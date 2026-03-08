@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -13,6 +16,7 @@ import (
 	"go-pathprobe/pkg/logging"
 	"go-pathprobe/pkg/netprobe"
 	"go-pathprobe/pkg/report"
+	"go-pathprobe/pkg/server"
 	"go-pathprobe/pkg/version"
 )
 
@@ -47,8 +51,64 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 
 	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
 	rootCmd.AddCommand(newVersionCommand())
+	rootCmd.AddCommand(newServeCommand(dispatcher, &opts, logger))
 
 	return rootCmd
+}
+
+// newServeCommand builds the `serve` subcommand that starts the embedded
+// HTTP REST API server.  It reuses the persistent --geo-db-city / --geo-db-asn
+// flags already defined on the root command via opts.
+func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, logger *slog.Logger) *cobra.Command {
+	cfg := server.DefaultConfig()
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the embedded PathProbe HTTP REST API server",
+		Long: `Starts an HTTP server that exposes PathProbe diagnostics as a REST API.
+
+Endpoints:
+  GET  /api/health   — liveness probe (returns version + build time)
+  POST /api/diag     — run a diagnostic and receive a JSON AnnotatedReport
+
+Geo annotation uses the --geo-db-city / --geo-db-asn flags from the root command.
+The server shuts down gracefully on SIGINT (Ctrl-C).`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			locator, err := geo.Open(opts.GeoDBCity, opts.GeoDBASN)
+			if err != nil {
+				logger.Warn("geo db unavailable, geo annotation disabled", "error", err)
+				locator = geo.NoopLocator{}
+			}
+			defer locator.Close()
+
+			srv := server.New(cfg, dispatcher, locator, logger)
+
+			// Graceful shutdown on SIGINT / Ctrl-C.
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer stop()
+
+			go func() {
+				<-ctx.Done()
+				shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := srv.Shutdown(shutCtx); err != nil {
+					logger.Warn("server shutdown error", "error", err)
+				}
+			}()
+
+			if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+				return fmt.Errorf("server error: %w", err)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.Addr, "addr", cfg.Addr,
+		"listen address (host:port), e.g. :8080 or 127.0.0.1:9090")
+	cmd.Flags().DurationVar(&cfg.WriteTimeout, "write-timeout", cfg.WriteTimeout,
+		"HTTP write timeout (should be >= max diagnostic duration)")
+
+	return cmd
 }
 
 func newVersionCommand() *cobra.Command {
