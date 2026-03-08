@@ -1,6 +1,9 @@
 package netprobe
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // RecordType enumerates DNS record types we support.
 type RecordType string
@@ -32,4 +35,39 @@ type DNSComparison struct {
 	Name    string
 	Type    RecordType
 	Results []DNSAnswer
+}
+
+// HasDivergence reports whether any two resolvers returned different answer sets.
+// Answer order is normalised before comparison, so ordering differences alone are
+// not flagged as divergence.
+func (c DNSComparison) HasDivergence() bool {
+	if len(c.Results) < 2 {
+		return false
+	}
+	ref := sortedStringSlice(c.Results[0].Values)
+	for _, r := range c.Results[1:] {
+		if !equalStringSlices(ref, sortedStringSlice(r.Values)) {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedStringSlice(vs []string) []string {
+	out := make([]string, len(vs))
+	copy(out, vs)
+	sort.Strings(out)
+	return out
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

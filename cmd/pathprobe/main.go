@@ -22,8 +22,13 @@ func main() {
 	tcpProber := &netprobe.TCPPortProber{Timeout: 2 * time.Second}
 	connectRunner := diag.NewConnectivityRunner(tcpProber, logger)
 
-	// Register web runner with DoH resolvers and HTTPS echo for public IP, combined with connectivity and HTTP probe.
-	webFetcher := &netprobe.HTTPPublicIPFetcher{Client: httpClient, URL: "https://api.ipify.org", Source: "https-echo"}
+	// Register web runner: STUN → HTTPS echo fallback for public IP, plus DNS compare and HTTP probe.
+	webFetcher := &netprobe.MultiSourcePublicIPFetcher{
+		Sources: []netprobe.PublicIPFetcher{
+			&netprobe.STUNPublicIPFetcher{Server: "stun.l.google.com:19302", Source: "stun-google"},
+			&netprobe.HTTPPublicIPFetcher{Client: httpClient, URL: "https://api.ipify.org", Source: "https-echo"},
+		},
+	}
 	webComparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{
 		&netprobe.SystemResolver{Name: "system"},
 		&netprobe.HTTPDNSResolver{Client: httpClient, Endpoint: "https://cloudflare-dns.com/dns-query", Name: "doh-1.1.1.1"},

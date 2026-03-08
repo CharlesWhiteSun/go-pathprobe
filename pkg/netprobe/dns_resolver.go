@@ -102,7 +102,11 @@ func (r *SystemResolver) Lookup(ctx context.Context, name string, rtype RecordTy
 
 	switch rtype {
 	case RecordTypeA:
-		records, err = res.LookupHost(ctx, name)
+		var ips []net.IP
+		ips, err = res.LookupIP(ctx, "ip4", name)
+		if err == nil {
+			records = stringifyIPs(ips)
+		}
 	case RecordTypeAAAA:
 		var ips []net.IP
 		ips, err = res.LookupIP(ctx, "ip6", name)

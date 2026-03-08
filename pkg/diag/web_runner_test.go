@@ -2,6 +2,7 @@ package diag
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -74,4 +75,72 @@ func TestWebRunnerDefaultsApplied(t *testing.T) {
 	if resolver.calls != 3 {
 		t.Fatalf("expected resolver called 3 times, got %d", resolver.calls)
 	}
+}
+
+// TestWebRunnerFetcherError verifies that a failing fetcher propagates its error.
+func TestWebRunnerFetcherError(t *testing.T) {
+	runner := NewWebRunner(&errorFetcher{}, netprobe.DNSComparator{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	req := Request{Target: TargetWeb, Options: Options{Global: GlobalOptions{MTRCount: 1, Timeout: time.Second}}}
+	if err := runner.Run(context.Background(), req); err == nil {
+		t.Fatal("expected error from failing fetcher")
+	}
+}
+
+// TestWebRunnerComparatorError verifies that a failing resolver propagates its error.
+func TestWebRunnerComparatorError(t *testing.T) {
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{&errorWebResolver{}}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(&stubFetcher{}, comparator, logger)
+
+	req := Request{
+		Target: TargetWeb,
+		Options: Options{
+			Global: GlobalOptions{MTRCount: 1, Timeout: time.Second},
+			Web:    WebOptions{Domains: []string{"example.com"}, Types: []netprobe.RecordType{netprobe.RecordTypeA}},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err == nil {
+		t.Fatal("expected error from failing comparator resolver")
+	}
+}
+
+// TestWebRunnerDivergentDNS verifies the runner completes without error even when resolvers diverge.
+func TestWebRunnerDivergentDNS(t *testing.T) {
+	r1 := &fixedResolver{name: "r1", values: []string{"1.1.1.1"}}
+	r2 := &fixedResolver{name: "r2", values: []string{"2.2.2.2"}}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{r1, r2}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(&stubFetcher{}, comparator, logger)
+
+	req := Request{
+		Target: TargetWeb,
+		Options: Options{
+			Global: GlobalOptions{MTRCount: 1, Timeout: time.Second},
+			Web:    WebOptions{Domains: []string{"example.com"}, Types: []netprobe.RecordType{netprobe.RecordTypeA}},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("divergent DNS should not return an error, got: %v", err)
+	}
+}
+
+type errorFetcher struct{}
+
+func (e *errorFetcher) Fetch(_ context.Context) (netprobe.PublicIPResult, error) {
+	return netprobe.PublicIPResult{}, errors.New("fetch failed")
+}
+
+type errorWebResolver struct{}
+
+func (e *errorWebResolver) Lookup(_ context.Context, _ string, _ netprobe.RecordType) (netprobe.DNSAnswer, error) {
+	return netprobe.DNSAnswer{}, errors.New("resolver failed")
+}
+
+type fixedResolver struct {
+	name   string
+	values []string
+}
+
+func (f *fixedResolver) Lookup(_ context.Context, name string, rtype netprobe.RecordType) (netprobe.DNSAnswer, error) {
+	return netprobe.DNSAnswer{Name: name, Type: rtype, Values: f.values, Source: f.name}, nil
 }

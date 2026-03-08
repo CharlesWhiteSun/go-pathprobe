@@ -57,7 +57,7 @@ func (r *WebRunner) Run(ctx context.Context, req Request) error {
 		return err
 	}
 	for _, comp := range comparisons {
-		r.logger.Info("dns comparison", "domain", comp.Name, "type", comp.Type, "results", comp.Results)
+		r.logger.Info("dns comparison", "domain", comp.Name, "type", comp.Type, "divergent", comp.HasDivergence(), "results", comp.Results)
 	}
 	return nil
 }
