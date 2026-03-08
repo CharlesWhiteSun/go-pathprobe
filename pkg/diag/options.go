@@ -35,4 +35,5 @@ func (o GlobalOptions) Validate() error {
 // Options bundles global options with target-specific placeholders for future extension.
 type Options struct {
 	Global GlobalOptions
+	Web    WebOptions
 }

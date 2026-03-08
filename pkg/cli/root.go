@@ -9,6 +9,7 @@ import (
 
 	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/logging"
+	"go-pathprobe/pkg/netprobe"
 )
 
 // NewRootCommand constructs the CLI root with subcommands for diagnostics.
@@ -57,15 +58,26 @@ func newDiagCommand(opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logge
 }
 
 func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logger *slog.Logger) *cobra.Command {
-	return &cobra.Command{
+	webOpts := diag.WebOptions{Domains: []string{"example.com"}}
+	recordTypes := []string{"A", "AAAA", "MX"}
+
+	cmd := &cobra.Command{
 		Use:   target.String(),
 		Short: fmt.Sprintf("Run %s diagnostics", target.String()),
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			webTypes, err := netprobe.ParseRecordTypes(recordTypes)
+			if err != nil {
+				return err
+			}
 			request := diag.Request{
 				Target: target,
 				Options: diag.Options{
 					Global: *opts,
+					Web:    webOpts,
 				},
+			}
+			if target == diag.TargetWeb {
+				request.Options.Web.Types = webTypes
 			}
 			if err := dispatcher.Dispatch(cmd.Context(), request); err != nil {
 				return err
@@ -74,4 +86,11 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 			return nil
 		},
 	}
+
+	if target == diag.TargetWeb {
+		cmd.Flags().StringSliceVar(&webOpts.Domains, "dns-domain", webOpts.Domains, "domains to compare across resolvers")
+		cmd.Flags().StringSliceVar(&recordTypes, "dns-type", recordTypes, "record types to query (A, AAAA, MX)")
+	}
+
+	return cmd
 }

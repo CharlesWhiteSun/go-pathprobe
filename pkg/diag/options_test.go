@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TestGlobalOptionsValidate covers happy path and rejects invalid counts.
 func TestGlobalOptionsValidate(t *testing.T) {
 	opts := GlobalOptions{MTRCount: 1, Timeout: time.Second}
 	if err := opts.Validate(); err != nil {
@@ -18,6 +19,7 @@ func TestGlobalOptionsValidate(t *testing.T) {
 	}
 }
 
+// TestDefaultLogLevel keeps default log level stable at info.
 func TestDefaultLogLevel(t *testing.T) {
 	opts := GlobalOptions{MTRCount: 1, Timeout: time.Second, LogLevel: slog.LevelInfo}
 	if opts.LogLevel != slog.LevelInfo {
@@ -25,6 +27,7 @@ func TestDefaultLogLevel(t *testing.T) {
 	}
 }
 
+// TestTimeoutValidation ensures zero/negative timeout is rejected early.
 func TestTimeoutValidation(t *testing.T) {
 	opts := GlobalOptions{MTRCount: 1, Timeout: 0}
 	if err := opts.Validate(); err == nil {

@@ -33,6 +33,7 @@ func executeCommand(cmd *cobra.Command, args ...string) (string, error) {
 	return buf.String(), err
 }
 
+// TestDiagWebRunsRegisteredRunner checks CLI flag propagation to runner and log level update.
 func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	runner := &recordingRunner{}
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: runner})
@@ -69,6 +70,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	}
 }
 
+// TestInvalidMTRCountFailsValidation ensures global validation blocks invalid traceroute counts.
 func TestInvalidMTRCountFailsValidation(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSMTP: &recordingRunner{}})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
@@ -79,6 +81,7 @@ func TestInvalidMTRCountFailsValidation(t *testing.T) {
 	}
 }
 
+// TestInvalidTimeoutFailsValidation guards against zero timeout input on CLI.
 func TestInvalidTimeoutFailsValidation(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetFTP: &recordingRunner{}})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
