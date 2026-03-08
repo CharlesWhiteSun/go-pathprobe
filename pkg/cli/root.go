@@ -60,6 +60,7 @@ func newDiagCommand(opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logge
 func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logger *slog.Logger) *cobra.Command {
 	webOpts := diag.WebOptions{Domains: []string{"example.com"}}
 	recordTypes := []string{"A", "AAAA", "MX"}
+	netOpts := diag.NetworkOptions{Host: "example.com", Ports: diag.DefaultPorts(target)}
 
 	cmd := &cobra.Command{
 		Use:   target.String(),
@@ -74,6 +75,7 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 				Options: diag.Options{
 					Global: *opts,
 					Web:    webOpts,
+					Net:    netOpts,
 				},
 			}
 			if target == diag.TargetWeb {
@@ -91,6 +93,10 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 		cmd.Flags().StringSliceVar(&webOpts.Domains, "dns-domain", webOpts.Domains, "domains to compare across resolvers")
 		cmd.Flags().StringSliceVar(&recordTypes, "dns-type", recordTypes, "record types to query (A, AAAA, MX)")
 	}
+
+	// Network flags for connectivity/traceroute style probes
+	cmd.Flags().StringVar(&netOpts.Host, "target-host", netOpts.Host, "host for connectivity probes")
+	cmd.Flags().IntSliceVar(&netOpts.Ports, "port", netOpts.Ports, "ports to probe for reachability")
 
 	return cmd
 }

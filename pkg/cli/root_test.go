@@ -41,7 +41,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
 	cmd := NewRootCommand(dispatcher, logger, levelVar)
 
-	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure"); err != nil {
+	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure", "--target-host", "example.com", "--port", "443", "--dns-domain", "example.com", "--dns-type", "A,MX"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -67,6 +67,13 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 
 	if levelVar.Level() != slog.LevelDebug {
 		t.Fatalf("expected log level debug, got %v", levelVar.Level())
+	}
+
+	if runner.lastRequest.Options.Net.Host != "example.com" {
+		t.Fatalf("expected target host propagated, got %s", runner.lastRequest.Options.Net.Host)
+	}
+	if len(runner.lastRequest.Options.Net.Ports) != 1 || runner.lastRequest.Options.Net.Ports[0] != 443 {
+		t.Fatalf("expected port 443 propagated")
 	}
 }
 
@@ -106,5 +113,26 @@ func TestAllTargetsHaveSubcommands(t *testing.T) {
 		if c, _, err := diagCmd.Find([]string{target.String()}); err != nil || c == nil {
 			t.Fatalf("expected subcommand for target %s", target)
 		}
+	}
+}
+
+// TestTargetHostDefault ensures default host/port apply when user omits flags.
+func TestTargetHostDefault(t *testing.T) {
+	runner := &recordingRunner{}
+	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSFTP: runner})
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	if _, err := executeCommand(cmd, "diag", "sftp"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected runner called once")
+	}
+	if runner.lastRequest.Options.Net.Host == "" {
+		t.Fatalf("expected default host to be set")
+	}
+	if len(runner.lastRequest.Options.Net.Ports) == 0 || runner.lastRequest.Options.Net.Ports[0] != 22 {
+		t.Fatalf("expected default port 22, got %v", runner.lastRequest.Options.Net.Ports)
 	}
 }

@@ -36,4 +36,11 @@ func (o GlobalOptions) Validate() error {
 type Options struct {
 	Global GlobalOptions
 	Web    WebOptions
+	Net    NetworkOptions
+}
+
+// NetworkOptions configures connectivity and traceroute-style probes.
+type NetworkOptions struct {
+	Host  string
+	Ports []int
 }

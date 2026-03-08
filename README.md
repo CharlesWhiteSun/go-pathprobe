@@ -8,6 +8,9 @@
   - 透過 HTTPS echo 取得 Public IP（預設 `https://api.ipify.org`）。
   - DNS 比對：系統 DNS + DoH (Cloudflare 1.1.1.1, Google 8.8.8.8) 針對 A/AAAA/MX 查詢，回報來源與 RTT。
   - 可自訂比對網域與記錄型態。
+- M2 路由探勘與端口可達性（初版）：
+  - 依 Target 預設端口（web:443, smtp:25/465/587, imap:143/993, pop:110/995, ftp:21/990, sftp:22），可用 `--port` 覆寫。
+  - MTR 風格重試次數沿用 `--mtr-count`，統計 loss/RTT；`--timeout` 控制單次探測逾時。
 
 ## 環境需求
 - Go 1.25+（專案 go.mod 目前為 1.25.1）
