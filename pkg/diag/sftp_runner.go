@@ -54,5 +54,16 @@ func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 		"auth_rtt", res.AuthRTT,
 		"ls_entries", len(res.LSEntries),
 	)
+	summary := res.ServerVersion
+	if res.Algorithms.HostKey != "" {
+		summary += " (" + res.Algorithms.HostKey + ")"
+	}
+	req.Report.AddProto(ProtoResult{
+		Protocol: "sftp",
+		Host:     host,
+		Port:     port,
+		OK:       true,
+		Summary:  summary,
+	})
 	return nil
 }

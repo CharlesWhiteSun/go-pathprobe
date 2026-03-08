@@ -40,6 +40,7 @@ func (r *WebRunner) Run(ctx context.Context, req Request) error {
 		return err
 	}
 	r.logger.Info("public ip fetched", "ip", ipRes.IP, "source", ipRes.Source, "rtt", ipRes.RTT)
+	req.Report.SetPublicIP(ipRes.IP)
 
 	webOpts := req.Options.Web
 	domains := webOpts.Domains

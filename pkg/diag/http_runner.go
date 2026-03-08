@@ -2,7 +2,9 @@ package diag
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"go-pathprobe/pkg/netprobe"
 )
@@ -43,5 +45,13 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	if res.TLS != nil {
 		r.Logger.Info("tls info", "version", res.TLS.Version, "cipher", res.TLS.CipherSuite, "alpn", res.TLS.NegotiatedALPN)
 	}
+
+	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
+	req.Report.AddProto(ProtoResult{
+		Protocol: "http",
+		Host:     req.Options.Net.Host,
+		OK:       res.StatusCode >= 200 && res.StatusCode < 400,
+		Summary:  summary,
+	})
 	return nil
 }

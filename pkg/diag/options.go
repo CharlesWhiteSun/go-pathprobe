@@ -13,12 +13,14 @@ const (
 
 // GlobalOptions captures flags shared across diagnostic targets.
 type GlobalOptions struct {
-	JSON     bool
-	Report   string
-	MTRCount int
-	Timeout  time.Duration
-	Insecure bool
-	LogLevel slog.Level
+	JSON      bool
+	Report    string
+	MTRCount  int
+	Timeout   time.Duration
+	Insecure  bool
+	LogLevel  slog.Level
+	GeoDBCity string // path to GeoLite2-City.mmdb
+	GeoDBASN  string // path to GeoLite2-ASN.mmdb
 }
 
 // Validate ensures the option values are within acceptable ranges.

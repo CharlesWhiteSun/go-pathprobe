@@ -56,5 +56,18 @@ func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 		"list_entries", len(res.ListEntries),
 		"rtt", res.RTT,
 	)
+	summary := res.Banner
+	if res.UsedAuthTLS {
+		summary += " [AUTH TLS]"
+	} else if res.UsedImplicitTLS {
+		summary += " [Implicit TLS]"
+	}
+	req.Report.AddProto(ProtoResult{
+		Protocol: "ftp",
+		Host:     host,
+		Port:     port,
+		OK:       res.LoginAccepted || res.Banner != "",
+		Summary:  summary,
+	})
 	return nil
 }

@@ -62,6 +62,17 @@ func (r *SMTPRunner) Run(ctx context.Context, req Request) error {
 			return err
 		}
 		r.Logger.Info("smtp probe", "host", host, "port", port, "banner", res.Banner, "starttls", res.UsedStartTLS, "rcpt", res.RcptAccepted)
+		summary := res.Banner
+		if res.UsedStartTLS {
+			summary += " [STARTTLS]"
+		}
+		req.Report.AddProto(ProtoResult{
+			Protocol: "smtp",
+			Host:     host,
+			Port:     port,
+			OK:       true,
+			Summary:  summary,
+		})
 	}
 	return nil
 }

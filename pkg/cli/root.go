@@ -3,13 +3,16 @@ package cli
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"go-pathprobe/pkg/diag"
+	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/logging"
 	"go-pathprobe/pkg/netprobe"
+	"go-pathprobe/pkg/report"
 )
 
 // NewRootCommand constructs the CLI root with subcommands for diagnostics.
@@ -33,11 +36,13 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&opts.JSON, "json", false, "output results in JSON")
-	rootCmd.PersistentFlags().StringVar(&opts.Report, "report", "", "output report path (optional)")
+	rootCmd.PersistentFlags().StringVar(&opts.Report, "report", "", "write HTML report to this file path")
 	rootCmd.PersistentFlags().IntVar(&opts.MTRCount, "mtr-count", diag.DefaultMTRCount, "probe count per hop for traceroute/MTR")
 	rootCmd.PersistentFlags().StringVar(&logLevelFlag, "log-level", "info", "log level: debug, info, warn, error")
 	rootCmd.PersistentFlags().DurationVar(&opts.Timeout, "timeout", 5*time.Second, "overall timeout per diagnostic")
 	rootCmd.PersistentFlags().BoolVar(&opts.Insecure, "insecure", false, "skip TLS verification (use with caution)")
+	rootCmd.PersistentFlags().StringVar(&opts.GeoDBCity, "geo-db-city", "", "path to GeoLite2-City.mmdb for location annotation")
+	rootCmd.PersistentFlags().StringVar(&opts.GeoDBASN, "geo-db-asn", "", "path to GeoLite2-ASN.mmdb for ASN annotation")
 
 	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
 
@@ -73,6 +78,10 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 			if err != nil {
 				return err
 			}
+
+			// Create a report accumulator so runners can write structured results.
+			diagReport := &diag.DiagReport{Target: target, Host: netOpts.Host}
+
 			request := diag.Request{
 				Target: target,
 				Options: diag.Options{
@@ -83,6 +92,7 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 					FTP:    ftpOpts,
 					SFTP:   sftpOpts,
 				},
+				Report: diagReport,
 			}
 			if target == diag.TargetWeb {
 				request.Options.Web.Types = webTypes
@@ -91,7 +101,8 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 				return err
 			}
 			logger.Info("diagnostic completed", "target", target)
-			return nil
+
+			return writeReport(cmd, opts, diagReport)
 		},
 	}
 
@@ -132,4 +143,37 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 	}
 
 	return cmd
+}
+
+// writeReport builds an AnnotatedReport from diagReport and outputs it using
+// the writer selected by opts (JSON, HTML file, or default table on stdout).
+func writeReport(cmd *cobra.Command, opts *diag.GlobalOptions, diagReport *diag.DiagReport) error {
+	locator, err := geo.Open(opts.GeoDBCity, opts.GeoDBASN)
+	if err != nil {
+		// Non-fatal: log the warning and proceed with NoopLocator.
+		fmt.Fprintf(os.Stderr, "warning: geo db unavailable: %v\n", err)
+		locator = geo.NoopLocator{}
+	}
+	defer locator.Close()
+
+	ar, err := report.Build(cmd.Context(), diagReport, locator)
+	if err != nil {
+		return fmt.Errorf("build report: %w", err)
+	}
+
+	// HTML file report.
+	if opts.Report != "" {
+		hw := report.HTMLWriter{}
+		if err := hw.WriteFile(opts.Report, ar); err != nil {
+			return fmt.Errorf("write HTML report: %w", err)
+		}
+	}
+
+	// JSON or table output to stdout.
+	if opts.JSON {
+		jw := report.JSONWriter{}
+		return jw.Write(os.Stdout, ar)
+	}
+	tw := report.TableWriter{}
+	return tw.Write(os.Stdout, ar)
 }

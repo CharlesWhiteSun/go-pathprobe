@@ -43,5 +43,6 @@ func (r *ConnectivityRunner) Run(ctx context.Context, req Request) error {
 		r.Logger.Info("port probe", "target", req.Target, "host", host, "port", res.Port, "loss_pct", res.Stats.LossPct, "avg_rtt", res.Stats.AvgRTT, "min_rtt", res.Stats.MinRTT, "max_rtt", res.Stats.MaxRTT, "sent", res.Stats.Sent, "received", res.Stats.Received)
 	}
 
+	req.Report.AddPorts(results)
 	return nil
 }

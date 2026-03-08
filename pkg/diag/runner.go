@@ -19,6 +19,9 @@ type Runner interface {
 type Request struct {
 	Target  Target
 	Options Options
+	// Report is an optional accumulator for structured results.
+	// Runners write to it when non-nil; a nil pointer disables reporting.
+	Report *DiagReport
 }
 
 // Dispatcher keeps target-to-runner mappings and delegates execution.

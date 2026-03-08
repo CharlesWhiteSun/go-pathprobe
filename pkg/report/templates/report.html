@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PathProbe — {{.Target}} — {{.Host}}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f7fa;color:#1a1a2e}
+    header{background:#1a1a2e;color:#fff;padding:1.5rem 2rem}
+    header h1{margin:0 0 .25rem;font-size:1.4rem;letter-spacing:.01em}
+    header .meta{font-size:.85rem;opacity:.72}
+    .container{max-width:1200px;margin:0 auto;padding:1.5rem 2rem}
+    #map{height:420px;border-radius:8px;margin-bottom:1.75rem;border:1px solid #d1d5db;background:#e9ecef}
+    .notice{background:#fef3c7;border-left:4px solid #f59e0b;padding:.75rem 1rem;border-radius:4px;margin-bottom:1.5rem;font-size:.875rem}
+    .notice code{background:#fff3;padding:.1em .3em;border-radius:3px}
+    .geo-cards{display:flex;gap:1rem;margin-bottom:1.75rem;flex-wrap:wrap}
+    .geo-card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:1rem 1.5rem;flex:1;min-width:240px}
+    .geo-card h3{margin:0 0 .5rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280}
+    .geo-card .ip{font-size:1.15rem;font-weight:700;font-family:monospace;color:#111827}
+    .geo-card .detail{font-size:.85rem;color:#4b5563;margin-top:.2rem}
+    section{margin-bottom:2rem}
+    section h2{font-size:1.05rem;margin:0 0 .75rem;color:#111827;font-weight:600}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb}
+    thead th{background:#f9fafb;padding:.6rem .875rem;text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;border-bottom:1px solid #e5e7eb;white-space:nowrap}
+    tbody td{padding:.6rem .875rem;font-size:.875rem;border-bottom:1px solid #f3f4f6;font-family:monospace}
+    tbody td.txt{font-family:system-ui,-apple-system,sans-serif}
+    tbody tr:last-child td{border-bottom:none}
+    .ok  td:first-child{border-left:3px solid #10b981}
+    .fail td:first-child{border-left:3px solid #ef4444}
+    .warn td:first-child{border-left:3px solid #f59e0b}
+    .badge{display:inline-block;padding:.2rem .55rem;border-radius:999px;font-size:.72rem;font-weight:700;font-family:system-ui;letter-spacing:.04em}
+    .badge-ok{background:#d1fae5;color:#065f46}
+    .badge-fail{background:#fee2e2;color:#991b1b}
+    footer{text-align:center;padding:2rem;font-size:.78rem;color:#9ca3af}
+    footer a{color:#9ca3af}
+  </style>
+</head>
+<body>
+<header>
+  <h1>PathProbe Diagnostic Report</h1>
+  <p class="meta">Target: <strong>{{.Target}}</strong> &mdash; <strong>{{.Host}}</strong> &mdash; {{.GeneratedAt}}</p>
+</header>
+<div class="container">
+
+  {{if or .PublicGeo.HasLocation .TargetGeo.HasLocation}}
+  <div id="map"></div>
+  <script>
+  (function(){
+    var map = L.map('map').setView([20,0],2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+      maxZoom:18
+    }).addTo(map);
+    var pts=[];
+    var redIcon=L.icon({
+      iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      iconSize:[25,41],iconAnchor:[12,41],popupAnchor:[1,-34],shadowSize:[41,41]
+    });
+    {{if .PublicGeo.HasLocation}}
+    L.marker([{{.PublicGeo.Lat}},{{.PublicGeo.Lon}}])
+      .addTo(map)
+      .bindPopup('<b>Client (Public IP)</b><br>IP: <code>{{.PublicGeo.IP}}</code>{{if .PublicGeo.City}}<br>{{.PublicGeo.City}}, {{.PublicGeo.CountryName}}{{end}}{{if .PublicGeo.OrgName}}<br>ASN{{.PublicGeo.ASN}} {{.PublicGeo.OrgName}}{{end}}');
+    pts.push([{{.PublicGeo.Lat}},{{.PublicGeo.Lon}}]);
+    {{end}}
+    {{if .TargetGeo.HasLocation}}
+    L.marker([{{.TargetGeo.Lat}},{{.TargetGeo.Lon}}],{icon:redIcon})
+      .addTo(map)
+      .bindPopup('<b>Target: {{.Host}}</b><br>IP: <code>{{.TargetGeo.IP}}</code>{{if .TargetGeo.City}}<br>{{.TargetGeo.City}}, {{.TargetGeo.CountryName}}{{end}}{{if .TargetGeo.OrgName}}<br>ASN{{.TargetGeo.ASN}} {{.TargetGeo.OrgName}}{{end}}');
+    pts.push([{{.TargetGeo.Lat}},{{.TargetGeo.Lon}}]);
+    {{end}}
+    {{if and .PublicGeo.HasLocation .TargetGeo.HasLocation}}
+    L.polyline([[{{.PublicGeo.Lat}},{{.PublicGeo.Lon}}],[{{.TargetGeo.Lat}},{{.TargetGeo.Lon}}]],
+      {color:'#3b82f6',weight:2,dashArray:'6 4',opacity:.85}).addTo(map);
+    {{end}}
+    if(pts.length>0){map.fitBounds(pts,{padding:[60,60],maxZoom:12});}
+  })();
+  </script>
+  {{else}}
+  <div class="notice">
+    Geo-IP database not configured &mdash; map unavailable.
+    Use <code>--geo-db-city</code> and <code>--geo-db-asn</code> to enable location visualisation.
+  </div>
+  {{end}}
+
+  <div class="geo-cards">
+    <div class="geo-card">
+      <h3>Client &mdash; Public IP</h3>
+      {{if .PublicGeo.IP}}
+      <div class="ip">{{.PublicGeo.IP}}</div>
+      {{if .PublicGeo.City}}<div class="detail">{{.PublicGeo.City}}, {{.PublicGeo.CountryName}}</div>{{else}}<div class="detail">Location unavailable</div>{{end}}
+      {{if .PublicGeo.ASN}}<div class="detail">ASN{{.PublicGeo.ASN}} &mdash; {{.PublicGeo.OrgName}}</div>{{end}}
+      {{else}}<div class="ip">—</div>{{end}}
+    </div>
+    <div class="geo-card">
+      <h3>Target Host</h3>
+      <div class="ip">{{.Host}}</div>
+      {{if .TargetGeo.IP}}<div class="detail">IP: {{.TargetGeo.IP}}</div>{{end}}
+      {{if .TargetGeo.City}}<div class="detail">{{.TargetGeo.City}}, {{.TargetGeo.CountryName}}</div>{{else if .TargetGeo.IP}}<div class="detail">Location unavailable</div>{{end}}
+      {{if .TargetGeo.ASN}}<div class="detail">ASN{{.TargetGeo.ASN}} &mdash; {{.TargetGeo.OrgName}}</div>{{end}}
+    </div>
+  </div>
+
+  {{if .Ports}}
+  <section>
+    <h2>Port Connectivity</h2>
+    <table>
+      <thead><tr><th>Port</th><th>Sent</th><th>Recv</th><th>Loss %</th><th>Min RTT</th><th>Avg RTT</th><th>Max RTT</th></tr></thead>
+      <tbody>
+      {{range .Ports}}
+      <tr class="{{if gt .LossPct 50.0}}fail{{else if gt .LossPct 0.0}}warn{{else}}ok{{end}}">
+        <td>{{.Port}}</td><td>{{.Sent}}</td><td>{{.Received}}</td>
+        <td>{{printf "%.1f" .LossPct}}%</td>
+        <td>{{.MinRTT}}</td><td>{{.AvgRTT}}</td><td>{{.MaxRTT}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+  {{end}}
+
+  {{if .Protos}}
+  <section>
+    <h2>Protocol Results</h2>
+    <table>
+      <thead><tr><th>Protocol</th><th>Host</th><th>Port</th><th>Status</th><th>Summary</th></tr></thead>
+      <tbody>
+      {{range .Protos}}
+      <tr class="{{if .OK}}ok{{else}}fail{{end}}">
+        <td>{{.Protocol}}</td>
+        <td class="txt">{{.Host}}</td>
+        <td>{{if .Port}}{{.Port}}{{else}}—{{end}}</td>
+        <td><span class="badge {{if .OK}}badge-ok{{else}}badge-fail{{end}}">{{if .OK}}OK{{else}}FAIL{{end}}</span></td>
+        <td class="txt">{{.Summary}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+  {{end}}
+
+</div>
+<footer>Generated by PathProbe &mdash; Map: <a href="https://www.openstreetmap.org/">OpenStreetMap</a> &amp; <a href="https://leafletjs.com/">Leaflet</a> &mdash; Geo: GeoLite2 by MaxMind</footer>
+</body>
+</html>
