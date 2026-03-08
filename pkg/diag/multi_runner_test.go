@@ -44,3 +44,33 @@ func TestMultiRunnerAllRun(t *testing.T) {
 		t.Fatalf("expected both runners to execute")
 	}
 }
+
+// ctxAwareRunner returns ctx.Err() when the context is already cancelled.
+type ctxAwareRunner struct{ calls int }
+
+func (r *ctxAwareRunner) Run(ctx context.Context, _ Request) error {
+	r.calls++
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return nil
+}
+
+// TestMultiRunnerContextCancel verifies context cancellation stops further runner execution.
+func TestMultiRunnerContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r1 := &ctxAwareRunner{}
+	r2 := &ctxAwareRunner{}
+	mr := NewMultiRunner(r1, r2)
+	err := mr.Run(ctx, Request{})
+	if err == nil {
+		t.Fatalf("expected context error, got nil")
+	}
+	if r1.calls != 1 {
+		t.Fatalf("expected r1 to run once, got %d", r1.calls)
+	}
+	if r2.calls != 0 {
+		t.Fatalf("expected r2 not to run, got %d", r2.calls)
+	}
+}
