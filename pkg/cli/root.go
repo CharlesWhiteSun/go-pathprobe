@@ -61,6 +61,7 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 	webOpts := diag.WebOptions{Domains: []string{"example.com"}}
 	recordTypes := []string{"A", "AAAA", "MX"}
 	netOpts := diag.NetworkOptions{Host: "example.com", Ports: diag.DefaultPorts(target)}
+	smtpOpts := diag.SMTPOptions{}
 
 	cmd := &cobra.Command{
 		Use:   target.String(),
@@ -76,6 +77,7 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 					Global: *opts,
 					Web:    webOpts,
 					Net:    netOpts,
+					SMTP:   smtpOpts,
 				},
 			}
 			if target == diag.TargetWeb {
@@ -92,11 +94,22 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 	if target == diag.TargetWeb {
 		cmd.Flags().StringSliceVar(&webOpts.Domains, "dns-domain", webOpts.Domains, "domains to compare across resolvers")
 		cmd.Flags().StringSliceVar(&recordTypes, "dns-type", recordTypes, "record types to query (A, AAAA, MX)")
+		cmd.Flags().StringVar(&webOpts.URL, "http-url", webOpts.URL, "HTTP/HTTPS URL for protocol probe")
 	}
 
 	// Network flags for connectivity/traceroute style probes
 	cmd.Flags().StringVar(&netOpts.Host, "target-host", netOpts.Host, "host for connectivity probes")
 	cmd.Flags().IntSliceVar(&netOpts.Ports, "port", netOpts.Ports, "ports to probe for reachability")
+
+	if target == diag.TargetSMTP {
+		cmd.Flags().StringVar(&smtpOpts.Domain, "smtp-domain", smtpOpts.Domain, "domain for MX lookup or EHLO")
+		cmd.Flags().StringVar(&smtpOpts.Username, "smtp-user", smtpOpts.Username, "SMTP username for auth")
+		cmd.Flags().StringVar(&smtpOpts.Password, "smtp-pass", smtpOpts.Password, "SMTP password or app password")
+		cmd.Flags().StringVar(&smtpOpts.From, "smtp-from", smtpOpts.From, "MAIL FROM address")
+		cmd.Flags().StringSliceVar(&smtpOpts.To, "smtp-to", smtpOpts.To, "RCPT TO addresses")
+		cmd.Flags().BoolVar(&smtpOpts.UseTLS, "smtp-ssl", false, "use implicit SSL/TLS (SMTPS)")
+		cmd.Flags().BoolVar(&smtpOpts.StartTLS, "smtp-starttls", true, "attempt STARTTLS when supported")
+	}
 
 	return cmd
 }

@@ -41,7 +41,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
 	cmd := NewRootCommand(dispatcher, logger, levelVar)
 
-	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure", "--target-host", "example.com", "--port", "443", "--dns-domain", "example.com", "--dns-type", "A,MX"); err != nil {
+	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure", "--target-host", "example.com", "--port", "443", "--dns-domain", "example.com", "--dns-type", "A,MX", "--http-url", "https://example.com"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -113,6 +113,31 @@ func TestAllTargetsHaveSubcommands(t *testing.T) {
 		if c, _, err := diagCmd.Find([]string{target.String()}); err != nil || c == nil {
 			t.Fatalf("expected subcommand for target %s", target)
 		}
+	}
+}
+
+// TestSMTPFlagPropagation ensures SMTP flags bind into options.
+func TestSMTPFlagPropagation(t *testing.T) {
+	runner := &recordingRunner{}
+	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSMTP: runner})
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	args := []string{"diag", "smtp", "--smtp-domain", "example.com", "--smtp-user", "user", "--smtp-pass", "pass", "--smtp-from", "from@test", "--smtp-to", "rcpt@test", "--smtp-starttls", "--smtp-ssl", "--port", "587", "--target-host", "mx.test"}
+	if _, err := executeCommand(cmd, args...); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("expected runner called")
+	}
+	if runner.lastRequest.Options.SMTP.Domain != "example.com" || runner.lastRequest.Options.SMTP.Username != "user" {
+		t.Fatalf("expected smtp options propagated")
+	}
+	if !runner.lastRequest.Options.SMTP.UseTLS || !runner.lastRequest.Options.SMTP.StartTLS {
+		t.Fatalf("expected tls/starttls flags set")
+	}
+	if runner.lastRequest.Options.Net.Host != "mx.test" || runner.lastRequest.Options.Net.Ports[0] != 587 {
+		t.Fatalf("expected host/port applied")
 	}
 }
 

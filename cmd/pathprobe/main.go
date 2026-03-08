@@ -22,18 +22,23 @@ func main() {
 	tcpProber := &netprobe.TCPPortProber{Timeout: 2 * time.Second}
 	connectRunner := diag.NewConnectivityRunner(tcpProber, logger)
 
-	// Register web runner with DoH resolvers and HTTPS echo for public IP, combined with connectivity.
+	// Register web runner with DoH resolvers and HTTPS echo for public IP, combined with connectivity and HTTP probe.
 	webFetcher := &netprobe.HTTPPublicIPFetcher{Client: httpClient, URL: "https://api.ipify.org", Source: "https-echo"}
 	webComparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{
 		&netprobe.SystemResolver{Name: "system"},
 		&netprobe.HTTPDNSResolver{Client: httpClient, Endpoint: "https://cloudflare-dns.com/dns-query", Name: "doh-1.1.1.1"},
 		&netprobe.HTTPDNSResolver{Client: httpClient, Endpoint: "https://dns.google/resolve", Name: "doh-8.8.8.8"},
 	}}
-	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), connectRunner))
+	httpProber := &netprobe.ClientHTTPProber{Client: httpClient}
+	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), diag.NewHTTPRunner(httpProber, logger), connectRunner))
+
+	// SMTP runner with MX resolution and connectivity.
+	smtpProber := &netprobe.DialSMTPProber{}
+	dispatcher.Register(diag.TargetSMTP, diag.NewMultiRunner(connectRunner, diag.NewSMTPRunner(smtpProber, &netprobe.SystemResolver{Name: "system"}, logger)))
 
 	// Connectivity for remaining targets.
 	for _, target := range diag.AllTargets {
-		if target == diag.TargetWeb {
+		if target == diag.TargetWeb || target == diag.TargetSMTP {
 			continue
 		}
 		dispatcher.Register(target, connectRunner)

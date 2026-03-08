@@ -19,6 +19,7 @@ type WebRunner struct {
 type WebOptions struct {
 	Domains []string
 	Types   []netprobe.RecordType
+	URL     string
 }
 
 // NewWebRunner wires public IP fetcher and DNS comparator.

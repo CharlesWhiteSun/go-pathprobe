@@ -37,10 +37,22 @@ type Options struct {
 	Global GlobalOptions
 	Web    WebOptions
 	Net    NetworkOptions
+	SMTP   SMTPOptions
 }
 
 // NetworkOptions configures connectivity and traceroute-style probes.
 type NetworkOptions struct {
 	Host  string
 	Ports []int
+}
+
+// SMTPOptions carries mail probe configuration.
+type SMTPOptions struct {
+	Domain   string
+	Username string
+	Password string
+	From     string
+	To       []string
+	UseTLS   bool // implicit TLS (SMTPS)
+	StartTLS bool // attempt STARTTLS after EHLO
 }
