@@ -109,6 +109,8 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 		cmd.Flags().StringSliceVar(&smtpOpts.To, "smtp-to", smtpOpts.To, "RCPT TO addresses")
 		cmd.Flags().BoolVar(&smtpOpts.UseTLS, "smtp-ssl", false, "use implicit SSL/TLS (SMTPS)")
 		cmd.Flags().BoolVar(&smtpOpts.StartTLS, "smtp-starttls", true, "attempt STARTTLS when supported")
+		cmd.Flags().StringSliceVar(&smtpOpts.AuthMethods, "smtp-auth-methods", nil, "auth mechanisms to try in order (PLAIN, LOGIN, XOAUTH2)")
+		cmd.Flags().BoolVar(&smtpOpts.MXProbeAll, "smtp-mx-all", false, "probe all MX records for the domain")
 	}
 
 	return cmd

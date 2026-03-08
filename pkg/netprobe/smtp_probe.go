@@ -14,17 +14,18 @@ import (
 
 // SMTPProbeRequest describes the SMTP flow to execute.
 type SMTPProbeRequest struct {
-	Host      string
-	Port      int
-	Domain    string
-	Username  string
-	Password  string
-	From      string
-	To        []string
-	UseTLS    bool // implicit TLS
-	StartTLS  bool
-	Timeout   time.Duration
-	HelloName string
+	Host        string
+	Port        int
+	Domain      string
+	Username    string
+	Password    string
+	From        string
+	To          []string
+	UseTLS      bool // implicit TLS
+	StartTLS    bool
+	Timeout     time.Duration
+	HelloName   string
+	AuthMethods []string // ordered auth mechanisms to try (PLAIN, LOGIN, XOAUTH2); defaults to ["PLAIN","LOGIN"] when empty
 }
 
 // SMTPProbeResult captures handshake and command outcomes.
@@ -138,9 +139,8 @@ func (p *DialSMTPProber) Probe(ctx context.Context, req SMTPProbeRequest) (SMTPP
 		res.Capabilities = caps
 	}
 
-	if req.Username != "" && req.Password != "" && supportsAuthLogin(caps) {
-		res.AuthTried = append(res.AuthTried, "LOGIN")
-		if err := authLogin(rw, req.Username, req.Password); err != nil {
+	if req.Username != "" && req.Password != "" {
+		if err := tryAuth(rw, req.Username, req.Password, req.AuthMethods, caps, &res); err != nil {
 			return res, err
 		}
 	}
@@ -216,6 +216,79 @@ func supportsAuthLogin(caps []string) bool {
 		}
 	}
 	return false
+}
+
+func supportsAuthPlain(caps []string) bool {
+	for _, c := range caps {
+		upper := strings.ToUpper(c)
+		if strings.Contains(upper, "AUTH") && strings.Contains(upper, "PLAIN") {
+			return true
+		}
+	}
+	return false
+}
+
+func supportsAuthXOAUTH2(caps []string) bool {
+	for _, c := range caps {
+		upper := strings.ToUpper(c)
+		if strings.Contains(upper, "AUTH") && strings.Contains(upper, "XOAUTH2") {
+			return true
+		}
+	}
+	return false
+}
+
+// tryAuth iterates the preferred methods list and executes the first method the server supports.
+func tryAuth(rw *bufio.ReadWriter, username, password string, methods []string, caps []string, res *SMTPProbeResult) error {
+	effective := methods
+	if len(effective) == 0 {
+		effective = []string{"PLAIN", "LOGIN"}
+	}
+	for _, m := range effective {
+		switch strings.ToUpper(m) {
+		case "PLAIN":
+			if !supportsAuthPlain(caps) {
+				continue
+			}
+			res.AuthTried = append(res.AuthTried, "PLAIN")
+			return authPlain(rw, username, password)
+		case "LOGIN":
+			if !supportsAuthLogin(caps) {
+				continue
+			}
+			res.AuthTried = append(res.AuthTried, "LOGIN")
+			return authLogin(rw, username, password)
+		case "XOAUTH2":
+			if !supportsAuthXOAUTH2(caps) {
+				continue
+			}
+			res.AuthTried = append(res.AuthTried, "XOAUTH2")
+			return authXOAUTH2(rw, username, password)
+		}
+	}
+	return nil
+}
+
+func authPlain(rw *bufio.ReadWriter, username, password string) error {
+	payload := "\x00" + username + "\x00" + password
+	if err := writeLine(rw, "AUTH PLAIN "+encodeBase64(payload)); err != nil {
+		return err
+	}
+	_, err := readLine(rw)
+	return err
+}
+
+// buildXOAUTH2Token constructs the SASL XOAUTH2 client response per Google's XOAUTH2 specification.
+func buildXOAUTH2Token(username, accessToken string) string {
+	return encodeBase64("user=" + username + "\x01auth=Bearer " + accessToken + "\x01\x01")
+}
+
+func authXOAUTH2(rw *bufio.ReadWriter, username, accessToken string) error {
+	if err := writeLine(rw, "AUTH XOAUTH2 "+buildXOAUTH2Token(username, accessToken)); err != nil {
+		return err
+	}
+	_, err := readLine(rw)
+	return err
 }
 
 func authLogin(rw *bufio.ReadWriter, username, password string) error {

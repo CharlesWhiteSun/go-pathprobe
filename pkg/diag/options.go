@@ -48,11 +48,13 @@ type NetworkOptions struct {
 
 // SMTPOptions carries mail probe configuration.
 type SMTPOptions struct {
-	Domain   string
-	Username string
-	Password string
-	From     string
-	To       []string
-	UseTLS   bool // implicit TLS (SMTPS)
-	StartTLS bool // attempt STARTTLS after EHLO
+	Domain      string
+	Username    string
+	Password    string
+	From        string
+	To          []string
+	UseTLS      bool     // implicit TLS (SMTPS)
+	StartTLS    bool     // attempt STARTTLS after EHLO
+	AuthMethods []string // ordered auth mechanisms to try (PLAIN, LOGIN, XOAUTH2); empty = server preference [PLAIN, LOGIN]
+	MXProbeAll  bool     // when true, probe all MX records for the domain instead of only the first
 }
