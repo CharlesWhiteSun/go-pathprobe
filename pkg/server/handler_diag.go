@@ -13,6 +13,7 @@ import (
 	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/netprobe"
 	"go-pathprobe/pkg/report"
+	"go-pathprobe/pkg/store"
 )
 
 // DiagHandler serves POST /api/diag.
@@ -21,6 +22,7 @@ import (
 type DiagHandler struct {
 	dispatcher *diag.Dispatcher
 	locator    geo.Locator
+	store      store.Store
 	logger     *slog.Logger
 }
 
@@ -74,6 +76,8 @@ func (h *DiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "report build failed: "+err.Error())
 		return
 	}
+
+	h.store.Save(store.HistoryEntry{Report: ar})
 
 	writeJSON(w, http.StatusOK, ar)
 }

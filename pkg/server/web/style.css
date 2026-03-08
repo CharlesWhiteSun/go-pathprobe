@@ -180,3 +180,104 @@ fieldset.target-fields legend {
   min-width: 7rem;
 }
 .progress-entry .msg { color: var(--muted); }
+
+/*  Geo Map  */
+#geo-map {
+  height: 280px;
+  margin-top: 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  display: none;
+}
+#geo-map.visible { display: block; }
+
+/*  History Panel  */
+.history-empty {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+}
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .15s;
+}
+.history-item:hover { background: var(--surface-alt, #f5f6f8); }
+.history-item .hi-badge {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--primary);
+  color: #fff;
+  padding: .15em .45em;
+  border-radius: 3px;
+  min-width: 3.5rem;
+  text-align: center;
+}
+.history-item .hi-host { font-weight: 600; flex: 1; }
+.history-item .hi-time { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+
+
+/* -- Geo Map ----------------------------------------------------------------- */
+#geo-map {
+  height: 280px;
+  margin-top: 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  display: none;
+}
+#geo-map.visible { display: block; }
+
+/* -- History Panel ----------------------------------------------------------- */
+.history-empty {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+}
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .15s;
+}
+.history-item:hover { background: var(--surface-alt, #f5f6f8); }
+.history-item .hi-badge {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--primary);
+  color: #fff;
+  padding: .15em .45em;
+  border-radius: 3px;
+  min-width: 3.5rem;
+  text-align: center;
+}
+.history-item .hi-host { font-weight: 600; flex: 1; }
+.history-item .hi-time { color: var(--muted); font-size: .78rem; white-space: nowrap; }

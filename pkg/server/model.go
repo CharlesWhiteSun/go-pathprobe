@@ -15,7 +15,7 @@ type DiagRequest struct {
 // Timeout is a Go duration string (e.g. "5s"); zero or missing defaults to
 // defaultDiagTimeout.
 // SFTP private-key authentication is intentionally not exposed via the HTTP
-// API — use the CLI with a local key file instead.
+// API  use the CLI with a local key file instead.
 type ReqOptions struct {
 	MTRCount int      `json:"mtr_count,omitempty"`
 	Timeout  string   `json:"timeout,omitempty"`
@@ -80,6 +80,15 @@ type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
 	BuiltAt string `json:"built_at"`
+}
+
+// HistoryListItem is a summary row returned by GET /api/history.
+type HistoryListItem struct {
+	ID          string `json:"id"`
+	CreatedAt   string `json:"created_at"`
+	Target      string `json:"target"`
+	Host        string `json:"host"`
+	GeneratedAt string `json:"generated_at"`
 }
 
 // defaultDiagTimeout is applied when ReqOptions.Timeout is empty or unparseable.

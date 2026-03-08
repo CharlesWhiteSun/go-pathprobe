@@ -9,6 +9,7 @@ import (
 
 	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/geo"
+	"go-pathprobe/pkg/store"
 )
 
 // Config holds HTTP server tuning parameters.
@@ -41,19 +42,28 @@ type Server struct {
 
 // New builds a Server with all API routes registered.
 // The caller owns locator's lifecycle and must close it after Shutdown returns.
-func New(cfg Config, dispatcher *diag.Dispatcher, locator geo.Locator, logger *slog.Logger) *Server {
+// st may be nil, in which case the history endpoints return empty results and
+// diagnostic results are not persisted.
+func New(cfg Config, dispatcher *diag.Dispatcher, locator geo.Locator, st store.Store, logger *slog.Logger) *Server {
+	if st == nil {
+		st = store.NewMemoryStore(0)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", &HealthHandler{logger: logger})
 	mux.Handle("POST /api/diag", &DiagHandler{
 		dispatcher: dispatcher,
 		locator:    locator,
+		store:      st,
 		logger:     logger,
 	})
 	mux.Handle("POST /api/diag/stream", &StreamDiagHandler{
 		dispatcher: dispatcher,
 		locator:    locator,
+		store:      st,
 		logger:     logger,
 	})
+	mux.Handle("GET /api/history", &HistoryHandler{store: st})
+	mux.Handle("GET /api/history/{id}", &HistoryDetailHandler{store: st})
 	// Static web UI — registered last; GET / acts as catch-all for all paths
 	// not claimed by more specific API patterns above.
 	mux.Handle("GET /", newStaticHandler())

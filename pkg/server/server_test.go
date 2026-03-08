@@ -15,6 +15,7 @@ import (
 	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/report"
 	"go-pathprobe/pkg/server"
+	"go-pathprobe/pkg/store"
 )
 
 // ---- test doubles -------------------------------------------------------
@@ -29,7 +30,7 @@ func (s stubRunner) Run(_ context.Context, _ diag.Request) error { return s.err 
 func newHandler(t *testing.T, dispatcher *diag.Dispatcher) http.Handler {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := server.New(server.DefaultConfig(), dispatcher, geo.NoopLocator{}, logger)
+	srv := server.New(server.DefaultConfig(), dispatcher, geo.NoopLocator{}, store.NewMemoryStore(10), logger)
 	return srv.Handler()
 }
 

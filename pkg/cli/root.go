@@ -17,6 +17,7 @@ import (
 	"go-pathprobe/pkg/netprobe"
 	"go-pathprobe/pkg/report"
 	"go-pathprobe/pkg/server"
+	"go-pathprobe/pkg/store"
 	"go-pathprobe/pkg/version"
 )
 
@@ -82,9 +83,8 @@ The server shuts down gracefully on SIGINT (Ctrl-C).`,
 			}
 			defer locator.Close()
 
-			srv := server.New(cfg, dispatcher, locator, logger)
-
-			// Graceful shutdown on SIGINT / Ctrl-C.
+			st := store.NewMemoryStore(store.DefaultMaxHistory)
+			srv := server.New(cfg, dispatcher, locator, st, logger)
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer stop()
 

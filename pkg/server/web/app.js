@@ -1,5 +1,22 @@
 'use strict';
 
+// ── Leaflet default-icon path override (embedded assets, no CDN) ─────────
+// Both leaflet.js and app.js are loaded with defer, so L is available here.
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof L !== 'undefined') {
+    // Remove the auto-detection hook so Leaflet uses our explicit paths.
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconUrl:       '/images/marker-icon.png',
+      iconRetinaUrl: '/images/marker-icon-2x.png',
+      shadowUrl:     '/images/marker-shadow.png',
+    });
+  }
+});
+
+// Active Leaflet map instance (one at a time).
+let _map = null;
+
 // ── Per-target default ports ──────────────────────────────────────────────
 const TARGET_PORTS = {
   web:  [443],
@@ -30,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   onTargetChange(); // populate defaults for initial selection
   fetchVersion();   // async version badge
+  loadHistory();    // populate history panel
 });
 
 // ── Form dynamics ─────────────────────────────────────────────────────────
@@ -197,6 +215,8 @@ function handleSSEMessage(raw, progressEl, resultEl) {
   } else if (evtName === 'result') {
     if (progressEl) progressEl.hidden = true;
     renderReport(payload);
+    renderMap(payload.PublicGeo, payload.TargetGeo);
+    loadHistory();
     resultEl.hidden = false;
     resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else if (evtName === 'error') {
@@ -372,4 +392,114 @@ function esc(s) {
     .replace(/>/g,  '&gt;')
     .replace(/"/g,  '&quot;')
     .replace(/'/g,  '&#39;');
+}
+
+// -- Geo Map (Leaflet) --------------------------------------------------------
+
+/** Render (or remove) the Leaflet map based on geo results.
+ *  pub / tgt are GeoAnnotation objects that may be null/undefined.
+ */
+function renderMap(pub, tgt) {
+  const container = document.getElementById('geo-map');
+  if (!container || typeof L === 'undefined') return;
+
+  const points = [];
+  if (pub && pub.HasLocation) {
+    points.push({ lat: pub.Lat, lon: pub.Lon, label: 'Public IP: ' + pub.IP });
+  }
+  if (tgt && tgt.HasLocation) {
+    points.push({ lat: tgt.Lat, lon: tgt.Lon, label: 'Target: ' + tgt.IP });
+  }
+
+  // Hide the map when there are no geo-located points.
+  if (points.length === 0) {
+    container.classList.remove('visible');
+    if (_map) { _map.remove(); _map = null; }
+    return;
+  }
+
+  container.classList.add('visible');
+
+  // Destroy any existing map instance before creating a new one.
+  if (_map) { _map.remove(); _map = null; }
+
+  _map = L.map('geo-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 18,
+  }).addTo(_map);
+
+  const latLngs = [];
+  for (const p of points) {
+    L.marker([p.lat, p.lon])
+      .addTo(_map)
+      .bindPopup(esc(p.label));
+    latLngs.push([p.lat, p.lon]);
+  }
+
+  if (latLngs.length === 1) {
+    _map.setView(latLngs[0], 8);
+  } else {
+    _map.fitBounds(latLngs, { padding: [40, 40] });
+  }
+}
+
+// -- History ------------------------------------------------------------------
+
+/** Fetch the history list from the server and re-render the panel. */
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/history');
+    if (!r.ok) return;
+    const items = await r.json();
+    renderHistoryList(Array.isArray(items) ? items : []);
+  } catch (_) { /* non-fatal - panel stays in its current state */ }
+}
+
+/** Render the history list items into #history-list. */
+function renderHistoryList(items) {
+  const emptyEl = document.getElementById('history-empty');
+  const listEl  = document.getElementById('history-list');
+  if (!listEl || !emptyEl) return;
+
+  if (items.length === 0) {
+    emptyEl.hidden = false;
+    listEl.hidden  = true;
+    return;
+  }
+
+  emptyEl.hidden = true;
+  listEl.hidden  = false;
+  listEl.innerHTML = items.map(item => {
+    const ts = item.created_at
+      ? new Date(item.created_at).toLocaleString()
+      : '';
+    const id = JSON.stringify(String(item.id));
+    return '<li class="history-item" onclick="loadHistoryEntry(' + id + ')">' +
+      '<span class="hi-badge">' + esc(item.target      || '\u2014') + '</span>' +
+      '<span class="hi-host">'  + esc(item.host        || '\u2014') + '</span>' +
+      '<span class="hi-time">'  + esc(ts)                           + '</span>' +
+    '</li>';
+  }).join('');
+}
+
+/** Fetch a single history entry and display it as the current results. */
+async function loadHistoryEntry(id) {
+  const resultEl = document.getElementById('results');
+  try {
+    const r = await fetch('/api/history/' + encodeURIComponent(id));
+    if (!r.ok) {
+      showError('History entry not found: ' + id);
+      return;
+    }
+    const report = await r.json();
+    renderReport(report);
+    renderMap(report.PublicGeo, report.TargetGeo);
+    if (resultEl) {
+      resultEl.hidden = false;
+      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch (err) {
+    showError('Failed to load history entry: ' + err.message);
+  }
 }

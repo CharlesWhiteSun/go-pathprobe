@@ -11,6 +11,7 @@ import (
 	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/report"
+	"go-pathprobe/pkg/store"
 )
 
 // StreamDiagHandler serves POST /api/diag/stream.
@@ -31,6 +32,7 @@ import (
 type StreamDiagHandler struct {
 	dispatcher *diag.Dispatcher
 	locator    geo.Locator
+	store      store.Store
 	logger     *slog.Logger
 }
 
@@ -105,6 +107,8 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeSSEError(w, flusher, "report build failed: "+err.Error())
 		return
 	}
+
+	h.store.Save(store.HistoryEntry{Report: ar})
 
 	writeSSEEvent(w, flusher, "result", ar)
 }
