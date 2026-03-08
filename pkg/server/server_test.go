@@ -145,9 +145,11 @@ func TestDiagEndpoint_BodyTooLarge_Returns400(t *testing.T) {
 }
 
 func TestDiagEndpoint_MethodNotAllowed(t *testing.T) {
+	// Use POST /api/health (a GET-only endpoint with no POST catch-all) so that
+	// the expected 405 is unaffected by the GET / static catch-all handler.
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diag", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/health", nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("want 405, got %d", rec.Code)
