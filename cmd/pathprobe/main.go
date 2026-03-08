@@ -10,10 +10,17 @@ import (
 	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/logging"
 	"go-pathprobe/pkg/netprobe"
+	"go-pathprobe/pkg/syscheck"
 )
 
 func main() {
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+
+	// Detect raw ICMP socket availability and warn the user when unavailable.
+	avail := syscheck.RawICMPChecker{}.Check()
+	if !avail.Available {
+		logger.Warn(avail.Notice(), "error", avail.Err)
+	}
 
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	dispatcher := diag.NewDispatcher(nil)

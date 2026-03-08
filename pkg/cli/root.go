@@ -13,6 +13,7 @@ import (
 	"go-pathprobe/pkg/logging"
 	"go-pathprobe/pkg/netprobe"
 	"go-pathprobe/pkg/report"
+	"go-pathprobe/pkg/version"
 )
 
 // NewRootCommand constructs the CLI root with subcommands for diagnostics.
@@ -45,8 +46,19 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 	rootCmd.PersistentFlags().StringVar(&opts.GeoDBASN, "geo-db-asn", "", "path to GeoLite2-ASN.mmdb for ASN annotation")
 
 	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
+	rootCmd.AddCommand(newVersionCommand())
 
 	return rootCmd
+}
+
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Show PathProbe version and build information",
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Printf("PathProbe %s (built %s)\n", version.Version, version.BuildTime)
+		},
+	}
 }
 
 func newDiagCommand(opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logger *slog.Logger) *cobra.Command {
