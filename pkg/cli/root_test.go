@@ -161,3 +161,42 @@ func TestTargetHostDefault(t *testing.T) {
 		t.Fatalf("expected default port 22, got %v", runner.lastRequest.Options.Net.Ports)
 	}
 }
+
+// TestReportFlagPropagates verifies --report value is passed through to GlobalOptions.
+func TestReportFlagPropagates(t *testing.T) {
+	runner := &recordingRunner{}
+	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: runner})
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	if _, err := executeCommand(cmd, "diag", "web", "--report", "output.json"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if runner.lastRequest.Options.Global.Report != "output.json" {
+		t.Fatalf("expected report path 'output.json', got %q", runner.lastRequest.Options.Global.Report)
+	}
+}
+
+// TestDispatcherRunnerNotFoundReturnsError verifies that a target with no runner returns an error.
+func TestDispatcherRunnerNotFoundReturnsError(t *testing.T) {
+	dispatcher := diag.NewDispatcher(nil) // no runners registered
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	_, err := executeCommand(cmd, "diag", "imap")
+	if err == nil {
+		t.Fatal("expected error when no runner registered for target 'imap'")
+	}
+}
+
+// TestInvalidLogLevelReturnsError verifies that unknown log level values are rejected before dispatch.
+func TestInvalidLogLevelReturnsError(t *testing.T) {
+	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: &recordingRunner{}})
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	_, err := executeCommand(cmd, "--log-level", "verbose", "diag", "web")
+	if err == nil {
+		t.Fatal("expected error for unknown log level 'verbose'")
+	}
+}
