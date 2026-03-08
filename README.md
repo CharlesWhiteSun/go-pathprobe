@@ -1,18 +1,23 @@
 # go-pathprobe
 
-多協定網路路徑與服務診斷 CLI 工具，涵蓋公網 IP 偵測、DNS 對比、端口可達性統計、HTTP/SMTP/FTP/FTPS/SFTP 協定層深度探測，以及帶 Geo 標註的 HTML / JSON / 表格三種格式報告輸出。
+_pathprobe_ 是一套多協定網路路徑與服務診斷工具。  
+主要以 **內嵌 Web UI（HTTP 伺服器）** 作為操作介面，支援公網 IP 偵測、DNS 對比、端口可達性統計、HTTP / SMTP / FTP / FTPS / SFTP 協定層深度探測、Geo 地圖標記，以及診斷歷史紀錄管理。
 
 ## 功能概覽
 
 | 里程碑 | 項目 | 說明 |
 |--------|------|------|
-| M0 | 基礎骨架 | Cobra CLI、`diag` 子命令群、共用旗標框架、結構化 slog 日誌 |
+| M0 | 基礎骨架 | Cobra CLI、diag 子命令群、共用旗標框架、結構化 slog 日誌 |
 | M1 | 公網資訊與 DNS 對比 | STUN / HTTPS echo 雙來源取得公網 IP；系統 DNS + DoH (Cloudflare / Google) 查詢 A/AAAA/MX 並比對差異 |
 | M2 | 端口可達性 | TCP MTR 風格多次探測、每 hop 統計 loss% / min/avg/max RTT |
 | M3 | Web / HTTP 深度探測 | HTTP(S) 狀態碼、回應標頭、重導向鏈追蹤 |
 | M4 | Mail / 檔案傳輸協定探測 | SMTP EHLO / STARTTLS / AUTH、FTP / FTPS（implicit & explicit AUTH TLS）+ PASV LIST、SFTP SSH 握手演算法 + 目錄列舉 |
-| M5 | Geo 標註與多格式報告 | MaxMind GeoLite2 離線 DB 標註 IP 地理位置與 ASN；輸出 CLI 表格、JSON、內嵌 Leaflet+OSM 互動式 HTML 地圖報告 |
-| M6 | 封裝與發佈 | `ldflags` 版本注入、ICMP 權限偵測 + TCP 降級提示、跨平台交叉編譯腳本、Windows `requireAdministrator` manifest |
+| M5 | Geo 標註與多格式報告 | MaxMind GeoLite2 離線 DB 標註 IP 地理位置與 ASN |
+| M6 | 封裝與發佈 | ldflags 版本注入、ICMP 權限偵測 + TCP 降級提示、跨平台交叉編譯腳本 |
+| M7-A | REST API 伺服器 | pkg/server：GET /api/health、POST /api/diag、POST /api/diag/stream |
+| M7-B | 內嵌 Web UI | 靜態資源（//go:embed web）；表單驅動診斷、即時 SSE 進度流 |
+| M7-C | SSE 串流進度 | Runner ProgressHook；POST /api/diag/stream 逐事件推送 |
+| M7-D | 歷史紀錄 + 互動地圖 | Store 介面 + MemoryStore；GET /api/history、GET /api/history/{id}；嵌入 Leaflet 1.9.4 地圖視覺化 |
 
 ---
 
@@ -21,26 +26,29 @@
 ```
 cmd/pathprobe/          ← 程式進入點、Windows manifest
 pkg/
-  cli/                  ← Cobra 命令樹（root / diag / version）
+  cli/                  ← Cobra 命令樹（root / diag / serve / version）
+  server/               ← HTTP 伺服器、路由、所有 API Handler、嵌入 Web UI
+    web/                ← 靜態資源（index.html / style.css / app.js / leaflet.*）
+  store/                ← Store 介面、MemoryStore（診斷歷史）
   diag/                 ← Runner 介面、Dispatcher、Request / DiagReport 資料模型
   netprobe/             ← 各協定探測實作（TCP port、DNS、HTTP、SMTP、FTP、SFTP）
   geo/                  ← GeoLite2 封裝（Locator 介面、NoopLocator、GeoLite2Locator）
-  report/               ← Writer 介面、TableWriter / JSONWriter / HTMLWriter（內嵌模板）
+  report/               ← AnnotatedReport 建構、TableWriter / JSONWriter / HTMLWriter
   syscheck/             ← OS 能力偵測（ICMP raw socket 可用性）
   version/              ← build-time 版本變數（由 ldflags 注入）
   logging/              ← slog 工廠
 ```
 
-**設計原則**：全程依賴介面注入（`PortProber`、`PublicIPFetcher`、`DNSResolver`、`Locator`、`Writer` 等），Runner 之間透過 `DiagReport` nil-safe 方法傳遞結構化結果，向下相容且不互相耦合。
+**設計原則**：全程依賴介面注入（PortProber、PublicIPFetcher、Locator、Store 等），Runner 之間透過 DiagReport nil-safe 方法傳遞結構化結果，向下相容且不互相耦合。
 
 ---
 
 ## 環境需求
 
-- Go 1.25.1+
+- Go 1.22+
 - Windows / Linux / macOS（cross-compile 支援全平台）
-- 原生 ICMP 探測需要管理員 / root 權限；無權限時自動降級為 TCP 模式並於啟動時顯示警告
-- Geo 標註需另行下載 [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) 資料庫（`.mmdb`），不提供則靜默略過
+- 原生 ICMP 探測需管理員 / root 權限；無權限時自動降級為 TCP 模式並顯示警告
+- Geo 標註需另行下載 [MaxMind GeoLite2](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) 資料庫（.mmdb），不提供則靜默略過
 
 ---
 
@@ -54,10 +62,10 @@ pkg/
 .\release.ps1
 
 # 指定版本與目標
-.\release.ps1 -Version v1.3.0 -Targets "windows/amd64,linux/amd64"
+.\release.ps1 -Version v1.4.0 -Targets "windows/amd64,linux/amd64"
 
 # 同時嵌入 requireAdministrator manifest（需安裝 rsrc）
-.\release.ps1 -Version v1.3.0 -WithManifest
+.\release.ps1 -Version v1.4.0 -WithManifest
 # go install github.com/akavel/rsrc@latest
 ```
 
@@ -65,136 +73,92 @@ pkg/
 
 ---
 
-## CLI 使用說明
-
-### 查詢版本
+## 啟動 Web 伺服器
 
 ```powershell
-pathprobe version
-# PathProbe v1.2 (built 2026-03-08T19:21:05Z)
+# 預設監聽 :8080
+.\bin\pathprobe.exe serve
+
+# 自訂監聽位址
+.\bin\pathprobe.exe serve --addr :9090
+
+# 啟用 Geo 標註（需 GeoLite2 .mmdb）
+.\bin\pathprobe.exe serve --geo-db-city ./GeoLite2-City.mmdb --geo-db-asn ./GeoLite2-ASN.mmdb
+
+# 自訂寫入逾時（長時間診斷時調高）
+.\bin\pathprobe.exe serve --addr :8080 --write-timeout 120s
 ```
 
-### 共用旗標（所有 `diag` 子命令適用）
+伺服器啟動後，瀏覽器開啟 http://localhost:8080 即可使用 Web UI。  
+以 Ctrl-C 中斷，伺服器會進行 5 秒優雅關閉。
+
+### 可用旗標
 
 | 旗標 | 預設值 | 說明 |
 |------|--------|------|
-| `--json` | false | 輸出 JSON |
-| `--report <path>` | — | 將 HTML 互動報告寫入指定路徑 |
-| `--geo-db-city <path>` | — | GeoLite2-City.mmdb 路徑（IP 地理位置） |
-| `--geo-db-asn <path>` | — | GeoLite2-ASN.mmdb 路徑（AS 號碼與組織） |
-| `--mtr-count <n>` | 5 | 每個端口的 TCP MTR 探測次數 |
-| `--timeout <duration>` | 5s | 單次診斷總逾時 |
-| `--insecure` | false | 跳過 TLS 憑證驗證 |
+| `--addr` | :8080 | 監聽位址，格式 host:port 或 :port |
+| `--write-timeout` | 120s | HTTP 寫入逾時（建議 >= 診斷最長時間） |
+| `--geo-db-city` | — | GeoLite2-City.mmdb 路徑（IP 地理位置） |
+| `--geo-db-asn` | — | GeoLite2-ASN.mmdb 路徑（AS 號碼與組織） |
 | `--log-level` | info | 日誌層級：debug / info / warn / error |
 
 ---
 
-### `diag web` — Web 與 DNS 診斷
+## Web UI 操作流程
 
-偵測公網 IP（STUN + HTTPS echo 雙來源）、對多組網域執行多 DNS 來源比對。
+### 1. 執行診斷
 
-```powershell
-# 基本使用
-pathprobe diag web
+1. 從「Target」下拉選單選擇目標類型（web / smtp / ftp / sftp / imap / pop）
+2. 填入「Target Host」與「Ports」（可多個，逗號分隔）
+3. 依目標類型填寫專屬欄位（DNS 網域、SMTP 帳密、FTP 選項等）
+4. 展開「Advanced Options」可調整 MTR Count 與 Timeout
+5. 點擊「▶ Run Diagnostic」
 
-# 指定網域、記錄型態，輸出 JSON
-pathprobe diag web --dns-domain example.com,google.com --dns-type A,MX --json
+診斷過程中，Progress Log 會即時顯示每個探測階段的狀態（透過 SSE 推送）。
 
-# 帶 Geo 標註輸出 HTML 報告
-pathprobe diag web --geo-db-city ./GeoLite2-City.mmdb --geo-db-asn ./GeoLite2-ASN.mmdb --report ./report.html
+### 2. 查看結果
+
+診斷完成後，Results 區塊顯示：
+
+| 區塊 | 內容 |
+|------|------|
+| Summary | Target 類型、Host、執行時間、公網 IP |
+| Port Connectivity | 每個端口的 Sent / Recv / 丟包率 / Min/Avg/Max RTT |
+| Protocol Results | 各協定握手結果（OK / FAIL）與摘要訊息 |
+| Geo Information | 公網 IP 與目標主機的地理位置（City / Country / ASN） |
+| 互動地圖 | Leaflet + OpenStreetMap 地圖，標記公網 IP 與目標主機位置（需 Geo DB） |
+
+### 3. 歷史紀錄
+
+頁面底部的「Diagnostic History」面板列出最近 100 筆診斷記錄（最新在前）。  
+點擊任一歷史項目，可將該次診斷結果載入 Results 區塊並重繪地圖，方便與目前結果比對。
+
+---
+
+## REST API
+
+Web UI 底層透過以下 API 與伺服器溝通，亦可直接呼叫進行自動化整合。
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | /api/health | 存活探針，回傳版本與 build 時間 |
+| POST | /api/diag | 執行診斷，同步回傳完整 AnnotatedReport（JSON） |
+| POST | /api/diag/stream | 執行診斷，以 SSE 串流逐步推送 progress / result / error 事件 |
+| GET | /api/history | 取得歷史清單（[]HistoryListItem，最新在前） |
+| GET | /api/history/{id} | 取得指定歷史記錄的完整 AnnotatedReport |
+
+**請求範例（POST /api/diag）：**
+
+```json
+{
+  "target": "web",
+  "options": {
+    "timeout": "30s",
+    "net": { "host": "example.com", "ports": [443] },
+    "web": { "domains": ["example.com"], "types": ["A", "MX"] }
+  }
+}
 ```
-
-| 專屬旗標 | 預設值 | 說明 |
-|----------|--------|------|
-| `--dns-domain` | example.com | 要比對的網域，逗號分隔 |
-| `--dns-type` | A,AAAA,MX | 記錄型態，逗號分隔 |
-
----
-
-### `diag smtp` — SMTP 郵件伺服器診斷
-
-探測 SMTP 握手、EHLO 能力協商、STARTTLS 升級、AUTH (PLAIN / LOGIN) 流程。
-
-```powershell
-pathprobe diag smtp --host mail.example.com --port 587 \
-    --smtp-domain example.com \
-    --smtp-user user@example.com --smtp-pass secret \
-    --smtp-starttls
-```
-
-| 專屬旗標 | 說明 |
-|----------|------|
-| `--host` | SMTP 伺服器位址 |
-| `--port` | 連接埠（預設 25,465,587） |
-| `--smtp-domain` | EHLO 使用的網域名稱 |
-| `--smtp-user / --smtp-pass` | AUTH 認證帳密 |
-| `--smtp-starttls` | 啟用 STARTTLS |
-| `--smtp-tls` | 隱式 TLS（SMTPS） |
-| `--smtp-from / --smtp-to` | 測試信封（MAIL FROM / RCPT TO） |
-
----
-
-### `diag ftp` — FTP / FTPS 診斷
-
-探測 FTP 控制連線、Banner、隱式 FTPS 或 AUTH TLS 顯式加密、PASV LIST 目錄列舉。
-
-```powershell
-pathprobe diag ftp --host ftp.example.com --port 21 \
-    --ftp-user ftpuser --ftp-pass secret \
-    --ftp-auth-tls --ftp-list
-```
-
-| 專屬旗標 | 說明 |
-|----------|------|
-| `--ftp-user / --ftp-pass` | 帳密（省略則 anonymous） |
-| `--ftp-tls` | 隱式 FTPS（port 990） |
-| `--ftp-auth-tls` | 顯式 FTPS（AUTH TLS） |
-| `--ftp-list` | 嘗試 PASV + LIST |
-
----
-
-### `diag sftp` — SSH / SFTP 診斷
-
-探測 SSH 握手演算法（KEX / HostKey / Cipher / MAC）、密碼或私鑰認證、遠端目錄列舉。
-
-```powershell
-pathprobe diag sftp --host sftp.example.com --port 22 \
-    --sftp-user sftpuser --sftp-pass secret --sftp-ls
-
-# 使用私鑰
-pathprobe diag sftp --host sftp.example.com \
-    --sftp-user deploy --sftp-key ~/.ssh/id_ed25519 --sftp-ls
-```
-
-| 專屬旗標 | 說明 |
-|----------|------|
-| `--sftp-user / --sftp-pass` | 帳密認證 |
-| `--sftp-key <path>` | PEM 私鑰路徑（公鑰認證） |
-| `--sftp-ls` | 嘗試列出遠端預設目錄 |
-
----
-
-### `diag imap` / `diag pop` — 連線可達性
-
-目前執行 TCP 多點端口可達性探測（IMAPv4: 143/993，POP3: 110/995）。
-
----
-
-## 報告輸出
-
-執行任何 `diag` 子命令時，加上以下旗標即可產生對應格式輸出：
-
-| 旗標 | 輸出格式 | 說明 |
-|------|----------|------|
-| `--json` | JSON | 結構化結果，適合管線處理或自動化 |
-| _(預設)_ | CLI 表格 | `PORT CONNECTIVITY` + `PROTOCOL RESULTS` 兩張表格 |
-| `--report <path>` | HTML | 自包含 HTML 檔（內嵌 Leaflet 1.9.4 + OSM 互動地圖） |
-
-HTML 報告包含：
-- 本機公網 IP 與目標主機雙點地圖標記 + 路徑連線
-- 端口統計表格（loss% / min/avg/max RTT）
-- 協定探測結果表格
-- 無 Geo 資料時自動降級為純表格（不顯示地圖）
 
 ---
 
@@ -208,11 +172,13 @@ go test -count=1 ./...
 
 | 套件 | 測試重點 |
 |------|----------|
-| `pkg/netprobe` | TCP 端口探測、DNS 解析、DoH、HTTP 探測、SMTP StartTLS / AUTH、FTP Banner / AUTH TLS / 匿名登入、SFTP 握手 |
+| `pkg/netprobe` | TCP 端口探測、DNS 解析、DoH、HTTP 探測、SMTP StartTLS / AUTH、FTP Banner / AUTH TLS、SFTP 握手 |
 | `pkg/diag` | Runner 編排、DiagReport nil-safe 方法、全域選項驗證 |
 | `pkg/geo` | NoopLocator 降級行為、DB 路徑驗證 |
 | `pkg/report` | AnnotatedReport 建構、TableWriter / JSONWriter / HTMLWriter 輸出正確性 |
-| `pkg/syscheck` | ICMPChecker 介面、RawICMPChecker 不 panic/契約一致性 |
+| `pkg/server` | API Handler（health / diag / history）路由、SSE 事件格式、錯誤回應結構 |
+| `pkg/store` | MemoryStore Save/List/Get、FIFO 淘汰行為、容量預設值 |
+| `pkg/syscheck` | ICMPChecker 介面契約一致性 |
 | `pkg/version` | Version / BuildTime 變數非空斷言 |
 | `pkg/cli` | 旗標傳遞、版本命令輸出 |
 
@@ -222,5 +188,6 @@ go test -count=1 ./...
 
 - 遵守 SOLID 原則；所有外部依賴以介面注入，便於測試替換。
 - 新增 Runner 時須實作 `Runner` 介面並向 `Dispatcher` 註冊；以 `req.Report.AddProto()` 等 nil-safe 方法寫入結構化結果。
+- 新增 API 端點時在 `pkg/server/server.go` 的 `New()` 中向 mux 註冊，Handler 以 `writeJSON` / `writeError` 統一回應格式。
 - 新增功能同步補齊單元測試，並執行 `go test -count=1 ./...` 確認全部通過。
 - 不使用 CGO（`CGO_ENABLED=0`），確保跨平台靜態連結。
