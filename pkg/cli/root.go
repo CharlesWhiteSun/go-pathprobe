@@ -62,6 +62,8 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 	recordTypes := []string{"A", "AAAA", "MX"}
 	netOpts := diag.NetworkOptions{Host: "example.com", Ports: diag.DefaultPorts(target)}
 	smtpOpts := diag.SMTPOptions{}
+	ftpOpts := diag.FTPOptions{}
+	sftpOpts := diag.SFTPOptions{}
 
 	cmd := &cobra.Command{
 		Use:   target.String(),
@@ -78,6 +80,8 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 					Web:    webOpts,
 					Net:    netOpts,
 					SMTP:   smtpOpts,
+					FTP:    ftpOpts,
+					SFTP:   sftpOpts,
 				},
 			}
 			if target == diag.TargetWeb {
@@ -111,6 +115,20 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 		cmd.Flags().BoolVar(&smtpOpts.StartTLS, "smtp-starttls", true, "attempt STARTTLS when supported")
 		cmd.Flags().StringSliceVar(&smtpOpts.AuthMethods, "smtp-auth-methods", nil, "auth mechanisms to try in order (PLAIN, LOGIN, XOAUTH2)")
 		cmd.Flags().BoolVar(&smtpOpts.MXProbeAll, "smtp-mx-all", false, "probe all MX records for the domain")
+	}
+
+	if target == diag.TargetFTP {
+		cmd.Flags().StringVar(&ftpOpts.Username, "ftp-user", ftpOpts.Username, "FTP username")
+		cmd.Flags().StringVar(&ftpOpts.Password, "ftp-pass", ftpOpts.Password, "FTP password")
+		cmd.Flags().BoolVar(&ftpOpts.UseTLS, "ftp-ssl", false, "use implicit FTPS (port 990)")
+		cmd.Flags().BoolVar(&ftpOpts.AuthTLS, "ftp-auth-tls", false, "use explicit FTPS via AUTH TLS")
+		cmd.Flags().BoolVar(&ftpOpts.RunLIST, "ftp-list", false, "attempt PASV + LIST after login")
+	}
+
+	if target == diag.TargetSFTP {
+		cmd.Flags().StringVar(&sftpOpts.Username, "sftp-user", sftpOpts.Username, "SSH/SFTP username")
+		cmd.Flags().StringVar(&sftpOpts.Password, "sftp-pass", sftpOpts.Password, "SSH/SFTP password")
+		cmd.Flags().BoolVar(&sftpOpts.RunLS, "sftp-ls", false, "attempt to list remote default directory via SFTP subsystem")
 	}
 
 	return cmd

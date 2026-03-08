@@ -41,9 +41,17 @@ func main() {
 	smtpProber := &netprobe.DialSMTPProber{}
 	dispatcher.Register(diag.TargetSMTP, diag.NewMultiRunner(connectRunner, diag.NewSMTPRunner(smtpProber, &netprobe.SystemResolver{Name: "system"}, logger)))
 
+	// FTP/FTPS runner.
+	ftpProber := &netprobe.DialFTPProber{}
+	dispatcher.Register(diag.TargetFTP, diag.NewMultiRunner(connectRunner, diag.NewFTPRunner(ftpProber, logger)))
+
+	// SFTP runner.
+	sftpProber := &netprobe.DialSFTPProber{}
+	dispatcher.Register(diag.TargetSFTP, diag.NewMultiRunner(connectRunner, diag.NewSFTPRunner(sftpProber, logger)))
+
 	// Connectivity for remaining targets.
 	for _, target := range diag.AllTargets {
-		if target == diag.TargetWeb || target == diag.TargetSMTP {
+		if target == diag.TargetWeb || target == diag.TargetSMTP || target == diag.TargetFTP || target == diag.TargetSFTP {
 			continue
 		}
 		dispatcher.Register(target, connectRunner)

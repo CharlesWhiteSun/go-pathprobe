@@ -38,6 +38,8 @@ type Options struct {
 	Web    WebOptions
 	Net    NetworkOptions
 	SMTP   SMTPOptions
+	FTP    FTPOptions
+	SFTP   SFTPOptions
 }
 
 // NetworkOptions configures connectivity and traceroute-style probes.
@@ -57,4 +59,21 @@ type SMTPOptions struct {
 	StartTLS    bool     // attempt STARTTLS after EHLO
 	AuthMethods []string // ordered auth mechanisms to try (PLAIN, LOGIN, XOAUTH2); empty = server preference [PLAIN, LOGIN]
 	MXProbeAll  bool     // when true, probe all MX records for the domain instead of only the first
+}
+
+// FTPOptions carries FTP/FTPS probe configuration.
+type FTPOptions struct {
+	Username string
+	Password string
+	UseTLS   bool // implicit FTPS
+	AuthTLS  bool // explicit FTPS via AUTH TLS
+	RunLIST  bool // attempt PASV + LIST after login
+}
+
+// SFTPOptions carries SFTP/SSH probe configuration.
+type SFTPOptions struct {
+	Username   string
+	Password   string
+	PrivateKey []byte // PEM-encoded private key for public-key auth
+	RunLS      bool   // attempt to list the remote default directory
 }
