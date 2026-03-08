@@ -31,6 +31,8 @@ func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 	port := choosePort(req.Options.Net.Ports, TargetSFTP)
 	opts := req.Options.SFTP
 
+	req.Emitf("sftp", "Connecting to SFTP %s:%d …", host, port)
+
 	res, err := r.Prober.Probe(ctx, netprobe.SFTPProbeRequest{
 		Host:       host,
 		Port:       port,
@@ -44,6 +46,8 @@ func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 		return err
 	}
 
+	req.Emitf("sftp_result", "%s:%d: %s (%s) auth=%s",
+		host, port, res.ServerVersion, res.Algorithms.HostKey, res.AuthMethod)
 	r.Logger.Info("sftp probe",
 		"host", host,
 		"port", port,

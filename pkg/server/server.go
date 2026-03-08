@@ -49,6 +49,11 @@ func New(cfg Config, dispatcher *diag.Dispatcher, locator geo.Locator, logger *s
 		locator:    locator,
 		logger:     logger,
 	})
+	mux.Handle("POST /api/diag/stream", &StreamDiagHandler{
+		dispatcher: dispatcher,
+		locator:    locator,
+		logger:     logger,
+	})
 	// Static web UI — registered last; GET / acts as catch-all for all paths
 	// not claimed by more specific API patterns above.
 	mux.Handle("GET /", newStaticHandler())

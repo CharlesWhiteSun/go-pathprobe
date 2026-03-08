@@ -122,36 +122,99 @@ function buildSFTPOpts() {
 
 // ── API calls ─────────────────────────────────────────────────────────────
 async function runDiag() {
-  const btn      = document.getElementById('run-btn');
-  const errorEl  = document.getElementById('error-banner');
-  const resultEl = document.getElementById('results');
+  const btn        = document.getElementById('run-btn');
+  const errorEl    = document.getElementById('error-banner');
+  const resultEl   = document.getElementById('results');
+  const progressEl = document.getElementById('progress-log');
 
-  btn.disabled    = true;
-  btn.innerHTML   = '<span class="spinner"></span>Running\u2026';
-  errorEl.hidden  = true;
+  btn.disabled   = true;
+  btn.innerHTML  = '<span class="spinner"></span>Running\u2026';
+  errorEl.hidden = true;
   resultEl.hidden = true;
+  if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
 
   try {
     const req  = buildRequest();
-    const resp = await fetch('/api/diag', {
+    const resp = await fetch('/api/diag/stream', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(req),
     });
-    const data = await resp.json();
+
+    // Non-2xx before SSE headers could be a plain JSON error (e.g. during
+    // reverse-proxy validation). Fall back to reading JSON body.
     if (!resp.ok) {
+      const data = await resp.json().catch(() => ({ error: 'HTTP ' + resp.status }));
       showError(data.error || 'Server returned HTTP ' + resp.status);
       return;
     }
-    renderReport(data);
-    resultEl.hidden = false;
-    resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Parse the SSE stream via ReadableStream — no EventSource because the
+    // browser's EventSource API does not support POST requests.
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE messages are separated by blank lines (\n\n).
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const raw = buffer.slice(0, boundary);
+        buffer    = buffer.slice(boundary + 2);
+        handleSSEMessage(raw, progressEl, resultEl);
+      }
+    }
+    // Flush any remaining content in the buffer.
+    if (buffer.trim()) handleSSEMessage(buffer, progressEl, resultEl);
+
   } catch (err) {
     showError('Request failed: ' + err.message);
   } finally {
     btn.disabled  = false;
     btn.innerHTML = '&#9654; Run Diagnostic';
   }
+}
+
+/** Parse a single SSE message block and dispatch to the appropriate handler. */
+function handleSSEMessage(raw, progressEl, resultEl) {
+  let evtName = '', dataStr = '';
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event: '))     evtName = line.slice(7).trim();
+    else if (line.startsWith('data: ')) dataStr = line.slice(6);
+  }
+  if (!dataStr) return;
+
+  let payload;
+  try { payload = JSON.parse(dataStr); } catch { return; }
+
+  if (evtName === 'progress') {
+    appendProgress(progressEl, payload);
+  } else if (evtName === 'result') {
+    if (progressEl) progressEl.hidden = true;
+    renderReport(payload);
+    resultEl.hidden = false;
+    resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if (evtName === 'error') {
+    if (progressEl) progressEl.hidden = true;
+    showError(payload.error || 'diagnostic error');
+  }
+}
+
+/** Append a single progress event entry to the progress log. */
+function appendProgress(el, ev) {
+  if (!el) return;
+  const entry     = document.createElement('div');
+  entry.className = 'progress-entry';
+  entry.innerHTML =
+    '<span class="stage">' + esc(ev.stage   || '') + '</span>' +
+    '<span class="msg">'  + esc(ev.message || '') + '</span>';
+  el.appendChild(entry);
+  el.scrollTop = el.scrollHeight;
 }
 
 async function fetchVersion() {

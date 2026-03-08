@@ -43,7 +43,10 @@ func (r *SMTPRunner) Run(ctx context.Context, req Request) error {
 
 	port := choosePort(req.Options.Net.Ports, TargetSMTP)
 
+	req.Emitf("smtp", "Probing %d SMTP host(s) on port %d …", len(hosts), port)
+
 	for _, host := range hosts {
+		req.Emitf("smtp", "Connecting to %s:%d …", host, port)
 		res, err := r.Prober.Probe(ctx, netprobe.SMTPProbeRequest{
 			Host:        host,
 			Port:        port,
@@ -61,6 +64,8 @@ func (r *SMTPRunner) Run(ctx context.Context, req Request) error {
 		if err != nil {
 			return err
 		}
+		req.Emitf("smtp_result", "%s:%d: banner=%q starttls=%v rcpt=%v",
+			host, port, res.Banner, res.UsedStartTLS, res.RcptAccepted)
 		r.Logger.Info("smtp probe", "host", host, "port", port, "banner", res.Banner, "starttls", res.UsedStartTLS, "rcpt", res.RcptAccepted)
 		summary := res.Banner
 		if res.UsedStartTLS {

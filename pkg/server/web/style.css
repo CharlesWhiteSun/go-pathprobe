@@ -158,3 +158,25 @@ fieldset.target-fields legend {
   .form-grid { grid-template-columns: 1fr; }
   .card      { padding: 1rem; }
 }
+
+/* ── Progress Log ───────────────────────────────────────────────────────── */
+.progress-log {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: .6rem 1rem;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 1.25rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Mono', monospace;
+  font-size: .78rem;
+  line-height: 1.55;
+}
+.progress-entry { display: flex; gap: .5rem; }
+.progress-entry .stage {
+  color: var(--primary);
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 7rem;
+}
+.progress-entry .msg { color: var(--muted); }

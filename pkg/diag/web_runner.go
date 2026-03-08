@@ -35,10 +35,12 @@ func NewWebRunner(fetcher netprobe.PublicIPFetcher, comparator netprobe.DNSCompa
 // Run executes public IP retrieval and DNS comparison.
 func (r *WebRunner) Run(ctx context.Context, req Request) error {
 	// Public IP
+	req.Emit("web", "Fetching public IP address …")
 	ipRes, err := r.fetcher.Fetch(ctx)
 	if err != nil {
 		return err
 	}
+	req.Emitf("web", "Public IP: %s (source: %s)", ipRes.IP, ipRes.Source)
 	r.logger.Info("public ip fetched", "ip", ipRes.IP, "source", ipRes.Source, "rtt", ipRes.RTT)
 	req.Report.SetPublicIP(ipRes.IP)
 
@@ -53,11 +55,14 @@ func (r *WebRunner) Run(ctx context.Context, req Request) error {
 		types = r.defaultTypes
 	}
 
+	req.Emitf("dns", "Comparing DNS records for %d domain(s) …", len(domains))
+
 	comparisons, err := r.comparator.Compare(ctx, domains, types)
 	if err != nil {
 		return err
 	}
 	for _, comp := range comparisons {
+		req.Emitf("dns_result", "%-4s %s divergent=%v", comp.Type, comp.Name, comp.HasDivergence())
 		r.logger.Info("dns comparison", "domain", comp.Name, "type", comp.Type, "divergent", comp.HasDivergence(), "results", comp.Results)
 	}
 	return nil

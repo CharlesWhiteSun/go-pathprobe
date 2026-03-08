@@ -33,6 +33,8 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		}
 		url = "https://" + host
 	}
+	req.Emitf("http", "Probing HTTP %s …", url)
+
 	res, err := r.Prober.Probe(ctx, netprobe.HTTPProbeRequest{
 		URL:      url,
 		Insecure: req.Options.Global.Insecure,
@@ -41,6 +43,7 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	if err != nil {
 		return err
 	}
+	req.Emitf("http_result", "HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
 	r.Logger.Info("http probe", "url", url, "status", res.StatusCode, "rtt", res.RTT)
 	if res.TLS != nil {
 		r.Logger.Info("tls info", "version", res.TLS.Version, "cipher", res.TLS.CipherSuite, "alpn", res.TLS.NegotiatedALPN)

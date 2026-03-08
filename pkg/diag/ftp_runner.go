@@ -31,6 +31,8 @@ func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 	port := choosePort(req.Options.Net.Ports, TargetFTP)
 	opts := req.Options.FTP
 
+	req.Emitf("ftp", "Connecting to FTP %s:%d …", host, port)
+
 	res, err := r.Prober.Probe(ctx, netprobe.FTPProbeRequest{
 		Host:     host,
 		Port:     port,
@@ -46,6 +48,7 @@ func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 		return err
 	}
 
+	req.Emitf("ftp_result", "%s:%d: login=%v banner=%q", host, port, res.LoginAccepted, res.Banner)
 	r.Logger.Info("ftp probe",
 		"host", host,
 		"port", port,

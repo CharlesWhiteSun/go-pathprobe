@@ -3,6 +3,7 @@ package diag
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -22,6 +23,25 @@ type Request struct {
 	// Report is an optional accumulator for structured results.
 	// Runners write to it when non-nil; a nil pointer disables reporting.
 	Report *DiagReport
+	// Hook is an optional callback for real-time progress updates.
+	// A nil Hook silently disables all progress emissions.
+	Hook ProgressHook
+}
+
+// Emit calls the progress hook (if non-nil) with a plain-text message.
+// It is a no-op when Hook is nil.
+func (r Request) Emit(stage, message string) {
+	if r.Hook != nil {
+		r.Hook(ProgressEvent{Stage: stage, Message: message})
+	}
+}
+
+// Emitf calls the progress hook (if non-nil) with a formatted message.
+// It is a no-op when Hook is nil.
+func (r Request) Emitf(stage, format string, args ...any) {
+	if r.Hook != nil {
+		r.Hook(ProgressEvent{Stage: stage, Message: fmt.Sprintf(format, args...)})
+	}
 }
 
 // Dispatcher keeps target-to-runner mappings and delegates execution.

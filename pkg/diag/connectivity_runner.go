@@ -34,12 +34,17 @@ func (r *ConnectivityRunner) Run(ctx context.Context, req Request) error {
 		ports = DefaultPorts(req.Target)
 	}
 
+	req.Emitf("network", "Probing %d port(s) on %s …", len(ports), host)
+
 	results, err := netprobe.ProbePorts(ctx, host, ports, req.Options.Global.MTRCount, r.Prober)
 	if err != nil {
 		return err
 	}
 
 	for _, res := range results {
+		req.Emitf("port_result", "Port %d: sent=%d recv=%d loss=%.1f%% avg=%s",
+			res.Port, res.Stats.Sent, res.Stats.Received,
+			res.Stats.LossPct, res.Stats.AvgRTT)
 		r.Logger.Info("port probe", "target", req.Target, "host", host, "port", res.Port, "loss_pct", res.Stats.LossPct, "avg_rtt", res.Stats.AvgRTT, "min_rtt", res.Stats.MinRTT, "max_rtt", res.Stats.MaxRTT, "sent", res.Stats.Sent, "received", res.Stats.Received)
 	}
 

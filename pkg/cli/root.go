@@ -68,8 +68,9 @@ func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, logg
 		Long: `Starts an HTTP server that exposes PathProbe diagnostics as a REST API.
 
 Endpoints:
-  GET  /api/health   — liveness probe (returns version + build time)
-  POST /api/diag     — run a diagnostic and receive a JSON AnnotatedReport
+  GET  /api/health        — liveness probe (returns version + build time)
+  POST /api/diag          — run a diagnostic and receive a JSON AnnotatedReport
+  POST /api/diag/stream   — run a diagnostic with real-time SSE progress events
 
 Geo annotation uses the --geo-db-city / --geo-db-asn flags from the root command.
 The server shuts down gracefully on SIGINT (Ctrl-C).`,
