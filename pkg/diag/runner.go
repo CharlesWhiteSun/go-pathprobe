@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	ErrNotImplemented = errors.New("probe not implemented")
 	ErrRunnerNotFound = errors.New("no runner registered for target")
 )
 

@@ -3,6 +3,7 @@ package diag
 import (
 	"errors"
 	"log/slog"
+	"time"
 )
 
 const (
@@ -15,6 +16,8 @@ type GlobalOptions struct {
 	JSON     bool
 	Report   string
 	MTRCount int
+	Timeout  time.Duration
+	Insecure bool
 	LogLevel slog.Level
 }
 
@@ -22,6 +25,9 @@ type GlobalOptions struct {
 func (o GlobalOptions) Validate() error {
 	if o.MTRCount <= 0 {
 		return errors.New("mtr-count must be greater than zero")
+	}
+	if o.Timeout <= 0 {
+		return errors.New("timeout must be greater than zero")
 	}
 	return nil
 }

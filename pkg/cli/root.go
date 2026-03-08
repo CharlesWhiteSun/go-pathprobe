@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -12,7 +13,7 @@ import (
 
 // NewRootCommand constructs the CLI root with subcommands for diagnostics.
 func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *slog.LevelVar) *cobra.Command {
-	opts := diag.GlobalOptions{MTRCount: diag.DefaultMTRCount, LogLevel: slog.LevelInfo}
+	opts := diag.GlobalOptions{MTRCount: diag.DefaultMTRCount, Timeout: 5 * time.Second, LogLevel: slog.LevelInfo}
 	var logLevelFlag string
 
 	rootCmd := &cobra.Command{
@@ -34,6 +35,8 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 	rootCmd.PersistentFlags().StringVar(&opts.Report, "report", "", "output report path (optional)")
 	rootCmd.PersistentFlags().IntVar(&opts.MTRCount, "mtr-count", diag.DefaultMTRCount, "probe count per hop for traceroute/MTR")
 	rootCmd.PersistentFlags().StringVar(&logLevelFlag, "log-level", "info", "log level: debug, info, warn, error")
+	rootCmd.PersistentFlags().DurationVar(&opts.Timeout, "timeout", 5*time.Second, "overall timeout per diagnostic")
+	rootCmd.PersistentFlags().BoolVar(&opts.Insecure, "insecure", false, "skip TLS verification (use with caution)")
 
 	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
 

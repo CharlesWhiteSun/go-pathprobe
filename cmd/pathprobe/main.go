@@ -14,7 +14,7 @@ func main() {
 
 	dispatcher := diag.NewDispatcher(nil)
 	for _, target := range diag.AllTargets {
-		dispatcher.Register(target, diag.NewNotImplementedRunner(target))
+		dispatcher.Register(target, diag.NewBasicRunner(target, logger))
 	}
 
 	rootCmd := cli.NewRootCommand(dispatcher, logger, levelVar)

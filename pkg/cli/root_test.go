@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -39,7 +40,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
 	cmd := NewRootCommand(dispatcher, logger, levelVar)
 
-	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug"); err != nil {
+	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -55,6 +56,14 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 		t.Fatalf("expected mtr-count=3, got %d", runner.lastRequest.Options.Global.MTRCount)
 	}
 
+	if runner.lastRequest.Options.Global.Timeout != 750*time.Millisecond {
+		t.Fatalf("expected timeout 750ms, got %v", runner.lastRequest.Options.Global.Timeout)
+	}
+
+	if !runner.lastRequest.Options.Global.Insecure {
+		t.Fatalf("expected insecure flag to propagate")
+	}
+
 	if levelVar.Level() != slog.LevelDebug {
 		t.Fatalf("expected log level debug, got %v", levelVar.Level())
 	}
@@ -67,6 +76,16 @@ func TestInvalidMTRCountFailsValidation(t *testing.T) {
 
 	if _, err := executeCommand(cmd, "diag", "smtp", "--mtr-count", "0"); err == nil {
 		t.Fatalf("expected validation error for mtr-count=0")
+	}
+}
+
+func TestInvalidTimeoutFailsValidation(t *testing.T) {
+	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetFTP: &recordingRunner{}})
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	if _, err := executeCommand(cmd, "diag", "ftp", "--timeout", "0"); err == nil {
+		t.Fatalf("expected validation error for timeout=0")
 	}
 }
 
