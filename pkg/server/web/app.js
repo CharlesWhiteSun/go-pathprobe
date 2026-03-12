@@ -27,15 +27,56 @@ const TARGET_PORTS = {
   sftp: [22],
 };
 
-// ── Per-target host placeholder text ─────────────────────────────────────
-const TARGET_PLACEHOLDERS = {
-  web:  'e.g. google.com',
-  smtp: 'e.g. mail.example.com',
-  imap: 'e.g. mail.example.com',
-  pop:  'e.g. mail.example.com',
-  ftp:  'e.g. ftp.example.com',
-  sftp: 'e.g. sftp.example.com',
+// ── Per-target host placeholder i18n keys ─────────────────────────────────
+const TARGET_PLACEHOLDER_KEYS = {
+  web:  'ph-web',
+  smtp: 'ph-smtp',
+  imap: 'ph-imap',
+  pop:  'ph-pop',
+  ftp:  'ph-ftp',
+  sftp: 'ph-sftp',
 };
+
+// ── Locale management ─────────────────────────────────────────────────────
+let _locale = 'en';
+
+/** Return the translation for key in the current locale, falling back to en. */
+function t(key) {
+  const locs = window.LOCALES || {};
+  return (locs[_locale] || {})[key] || (locs.en || {})[key] || key;
+}
+
+/** Apply the current locale to all [data-i18n] elements and refresh dynamic UI. */
+function applyLocale() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  // Refresh host placeholder (depends on current target selection)
+  const target = val('target');
+  const hostEl = document.getElementById('host');
+  if (hostEl) hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
+  // Update run button (unless currently running)
+  const runBtn = document.getElementById('run-btn');
+  if (runBtn && !runBtn.disabled) runBtn.textContent = t('btn-run');
+  // Highlight the active language button
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === _locale);
+  });
+  document.documentElement.lang = _locale;
+}
+
+/** Persist and apply a new locale choice. */
+function setLocale(lang) {
+  _locale = lang;
+  try { localStorage.setItem('lang', lang); } catch (_) {}
+  applyLocale();
+}
+
+/** Initialise locale from localStorage (defaults to 'en'). */
+function initLocale() {
+  try { _locale = localStorage.getItem('lang') || 'en'; } catch (_) { _locale = 'en'; }
+  applyLocale();
+}
 
 // ── Initialisation ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -48,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
   onTargetChange(); // populate defaults for initial selection
   fetchVersion();   // async version badge
   loadHistory();    // populate history panel
+  initLocale();     // apply saved locale (must run after DOM is ready)
 });
 
 // ── Form dynamics ─────────────────────────────────────────────────────────
@@ -68,7 +110,7 @@ function onTargetChange() {
   // Update host placeholder based on target.
   const hostEl = document.getElementById('host');
   if (hostEl) {
-    hostEl.placeholder = TARGET_PLACEHOLDERS[target] || 'hostname or IP';
+    hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
   }
 }
 
@@ -147,7 +189,7 @@ async function runDiag() {
   const progressEl = document.getElementById('progress-log');
 
   btn.disabled   = true;
-  btn.innerHTML  = '<span class="spinner"></span>Running\u2026';
+  btn.innerHTML  = '<span class="spinner"></span>' + esc(t('btn-running'));
   errorEl.hidden = true;
   resultEl.hidden = true;
   if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
@@ -195,7 +237,7 @@ async function runDiag() {
     showError('Request failed: ' + err.message);
   } finally {
     btn.disabled  = false;
-    btn.innerHTML = '&#9654; Run Diagnostic';
+    btn.textContent = t('btn-run');
   }
 }
 
@@ -242,12 +284,9 @@ async function fetchVersion() {
   try {
     const r = await fetch('/api/health');
     if (!r.ok) return;
-    const { version, built_at } = await r.json();
+    const { version } = await r.json();
     const el = document.getElementById('version-badge');
-    if (el) {
-      el.textContent = version +
-        (built_at && built_at !== 'unknown' ? '  \u00b7  ' + built_at : '');
-    }
+    if (el && version) el.textContent = version;
   } catch (_) { /* non-fatal — version badge stays empty */ }
 }
 
@@ -269,12 +308,12 @@ function renderReport(r) {
 
 function renderSummary(r) {
   const items = [
-    ['Target',    r.Target],
-    ['Host',      r.Host],
-    ['Generated', r.GeneratedAt],
+    [t('key-target'),    r.Target],
+    [t('key-host'),      r.Host],
+    [t('key-generated'), r.GeneratedAt],
   ];
   if (r.PublicGeo && r.PublicGeo.IP) {
-    items.push(['Public IP', r.PublicGeo.IP]);
+    items.push([t('key-public-ip'), r.PublicGeo.IP]);
   }
   return '<div class="results-summary">' +
     items.map(([k, v]) =>
@@ -300,11 +339,16 @@ function renderPortsSection(ports) {
     '</tr>'
   ).join('');
   return '<div class="result-section">' +
-    '<h3>Port Connectivity</h3>' +
+    '<h3>' + esc(t('section-ports')) + '</h3>' +
     '<table class="result-table">' +
       '<thead><tr>' +
-        '<th>Port</th><th>Sent</th><th>Recv</th>' +
-        '<th>Loss%</th><th>Min RTT</th><th>Avg RTT</th><th>Max RTT</th>' +
+        '<th>' + esc(t('th-port'))    + '</th>' +
+        '<th>' + esc(t('th-sent'))    + '</th>' +
+        '<th>' + esc(t('th-recv'))    + '</th>' +
+        '<th>' + esc(t('th-loss'))    + '</th>' +
+        '<th>' + esc(t('th-min-rtt'))+ '</th>' +
+        '<th>' + esc(t('th-avg-rtt'))+ '</th>' +
+        '<th>' + esc(t('th-max-rtt'))+ '</th>' +
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table></div>';
@@ -325,10 +369,14 @@ function renderProtosSection(protos) {
     '</tr>';
   }).join('');
   return '<div class="result-section">' +
-    '<h3>Protocol Results</h3>' +
+    '<h3>' + esc(t('section-protos')) + '</h3>' +
     '<table class="result-table">' +
       '<thead><tr>' +
-        '<th>Protocol</th><th>Host</th><th>Port</th><th>Status</th><th>Summary</th>' +
+        '<th>' + esc(t('th-protocol'))+ '</th>' +
+        '<th>' + esc(t('th-host'))    + '</th>' +
+        '<th>' + esc(t('th-port'))    + '</th>' +
+        '<th>' + esc(t('th-status'))  + '</th>' +
+        '<th>' + esc(t('th-summary')) + '</th>' +
       '</tr></thead>' +
       '<tbody>' + rows + '</tbody>' +
     '</table></div>';
@@ -338,23 +386,23 @@ function renderGeoSection(pub, tgt) {
   const hasAny = (pub && pub.HasLocation) || (tgt && tgt.HasLocation);
   if (!hasAny) return '';
   return '<div class="result-section">' +
-    '<h3>Geo Information</h3>' +
+    '<h3>' + esc(t('section-geo')) + '</h3>' +
     '<div class="geo-grid">' +
-      renderGeoBlock('Public IP',    pub) +
-      renderGeoBlock('Target Host',  tgt) +
+      renderGeoBlock(t('geo-public-ip'),   pub) +
+      renderGeoBlock(t('geo-target-host'), tgt) +
     '</div></div>';
 }
 
 function renderGeoBlock(label, geo) {
   if (!geo || !geo.IP) {
     return '<div class="geo-block"><h4>' + esc(label) + '</h4>' +
-           '<p class="empty-note">No data</p></div>';
+           '<p class="empty-note">' + esc(t('geo-no-data')) + '</p></div>';
   }
   const rows = [
-    ['IP',      geo.IP],
-    geo.City        ? ['City',    geo.City]                                        : null,
-    geo.CountryName ? ['Country', geo.CountryName + ' (' + geo.CountryCode + ')'] : null,
-    geo.OrgName     ? ['ASN',     'AS' + geo.ASN + ' ' + geo.OrgName]             : null,
+    [t('geo-kv-ip'),      geo.IP],
+    geo.City        ? [t('geo-kv-city'),    geo.City]                                        : null,
+    geo.CountryName ? [t('geo-kv-country'), geo.CountryName + ' (' + geo.CountryCode + ')'] : null,
+    geo.OrgName     ? [t('geo-kv-asn'),     'AS' + geo.ASN + ' ' + geo.OrgName]             : null,
   ].filter(Boolean);
 
   const kvHtml = rows.map(([k, v]) =>
@@ -406,10 +454,10 @@ function renderMap(pub, tgt) {
 
   const points = [];
   if (pub && pub.HasLocation) {
-    points.push({ lat: pub.Lat, lon: pub.Lon, label: 'Public IP: ' + pub.IP });
+    points.push({ lat: pub.Lat, lon: pub.Lon, label: t('map-public-ip') + ': ' + pub.IP });
   }
   if (tgt && tgt.HasLocation) {
-    points.push({ lat: tgt.Lat, lon: tgt.Lon, label: 'Target: ' + tgt.IP });
+    points.push({ lat: tgt.Lat, lon: tgt.Lon, label: t('map-target') + ': ' + tgt.IP });
   }
 
   // Hide the map when there are no geo-located points.

@@ -115,9 +115,9 @@ The server shuts down gracefully on SIGINT (Ctrl-C).`,
 func newVersionCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Show PathProbe version and build information",
+		Short: "Show PathProbe version",
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Printf("PathProbe %s (built %s)\n", version.Version, version.BuildTime)
+			fmt.Printf("PathProbe %s\n", version.Version)
 		},
 	}
 }

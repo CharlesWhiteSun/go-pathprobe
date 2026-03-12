@@ -80,7 +80,6 @@ type ErrorResponse struct {
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
-	BuiltAt string `json:"built_at"`
 }
 
 // HistoryListItem is a summary row returned by GET /api/history.

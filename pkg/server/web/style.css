@@ -281,3 +281,15 @@ fieldset.target-fields legend {
 }
 .history-item .hi-host { font-weight: 600; flex: 1; }
 .history-item .hi-time { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+
+/*  Language switcher  */
+.lang-switcher { margin-left: auto; display: flex; gap: .3rem; }
+.lang-btn {
+  background: rgba(255,255,255,.15); color: #fff;
+  border: 1px solid rgba(255,255,255,.35); border-radius: 4px;
+  padding: .2rem .52rem; font-size: .75rem; font-weight: 700; cursor: pointer;
+  transition: background .15s, border-color .15s;
+  line-height: 1.4;
+}
+.lang-btn:hover  { background: rgba(255,255,255,.28); }
+.lang-btn.active { background: rgba(255,255,255,.32); border-color: #fff; }

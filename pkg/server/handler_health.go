@@ -19,6 +19,5 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
 		Status:  "ok",
 		Version: version.Version,
-		BuiltAt: version.BuildTime,
 	})
 }

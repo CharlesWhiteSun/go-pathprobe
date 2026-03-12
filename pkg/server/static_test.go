@@ -67,6 +67,29 @@ func TestStaticHandler_ServesAppJS(t *testing.T) {
 	}
 }
 
+// TestStaticHandler_ServesI18nJS verifies that the i18n translation module is
+// embedded and served with a JavaScript Content-Type.
+func TestStaticHandler_ServesI18nJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "javascript") {
+		t.Fatalf("Content-Type = %q, want javascript content type", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "LOCALES") {
+		t.Error("i18n.js must export the LOCALES object")
+	}
+	if !strings.Contains(body, "zh-TW") {
+		t.Error("i18n.js must contain the zh-TW locale")
+	}
+}
+
 // TestStaticHandler_NotFound verifies that a non-existent path returns 404.
 func TestStaticHandler_NotFound(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))

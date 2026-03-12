@@ -13,6 +13,10 @@
   <div class="header-inner">
     <h1>PathProbe</h1>
     <span class="version-badge" id="version-badge"></span>
+    <div class="lang-switcher">
+      <button class="lang-btn" data-lang="en" data-i18n="btn-lang-en" onclick="setLocale('en')">EN</button>
+      <button class="lang-btn" data-lang="zh-TW" data-i18n="btn-lang-zh" onclick="setLocale('zh-TW')">TW</button>
+    </div>
   </div>
 </header>
 
@@ -20,42 +24,42 @@
 
   <!-- ── Diagnostic Form ─────────────────────────────────────────────── -->
   <section class="card">
-    <h2 class="card-title">Run Diagnostic</h2>
+    <h2 class="card-title" data-i18n="run-diagnostic">Run Diagnostic</h2>
 
     <div class="form-grid">
       <div class="field-group">
-        <label for="target">Target</label>
+        <label for="target" data-i18n="label-target">Target</label>
         <select id="target" onchange="onTargetChange()">
-          <option value="web">web — Public IP &amp; DNS</option>
-          <option value="smtp">smtp — Mail server</option>
-          <option value="imap">imap — IMAP server</option>
-          <option value="pop">pop — POP3 server</option>
-          <option value="ftp">ftp — FTP / FTPS</option>
-          <option value="sftp">sftp — SFTP / SSH</option>
+          <option value="web" data-i18n="opt-web">web — Public IP &amp; DNS</option>
+          <option value="smtp" data-i18n="opt-smtp">smtp — Mail server</option>
+          <option value="imap" data-i18n="opt-imap">imap — IMAP server</option>
+          <option value="pop" data-i18n="opt-pop">pop — POP3 server</option>
+          <option value="ftp" data-i18n="opt-ftp">ftp — FTP / FTPS</option>
+          <option value="sftp" data-i18n="opt-sftp">sftp — SFTP / SSH</option>
         </select>
       </div>
 
       <div class="field-group">
-        <label for="host">Target Host</label>
+        <label for="host" data-i18n="label-host">Target Host</label>
         <input type="text" id="host" placeholder="e.g. google.com">
       </div>
 
       <div class="field-group">
-        <label for="ports">Ports <small>(comma-separated)</small></label>
+        <label for="ports"><span data-i18n="label-ports">Ports</span> <small data-i18n="label-ports-hint">(comma-separated)</small></label>
         <input type="text" id="ports" placeholder="443">
       </div>
     </div>
 
     <!-- web-specific fields -->
     <fieldset class="target-fields" id="fields-web">
-      <legend>Web / DNS Options</legend>
+      <legend data-i18n="legend-web">Web / DNS Options</legend>
       <div class="form-grid">
         <div class="field-group">
-          <label for="dns-domains">DNS Domains <small>(comma-separated)</small></label>
+          <label for="dns-domains"><span data-i18n="label-dns-domains">DNS Domains</span> <small data-i18n="label-dns-domains-hint">(comma-separated)</small></label>
           <input type="text" id="dns-domains" value="example.com" placeholder="example.com,google.com">
         </div>
         <div class="field-group">
-          <label>Record Types</label>
+          <label data-i18n="label-record-types">Record Types</label>
           <div class="checkbox-row">
             <label><input type="checkbox" id="dns-A"    checked> A</label>
             <label><input type="checkbox" id="dns-AAAA" checked> AAAA</label>
@@ -63,7 +67,7 @@
           </div>
         </div>
         <div class="field-group">
-          <label for="http-url">HTTP URL <small>(optional probe)</small></label>
+          <label for="http-url"><span data-i18n="label-http-url">HTTP URL</span> <small data-i18n="label-http-url-hint">(optional probe)</small></label>
           <input type="text" id="http-url" placeholder="https://example.com">
         </div>
       </div>
@@ -71,90 +75,90 @@
 
     <!-- smtp-specific fields -->
     <fieldset class="target-fields" id="fields-smtp" hidden>
-      <legend>SMTP Options</legend>
+      <legend data-i18n="legend-smtp">SMTP Options</legend>
       <div class="form-grid">
         <div class="field-group">
-          <label for="smtp-domain">EHLO Domain</label>
+          <label for="smtp-domain" data-i18n="label-smtp-domain">EHLO Domain</label>
           <input type="text" id="smtp-domain" placeholder="example.com" autocomplete="off">
         </div>
         <div class="field-group">
-          <label for="smtp-user">Username</label>
+          <label for="smtp-user" data-i18n="label-smtp-user">Username</label>
           <input type="text" id="smtp-user" placeholder="user@example.com" autocomplete="off">
         </div>
         <div class="field-group">
-          <label for="smtp-pass">Password</label>
+          <label for="smtp-pass" data-i18n="label-smtp-pass">Password</label>
           <input type="password" id="smtp-pass" autocomplete="new-password">
         </div>
         <div class="field-group">
-          <label for="smtp-from">MAIL FROM</label>
+          <label for="smtp-from" data-i18n="label-smtp-from">MAIL FROM</label>
           <input type="text" id="smtp-from" placeholder="sender@example.com">
         </div>
         <div class="field-group">
-          <label for="smtp-to">RCPT TO <small>(comma-separated)</small></label>
+          <label for="smtp-to"><span data-i18n="label-smtp-to">RCPT TO</span> <small data-i18n="label-smtp-to-hint">(comma-separated)</small></label>
           <input type="text" id="smtp-to" placeholder="recipient@example.com">
         </div>
       </div>
       <div class="checkbox-row">
-        <label><input type="checkbox" id="smtp-starttls" checked> STARTTLS</label>
-        <label><input type="checkbox" id="smtp-ssl"> Implicit TLS (SMTPS)</label>
-        <label><input type="checkbox" id="smtp-mx-all"> Probe all MX records</label>
+        <label><input type="checkbox" id="smtp-starttls" checked> <span data-i18n="label-smtp-starttls">STARTTLS</span></label>
+        <label><input type="checkbox" id="smtp-ssl"> <span data-i18n="label-smtp-ssl">Implicit TLS (SMTPS)</span></label>
+        <label><input type="checkbox" id="smtp-mx-all"> <span data-i18n="label-smtp-mx-all">Probe all MX records</span></label>
       </div>
     </fieldset>
 
     <!-- ftp-specific fields -->
     <fieldset class="target-fields" id="fields-ftp" hidden>
-      <legend>FTP / FTPS Options</legend>
+      <legend data-i18n="legend-ftp">FTP / FTPS Options</legend>
       <div class="form-grid">
         <div class="field-group">
-          <label for="ftp-user">Username <small>(blank = anonymous)</small></label>
+          <label for="ftp-user"><span data-i18n="label-ftp-user">Username</span> <small data-i18n="label-ftp-user-hint">(blank = anonymous)</small></label>
           <input type="text" id="ftp-user" placeholder="anonymous" autocomplete="off">
         </div>
         <div class="field-group">
-          <label for="ftp-pass">Password</label>
+          <label for="ftp-pass" data-i18n="label-ftp-pass">Password</label>
           <input type="password" id="ftp-pass" autocomplete="new-password">
         </div>
       </div>
       <div class="checkbox-row">
-        <label><input type="checkbox" id="ftp-ssl"> Implicit FTPS (port 990)</label>
-        <label><input type="checkbox" id="ftp-auth-tls"> Explicit FTPS (AUTH TLS)</label>
-        <label><input type="checkbox" id="ftp-list"> Attempt PASV + LIST</label>
+        <label><input type="checkbox" id="ftp-ssl"> <span data-i18n="label-ftp-ssl">Implicit FTPS (port 990)</span></label>
+        <label><input type="checkbox" id="ftp-auth-tls"> <span data-i18n="label-ftp-auth-tls">Explicit FTPS (AUTH TLS)</span></label>
+        <label><input type="checkbox" id="ftp-list"> <span data-i18n="label-ftp-list">Attempt PASV + LIST</span></label>
       </div>
     </fieldset>
 
     <!-- sftp-specific fields -->
     <fieldset class="target-fields" id="fields-sftp" hidden>
-      <legend>SFTP / SSH Options</legend>
+      <legend data-i18n="legend-sftp">SFTP / SSH Options</legend>
       <div class="form-grid">
         <div class="field-group">
-          <label for="sftp-user">Username</label>
+          <label for="sftp-user" data-i18n="label-sftp-user">Username</label>
           <input type="text" id="sftp-user" autocomplete="off">
         </div>
         <div class="field-group">
-          <label for="sftp-pass">Password</label>
+          <label for="sftp-pass" data-i18n="label-sftp-pass">Password</label>
           <input type="password" id="sftp-pass" autocomplete="new-password">
         </div>
       </div>
       <div class="checkbox-row">
-        <label><input type="checkbox" id="sftp-ls"> List remote default directory</label>
+        <label><input type="checkbox" id="sftp-ls"> <span data-i18n="label-sftp-ls">List remote default directory</span></label>
       </div>
     </fieldset>
 
     <!-- advanced options (shared, collapsible) -->
     <details class="advanced-opts">
-      <summary>Advanced Options</summary>
+      <summary data-i18n="adv-summary">Advanced Options</summary>
       <div class="form-grid adv-grid">
         <div class="field-group">
-          <label for="mtr-count">MTR Count</label>
+          <label for="mtr-count" data-i18n="label-mtr-count">MTR Count</label>
           <input type="number" id="mtr-count" value="5" min="1" max="50">
         </div>
         <div class="field-group">
-          <label for="diag-timeout">Timeout</label>
+          <label for="diag-timeout" data-i18n="label-timeout">Timeout</label>
           <input type="text" id="diag-timeout" value="30s" placeholder="30s">
         </div>
       </div>
       <div class="checkbox-row">
-        <label><input type="checkbox" id="insecure"> Skip TLS certificate verification</label>
-        <label><input type="checkbox" id="geo-enabled" checked> Enable Geo annotation &amp; map</label>
+        <label><input type="checkbox" id="insecure"> <span data-i18n="label-insecure">Skip TLS certificate verification</span></label>
+        <label><input type="checkbox" id="geo-enabled" checked> <span data-i18n="label-geo-enabled">Enable Geo annotation &amp; map</span></label>
       </div>
     </details>
 
@@ -171,19 +175,20 @@
 
   <!-- ── Results ──────────────────────────────────────────────────────── -->
   <section class="card" id="results" hidden>
-    <h2 class="card-title">Results</h2>
+    <h2 class="card-title" data-i18n="results-title">Results</h2>
     <div id="results-inner"></div>    <div id="geo-map" aria-label="Geo location map"></div>
   </section>
 
   <!-- ── History ──────────────────────────────────────────────────── -->
   <section class="card" id="history-panel">
-    <h2 class="card-title">Diagnostic History</h2>
-    <p class="history-empty" id="history-empty">No diagnostics run yet.</p>
+    <h2 class="card-title" data-i18n="history-title">Diagnostic History</h2>
+    <p class="history-empty" id="history-empty" data-i18n="history-empty">No diagnostics run yet.</p>
     <ul class="history-list" id="history-list" hidden></ul>  </section>
 
 </main>
 
 <script src="/leaflet.js" defer></script>
+<script src="/i18n.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

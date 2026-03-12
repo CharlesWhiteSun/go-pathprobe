@@ -70,6 +70,24 @@ func TestHealthEndpoint_ReturnsOKWithVersion(t *testing.T) {
 	}
 }
 
+// TestHealthEndpoint_NoBuiltAtField verifies that the health response no longer
+// contains a built_at field — it was removed in favour of encoding time into the
+// version string (tag-hash[-dirty] format).
+func TestHealthEndpoint_NoBuiltAtField(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+
+	// Decode into a generic map to inspect raw JSON keys.
+	var raw map[string]interface{}
+	if err := json.NewDecoder(rec.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if _, ok := raw["built_at"]; ok {
+		t.Error("health response must not contain built_at field")
+	}
+}
+
 func TestHealthEndpoint_MethodNotAllowed(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
