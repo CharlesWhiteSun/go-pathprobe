@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -163,17 +164,20 @@ func TestTargetHostDefault(t *testing.T) {
 }
 
 // TestReportFlagPropagates verifies --report value is passed through to GlobalOptions.
+// The report is written to a temporary directory so that no artefacts are left
+// inside the source tree after the test run.
 func TestReportFlagPropagates(t *testing.T) {
 	runner := &recordingRunner{}
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: runner})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
 	cmd := NewRootCommand(dispatcher, logger, levelVar)
 
-	if _, err := executeCommand(cmd, "diag", "web", "--report", "output.json"); err != nil {
+	reportPath := filepath.Join(t.TempDir(), "report.html")
+	if _, err := executeCommand(cmd, "diag", "web", "--report", reportPath); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if runner.lastRequest.Options.Global.Report != "output.json" {
-		t.Fatalf("expected report path 'output.json', got %q", runner.lastRequest.Options.Global.Report)
+	if runner.lastRequest.Options.Global.Report != reportPath {
+		t.Fatalf("expected report path %q, got %q", reportPath, runner.lastRequest.Options.Global.Report)
 	}
 }
 

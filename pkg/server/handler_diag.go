@@ -71,7 +71,8 @@ func (h *DiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ar, err := report.Build(ctx, diagReport, h.locator)
+	locator := h.resolveLocator(req.Options.DisableGeo)
+	ar, err := report.Build(ctx, diagReport, locator)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "report build failed: "+err.Error())
 		return
@@ -80,6 +81,15 @@ func (h *DiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.store.Save(store.HistoryEntry{Report: ar})
 
 	writeJSON(w, http.StatusOK, ar)
+}
+
+// resolveLocator returns the handler's locator normally, or a NoopLocator when
+// the caller has opted out of geo annotation for this request.
+func (h *DiagHandler) resolveLocator(disableGeo bool) geo.Locator {
+	if disableGeo {
+		return geo.NoopLocator{}
+	}
+	return h.locator
 }
 
 // isValidTarget returns true when t is one of the registered diagnostic targets.

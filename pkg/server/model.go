@@ -17,14 +17,15 @@ type DiagRequest struct {
 // SFTP private-key authentication is intentionally not exposed via the HTTP
 // API  use the CLI with a local key file instead.
 type ReqOptions struct {
-	MTRCount int      `json:"mtr_count,omitempty"`
-	Timeout  string   `json:"timeout,omitempty"`
-	Insecure bool     `json:"insecure,omitempty"`
-	Web      *ReqWeb  `json:"web,omitempty"`
-	Net      *ReqNet  `json:"net,omitempty"`
-	SMTP     *ReqSMTP `json:"smtp,omitempty"`
-	FTP      *ReqFTP  `json:"ftp,omitempty"`
-	SFTP     *ReqSFTP `json:"sftp,omitempty"`
+	MTRCount   int      `json:"mtr_count,omitempty"`
+	Timeout    string   `json:"timeout,omitempty"`
+	Insecure   bool     `json:"insecure,omitempty"`
+	DisableGeo bool     `json:"disable_geo,omitempty"`
+	Web        *ReqWeb  `json:"web,omitempty"`
+	Net        *ReqNet  `json:"net,omitempty"`
+	SMTP       *ReqSMTP `json:"smtp,omitempty"`
+	FTP        *ReqFTP  `json:"ftp,omitempty"`
+	SFTP       *ReqSFTP `json:"sftp,omitempty"`
 }
 
 // ReqWeb configures Web / DNS diagnostic parameters.

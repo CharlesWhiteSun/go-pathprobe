@@ -13,3 +13,6 @@
 # Go coverage
 *.coverprofile
 coverage.*
+
+# Compressed database downloads (raw .mmdb are embedded via go:embed and ARE tracked)
+*.mmdb.gz

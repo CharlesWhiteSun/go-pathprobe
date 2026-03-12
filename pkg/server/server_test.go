@@ -255,6 +255,37 @@ func TestDiagEndpoint_AllTargets_AreRoutable(t *testing.T) {
 	}
 }
 
+func TestDiagEndpoint_DisableGeo_ReturnsOKWithEmptyGeoFields(t *testing.T) {
+	d := diag.NewDispatcher(nil)
+	d.Register(diag.TargetWeb, stubRunner{})
+
+	h := newHandler(t, d)
+	body := diagBody(t, server.DiagRequest{
+		Target: "web",
+		Options: server.ReqOptions{
+			Net:        &server.ReqNet{Host: "127.0.0.1", Ports: []int{80}},
+			DisableGeo: true, // opt out of geo annotation
+		},
+	})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/diag", body))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: body=%s", rec.Code, rec.Body.String())
+	}
+	var ar report.AnnotatedReport
+	if err := json.NewDecoder(rec.Body).Decode(&ar); err != nil {
+		t.Fatalf("decode AnnotatedReport: %v", err)
+	}
+	// With DisableGeo, the geo annotation fields must remain zero-valued.
+	if ar.PublicGeo.HasLocation {
+		t.Error("PublicGeo.HasLocation should be false when disable_geo=true")
+	}
+	if ar.TargetGeo.HasLocation {
+		t.Error("TargetGeo.HasLocation should be false when disable_geo=true")
+	}
+}
+
 // ---- helpers ------------------------------------------------------------
 
 // assertErrorField decodes the body and asserts the "error" key is non-empty.

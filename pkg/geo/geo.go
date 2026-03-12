@@ -53,6 +53,20 @@ type GeoLite2Locator struct {
 	asnDB  *geoip2.Reader
 }
 
+// AutoLocator selects the best available Locator:
+//   - If cityPath or asnPath are non-empty, delegates to Open (file-based).
+//   - Otherwise returns a CountryLocator backed by the databases embedded at
+//     build time (DB-IP Country Lite + ASN Lite, CC BY 4.0).
+//
+// AutoLocator is the recommended entry point for the serve command so that
+// geo annotation works out of the box with no extra flags.
+func AutoLocator(cityPath, asnPath string) (Locator, error) {
+	if cityPath != "" || asnPath != "" {
+		return Open(cityPath, asnPath)
+	}
+	return openEmbedded()
+}
+
 // Open loads the GeoLite2 database files at the given paths.
 // Either path may be empty, in which case that database is skipped.
 // If both paths are empty, Open returns a NoopLocator.

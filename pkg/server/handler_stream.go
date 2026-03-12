@@ -102,7 +102,8 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ar, err := report.Build(ctx, diagReport, h.locator)
+	locator := h.resolveLocator(req.Options.DisableGeo)
+	ar, err := report.Build(ctx, diagReport, locator)
 	if err != nil {
 		writeSSEError(w, flusher, "report build failed: "+err.Error())
 		return
@@ -111,6 +112,15 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.store.Save(store.HistoryEntry{Report: ar})
 
 	writeSSEEvent(w, flusher, "result", ar)
+}
+
+// resolveLocator returns the handler's locator normally, or a NoopLocator when
+// the caller has opted out of geo annotation for this request.
+func (h *StreamDiagHandler) resolveLocator(disableGeo bool) geo.Locator {
+	if disableGeo {
+		return geo.NoopLocator{}
+	}
+	return h.locator
 }
 
 // writeSSEEvent encodes payload as JSON and writes a named SSE event, then

@@ -76,7 +76,7 @@ Endpoints:
 Geo annotation uses the --geo-db-city / --geo-db-asn flags from the root command.
 The server shuts down gracefully on SIGINT (Ctrl-C).`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			locator, err := geo.Open(opts.GeoDBCity, opts.GeoDBASN)
+			locator, err := geo.AutoLocator(opts.GeoDBCity, opts.GeoDBASN)
 			if err != nil {
 				logger.Warn("geo db unavailable, geo annotation disabled", "error", err)
 				locator = geo.NoopLocator{}

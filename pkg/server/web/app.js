@@ -84,9 +84,10 @@ function buildRequest() {
     .filter(n => n > 0 && n <= 65535);
 
   const opts = {
-    mtr_count: mtrCount,
+    mtr_count:   mtrCount,
     timeout,
     insecure,
+    disable_geo: !checked('geo-enabled'),
     net: { host: val('host'), ports },
   };
 
