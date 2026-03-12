@@ -85,7 +85,11 @@ fieldset.target-fields legend {
 
 #run-btn {
   background: var(--primary); color: #fff; border: none; border-radius: 5px;
-  padding: .52rem 1.4rem; font-size: .95rem; font-weight: 600; cursor: pointer;
+  /* Square icon-only button: fixed width = height to lock layout regardless
+     of spinner vs triangle state. Font-size scaled up for icon legibility. */
+  width: 2.75rem; height: 2.75rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; font-size: 1.1rem; cursor: pointer;
   transition: background .15s, opacity .15s;
 }
 #run-btn:hover:not(:disabled) { background: var(--primary-h); }
@@ -287,7 +291,9 @@ fieldset.target-fields legend {
 .lang-btn {
   background: rgba(255,255,255,.15); color: #fff;
   border: 1px solid rgba(255,255,255,.35); border-radius: 4px;
-  padding: .2rem .52rem; font-size: .75rem; font-weight: 700; cursor: pointer;
+  /* Fixed width + center: prevents layout shift when locale labels change length */
+  width: 2.8rem; text-align: center;
+  padding: .2rem .1rem; font-size: .75rem; font-weight: 700; cursor: pointer;
   transition: background .15s, border-color .15s;
   line-height: 1.4;
 }

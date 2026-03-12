@@ -58,8 +58,8 @@ window.LOCALES = {
     'label-geo-enabled':     'Enable Geo annotation & map',
 
     /* ── Run button ───────────────────────────────────────────────────── */
-    'btn-run':               '\u25b6 Run Diagnostic',
-    'btn-running':           'Running\u2026',
+    'btn-run':               '▶',
+    'btn-running':           '',
 
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         'Results',
@@ -176,8 +176,8 @@ window.LOCALES = {
     'label-geo-enabled':     '啟用地理標註與地圖',
 
     /* ── Run button ───────────────────────────────────────────────────── */
-    'btn-run':               '\u25b6 執行診斷',
-    'btn-running':           '執行中\u2026',
+    'btn-run':               '▶',
+    'btn-running':           '',
 
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         '結果',

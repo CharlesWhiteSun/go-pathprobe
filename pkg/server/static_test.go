@@ -90,6 +90,65 @@ func TestStaticHandler_ServesI18nJS(t *testing.T) {
 	}
 }
 
+// TestStaticI18n_RunButtonLabels verifies that the embedded i18n.js separates
+// the card-title key (run-diagnostic) from the button key (btn-run), and that
+// the button uses an icon-only value (U+25B6) with no text label.
+func TestStaticI18n_RunButtonLabels(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Card-title keys must carry the full section names (not the icon).
+	for _, want := range []string{"'run-diagnostic'", "Run Diagnostic"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("i18n.js en: missing %q for run-diagnostic key", want)
+		}
+	}
+	if !strings.Contains(body, "\u57f7\u884c\u8a3a\u65b7") { // 執行診斷
+		t.Error("i18n.js zh-TW: run-diagnostic must contain '\u57f7\u884c\u8a3a\u65b7'")
+	}
+
+	// btn-run must be the icon-only triangle (U+25B6); btn-running empty (spinner only).
+	if !strings.Contains(body, "'btn-run'") {
+		t.Error("i18n.js: btn-run key must be present")
+	}
+	if !strings.Contains(body, "\u25b6") { // ▶
+		t.Error("i18n.js: btn-run must contain the play triangle '\u25b6'")
+	}
+	if !strings.Contains(body, "'btn-running'") {
+		t.Error("i18n.js: btn-running key must be present")
+	}
+}
+
+// TestStaticCSS_ButtonFixedDimensions verifies that the embedded style.css declares
+// all fixed-dimension properties required to prevent layout shift on buttons.
+func TestStaticCSS_ButtonFixedDimensions(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// .lang-btn: explicit fixed width prevents re-flow when EN/TW ↔ 英文/繁中.
+	if !strings.Contains(body, "width: 2.8rem") {
+		t.Error("style.css: .lang-btn must declare 'width: 2.8rem' to prevent locale-switch layout shift")
+	}
+
+	// #run-btn: square icon-only button — both width and height must be fixed.
+	if !strings.Contains(body, "width: 2.75rem") {
+		t.Error("style.css: #run-btn must declare 'width: 2.75rem' for icon-only square shape")
+	}
+	if !strings.Contains(body, "height: 2.75rem") {
+		t.Error("style.css: #run-btn must declare 'height: 2.75rem' to prevent vertical layout shift")
+	}
+}
+
 // TestStaticHandler_NotFound verifies that a non-existent path returns 404.
 func TestStaticHandler_NotFound(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
