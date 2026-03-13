@@ -21,6 +21,14 @@
   /* Misc */
   --r:              8px;
   --shadow:         0 1px 4px rgba(0,0,0,.07);
+  /* Brand typography — change this single token to swap the header typeface */
+  --brand-font:     system-ui, -apple-system, sans-serif;
+  /* Layout rhythm */
+  --header-py:      .92rem;
+  /* Header shadow — multi-layer keeps it crisp at the edge, diffuse further out */
+  --header-shadow:  0 2px 8px rgba(0,0,0,.20), 0 1px 2px rgba(0,0,0,.10);
+  /* Brand logo size — Path 1 step up, Probe 1 step down from h1 baseline (1.3rem) */
+  --brand-logo-size:  1.5rem;
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -30,14 +38,42 @@ body  { background: var(--bg); color: var(--text);
         font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
-.site-header  { background: var(--primary); color: #fff; padding: .7rem 1.5rem; }
+.site-header  { background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
+                box-shadow: var(--header-shadow); }
 /* 3-column flex: brand (left, flex:1) | theme-bar (centre) | lang (right, flex:1)
    All three share the same cross-axis, so align-items: center keeps every item
    vertically centred in one pass without needing an extra wrapper row. */
 .header-inner { max-width: 960px; margin: 0 auto;
                 display: flex; align-items: center; gap: .75rem; }
 .header-brand { flex: 1; display: flex; align-items: center; gap: .75rem; }
-.site-header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
+/* ── Brand typography ─────────────────────────────────────────────────────
+   --brand-font drives the h1 typeface.  To swap in a custom web font:
+     1. Drop a .woff2 file into pkg/server/web/fonts/
+     2. Uncomment the @font-face block below and set font-family to your name
+     3. Update --brand-font in :root to that same name
+   That is the only required code change — one token, one place.
+   ─────────────────────────────────────────────────────────────────────── */
+/*
+@font-face {
+  font-family: 'BrandFont';
+  src: url('/fonts/brand.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+*/
+.site-header h1 {
+  font-family: var(--brand-font);
+  font-size:   1.3rem;
+  font-weight: 400;
+  letter-spacing: .05em;
+  line-height: 1;
+}
+/* Finalized Inverse style: Path bold, Probe whisper — unified size via --brand-logo-size.
+   Adjust --brand-logo-size in :root to resize both glyphs together. */
+.brand-path  { font-weight: 800; opacity: 1;   font-size: var(--brand-logo-size); }
+.brand-probe { font-weight: 200; opacity: .62; font-size: var(--brand-logo-size); }
+
 .version-badge  { font-size: .72rem; background: rgba(255,255,255,.18);
                   padding: .2rem .6rem; border-radius: 999px; }
 

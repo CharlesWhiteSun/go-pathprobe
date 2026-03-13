@@ -461,3 +461,171 @@ func TestStaticJS_DefaultThemeConstant(t *testing.T) {
 		t.Error("app.js: initTheme() must validate htmlDefault against THEMES before use")
 	}
 }
+
+// TestStaticHTML_BrandMarkup verifies that the embedded index.html renders
+// the "PathProbe" logotype as two separate spans so that CSS can apply
+// independent weight/opacity to each half.
+func TestStaticHTML_BrandMarkup(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `class="brand-path"`) {
+		t.Error(`index.html: expected <span class="brand-path"> inside h1`)
+	}
+	if !strings.Contains(body, `class="brand-probe"`) {
+		t.Error(`index.html: expected <span class="brand-probe"> inside h1`)
+	}
+	// The plain text logotype must no longer appear as a bare text node.
+	if strings.Contains(body, `<h1>PathProbe</h1>`) {
+		t.Error("index.html: h1 must use brand-path/brand-probe spans, not bare text")
+	}
+}
+
+// TestStaticCSS_BrandTypography verifies that the embedded style.css contains
+// the --brand-font token, individual brand-span rules, and the commented-out
+// @font-face swap-point template so future custom fonts require only updating
+// that one CSS variable.
+func TestStaticCSS_BrandTypography(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	checks := []struct {
+		needle string
+		msg    string
+	}{
+		{"--brand-font", "style.css: --brand-font token must be declared in :root"},
+		{".brand-path", "style.css: .brand-path rule must exist"},
+		{".brand-probe", "style.css: .brand-probe rule must exist"},
+		{"@font-face", "style.css: @font-face swap-point template must be present (as a comment)"},
+		{"font-display: swap", "style.css: @font-face template must include font-display: swap"},
+		{"brand.woff2", "style.css: @font-face template must reference brand.woff2"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(body, c.needle) {
+			t.Error(c.msg)
+		}
+	}
+}
+
+// TestStaticCSS_HeaderPaddingToken verifies that the embedded style.css uses a
+// --header-py CSS custom property for vertical header padding.  This makes
+// header height adjustments a single-token change with no selector hunting.
+func TestStaticCSS_HeaderPaddingToken(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--header-py") {
+		t.Error("style.css: --header-py token must be declared in :root")
+	}
+	if !strings.Contains(body, "var(--header-py)") {
+		t.Error("style.css: .site-header must consume var(--header-py) for vertical padding")
+	}
+}
+
+// TestStaticCSS_BrandLogoSizeTokens verifies that style.css declares a unified
+// --brand-logo-size token in :root and that both .brand-path and .brand-probe
+// consume it via var(), so both glyphs always share the same size.
+func TestStaticCSS_BrandLogoSizeTokens(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--brand-logo-size") {
+		t.Error("style.css: --brand-logo-size token must be declared in :root")
+	}
+	// Both glyphs must reference the unified token — no separate size tokens.
+	if strings.Contains(body, "--brand-path-size") {
+		t.Error("style.css: --brand-path-size must not exist; use --brand-logo-size instead")
+	}
+	if strings.Contains(body, "--brand-probe-size") {
+		t.Error("style.css: --brand-probe-size must not exist; use --brand-logo-size instead")
+	}
+	// Count occurrences of var(--brand-logo-size): must appear for .brand-path AND .brand-probe.
+	count := strings.Count(body, "var(--brand-logo-size)")
+	if count < 2 {
+		t.Errorf("style.css: var(--brand-logo-size) must be used at least twice (brand-path + brand-probe), got %d", count)
+	}
+}
+
+// TestStaticHTML_BrandNoPicker verifies that the embedded index.html no longer
+// contains the picker markup now that the logo style is fixed.
+func TestStaticHTML_BrandNoPicker(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, absent := range []string{
+		"brand-type-wrapper",
+		"brand-style-btn",
+		"brand-style-picker",
+	} {
+		if strings.Contains(body, absent) {
+			t.Errorf("index.html: picker markup %q must not be present", absent)
+		}
+	}
+}
+
+// TestStaticJS_BrandSystemRemoved verifies that the brand style management
+// system has been removed from app.js now that the logo style is fixed.
+func TestStaticJS_BrandSystemRemoved(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, absent := range []string{
+		"BRAND_STYLES",
+		"toggleBrandPicker",
+		"initBrandStyle",
+	} {
+		if strings.Contains(body, absent) {
+			t.Errorf("app.js: brand system symbol %q must not be present", absent)
+		}
+	}
+}
+
+// TestStaticCSS_HeaderShadow verifies that the embedded style.css declares a
+// --header-shadow CSS token in :root and that .site-header consumes it via
+// var(--header-shadow), keeping the shadow value a single-token change.
+func TestStaticCSS_HeaderShadow(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "--header-shadow") {
+		t.Error("style.css: --header-shadow token must be declared in :root")
+	}
+	if !strings.Contains(body, "var(--header-shadow)") {
+		t.Error("style.css: .site-header must consume var(--header-shadow)")
+	}
+}
