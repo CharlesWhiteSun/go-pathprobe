@@ -52,7 +52,15 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 
 	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
 	rootCmd.AddCommand(newVersionCommand())
-	rootCmd.AddCommand(newServeCommand(dispatcher, &opts, logger))
+	serveCmd := newServeCommand(dispatcher, &opts, logger, platformOpen)
+	rootCmd.AddCommand(serveCmd)
+
+	// When invoked with no subcommand (e.g. double-clicking the binary),
+	// behave as if the user ran "pathprobe serve" so the web UI opens
+	// immediately without requiring any flags.
+	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return serveCmd.RunE(serveCmd, args)
+	}
 
 	return rootCmd
 }
@@ -60,8 +68,13 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 // newServeCommand builds the `serve` subcommand that starts the embedded
 // HTTP REST API server.  It reuses the persistent --geo-db-city / --geo-db-asn
 // flags already defined on the root command via opts.
-func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, logger *slog.Logger) *cobra.Command {
+//
+// opener is called with the server URL just before srv.Start() so the browser
+// opens while the server is warming up.  Pass platformOpen for production;
+// tests may inject a no-op or recording function.
+func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, logger *slog.Logger, opener func(string) error) *cobra.Command {
 	cfg := server.DefaultConfig()
+	var openBrowser bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -97,6 +110,20 @@ The server shuts down gracefully on SIGINT (Ctrl-C).`,
 				}
 			}()
 
+			// Launch the browser in a goroutine so srv.Start() is not delayed.
+			// A brief sleep gives the HTTP listener time to bind before the
+			// browser sends its first request.
+			if openBrowser {
+				url := serverURL(cfg.Addr)
+				logger.Info("opening browser", "url", url)
+				go func() {
+					time.Sleep(300 * time.Millisecond)
+					if err := opener(url); err != nil {
+						logger.Warn("failed to open browser", "url", url, "error", err)
+					}
+				}()
+			}
+
 			if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 				return fmt.Errorf("server error: %w", err)
 			}
@@ -108,6 +135,8 @@ The server shuts down gracefully on SIGINT (Ctrl-C).`,
 		"listen address (host:port), e.g. :8080 or 127.0.0.1:9090")
 	cmd.Flags().DurationVar(&cfg.WriteTimeout, "write-timeout", cfg.WriteTimeout,
 		"HTTP write timeout (should be >= max diagnostic duration)")
+	cmd.Flags().BoolVar(&openBrowser, "open", true,
+		"open the web UI in the default browser on startup (use --open=false to disable)")
 
 	return cmd
 }

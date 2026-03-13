@@ -204,3 +204,130 @@ func TestInvalidLogLevelReturnsError(t *testing.T) {
 		t.Fatal("expected error for unknown log level 'verbose'")
 	}
 }
+
+// ── Default-serve / browser-open tests ───────────────────────────────────
+
+// TestRootCommandHasDefaultServe verifies that the root command has a RunE
+// set so that running the binary without a subcommand starts the server
+// instead of printing help.
+func TestRootCommandHasDefaultServe(t *testing.T) {
+	dispatcher := diag.NewDispatcher(nil)
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	cmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	if cmd.RunE == nil {
+		t.Fatal("root command must have RunE set so that bare invocation starts the server")
+	}
+}
+
+// TestServeCommandFlags verifies that the serve subcommand exposes the expected
+// flags with their documented defaults.
+func TestServeCommandFlags(t *testing.T) {
+	dispatcher := diag.NewDispatcher(nil)
+	logger, levelVar := logging.NewLogger(slog.LevelInfo)
+	rootCmd := NewRootCommand(dispatcher, logger, levelVar)
+
+	serveCmd, _, err := rootCmd.Find([]string{"serve"})
+	if err != nil || serveCmd == nil {
+		t.Fatalf("expected 'serve' subcommand to be registered: %v", err)
+	}
+
+	// --open flag must exist and default to true.
+	openFlag := serveCmd.Flags().Lookup("open")
+	if openFlag == nil {
+		t.Fatal("serve command must have --open flag")
+	}
+	if openFlag.DefValue != "true" {
+		t.Errorf("--open default must be true, got %q", openFlag.DefValue)
+	}
+
+	// --addr flag must exist.
+	if serveCmd.Flags().Lookup("addr") == nil {
+		t.Fatal("serve command must have --addr flag")
+	}
+
+	// --write-timeout flag must exist.
+	if serveCmd.Flags().Lookup("write-timeout") == nil {
+		t.Fatal("serve command must have --write-timeout flag")
+	}
+}
+
+// TestServerURL verifies the URL derivation helper for various listen addresses.
+func TestServerURL(t *testing.T) {
+	cases := []struct {
+		addr string
+		want string
+	}{
+		{":8080", "http://localhost:8080"},
+		{"0.0.0.0:9090", "http://localhost:9090"},
+		{"[::]:8080", "http://localhost:8080"},
+		{"127.0.0.1:8888", "http://127.0.0.1:8888"},
+		{"192.168.1.5:3000", "http://192.168.1.5:3000"},
+	}
+	for _, tc := range cases {
+		got := serverURL(tc.addr)
+		if got != tc.want {
+			t.Errorf("serverURL(%q) = %q, want %q", tc.addr, got, tc.want)
+		}
+	}
+}
+
+// TestServeOpenerCalledOnStart verifies that the injected opener function is
+// invoked when the serve command is started with --open=true (the default).
+// The test replaces the real server with a context-cancelled run to avoid
+// binding a real TCP port.
+func TestServeOpenerCalledOnStart(t *testing.T) {
+	var opened []string
+	recorder := func(url string) error {
+		opened = append(opened, url)
+		return nil
+	}
+
+	dispatcher := diag.NewDispatcher(nil)
+	logger, _ := logging.NewLogger(slog.LevelInfo)
+	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, logger, recorder)
+
+	// Cancel the context immediately so the server exits without binding.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+	cmd.SetArgs([]string{"--open=true"})
+	// srv.Start() returns ErrServerClosed for a cancelled context – that is fine.
+	_ = cmd.Execute()
+
+	// Allow the browser goroutine (300 ms sleep) to fire.
+	time.Sleep(500 * time.Millisecond)
+
+	if len(opened) == 0 {
+		t.Fatal("expected opener to be called at least once when --open=true")
+	}
+	if opened[0] != "http://localhost:8080" {
+		t.Errorf("expected opener called with http://localhost:8080, got %q", opened[0])
+	}
+}
+
+// TestServeOpenerSkippedWhenOpenFalse verifies that the browser is NOT opened
+// when the user passes --open=false.
+func TestServeOpenerSkippedWhenOpenFalse(t *testing.T) {
+	var opened []string
+	recorder := func(url string) error {
+		opened = append(opened, url)
+		return nil
+	}
+
+	dispatcher := diag.NewDispatcher(nil)
+	logger, _ := logging.NewLogger(slog.LevelInfo)
+	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, logger, recorder)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+	cmd.SetArgs([]string{"--open=false"})
+	_ = cmd.Execute()
+
+	time.Sleep(500 * time.Millisecond)
+
+	if len(opened) != 0 {
+		t.Fatalf("expected opener NOT to be called when --open=false, but got calls: %v", opened)
+	}
+}
