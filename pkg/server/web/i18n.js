@@ -9,7 +9,7 @@
 window.LOCALES = {
   en: {
     /* ── Form ─────────────────────────────────────────────────────────── */
-    'run-diagnostic':        'Run Diagnostic',
+    'run-diagnostic':        'Diagnostic',
     'label-target':          'Target',
     'label-host':            'Target Host',
     'label-ports':           'Ports',
@@ -63,7 +63,7 @@ window.LOCALES = {
 
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         'Results',
-    'history-title':         'Diagnostic History',
+    'history-title':         'History',
     'history-empty':         'No diagnostics run yet.',
 
     /* ── Summary keys ─────────────────────────────────────────────────── */
@@ -134,7 +134,7 @@ window.LOCALES = {
 
   'zh-TW': {
     /* ── Form ─────────────────────────────────────────────────────────── */
-    'run-diagnostic':        '執行診斷',
+    'run-diagnostic':        '診斷',
     'label-target':          '目標類型',
     'label-host':            '目標主機',
     'label-ports':           '連接埠',
@@ -188,7 +188,7 @@ window.LOCALES = {
 
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         '結果',
-    'history-title':         '診斷記錄',
+    'history-title':         '記錄',
     'history-empty':         '尚無診斷記錄。',
 
     /* ── Summary keys ─────────────────────────────────────────────────── */

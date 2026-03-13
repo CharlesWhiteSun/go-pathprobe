@@ -102,14 +102,24 @@ func TestStaticI18n_RunButtonLabels(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// Card-title keys must carry the full section names (not the icon).
-	for _, want := range []string{"'run-diagnostic'", "Run Diagnostic"} {
+	// Card-title keys must carry the section names (not the icon).
+	for _, want := range []string{"'run-diagnostic'", "Diagnostic"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("i18n.js en: missing %q for run-diagnostic key", want)
 		}
 	}
-	if !strings.Contains(body, "\u57f7\u884c\u8a3a\u65b7") { // 執行診斷
-		t.Error("i18n.js zh-TW: run-diagnostic must contain '\u57f7\u884c\u8a3a\u65b7'")
+	if !strings.Contains(body, "\u8a3a\u65b7") { // 診斷
+		t.Error("i18n.js zh-TW: run-diagnostic must contain '\u8a3a\u65b7'")
+	}
+
+	// History-title key — section 2 label.
+	for _, want := range []string{"'history-title'", "History"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("i18n.js en: missing %q for history-title key", want)
+		}
+	}
+	if !strings.Contains(body, "\u8a18\u9304") { // 記錄
+		t.Error("i18n.js zh-TW: history-title must contain '\u8a18\u9304'")
 	}
 
 	// btn-run must be the icon-only triangle (U+25B6); btn-running empty (spinner only).
