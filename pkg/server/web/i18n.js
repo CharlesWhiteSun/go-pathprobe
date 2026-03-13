@@ -104,12 +104,12 @@ window.LOCALES = {
     'map-target':            'Target',
 
     /* ── Target select options ────────────────────────────────────────── */
-    'opt-web':               'web \u2014 Public IP & DNS',
-    'opt-smtp':              'smtp \u2014 Mail server',
-    'opt-imap':              'imap \u2014 IMAP server',
-    'opt-pop':               'pop \u2014 POP3 server',
-    'opt-ftp':               'ftp \u2014 FTP / FTPS',
-    'opt-sftp':              'sftp \u2014 SFTP / SSH',
+    'opt-web':               'WEB \u2014 Public IP & DNS',
+    'opt-smtp':              'SMTP \u2014 Mail server',
+    'opt-imap':              'IMAP \u2014 IMAP server',
+    'opt-pop':               'POP \u2014 POP3 server',
+    'opt-ftp':               'FTP \u2014 FTP / FTPS',
+    'opt-sftp':              'SFTP \u2014 SFTP / SSH',
 
     /* ── Language switcher button labels ─────────────────────────────── */
     'btn-lang-en':           'EN',
@@ -123,6 +123,13 @@ window.LOCALES = {
     'ph-ftp':                'e.g. ftp.example.com',
     'ph-sftp':               'e.g. sftp.example.com',
     'ph-host-default':       'hostname or IP',
+
+    /* ── Theme switcher ─────────────────────────────────────────────── */
+    'theme-default':          'Default',
+    'theme-deep-blue':        'Deep Blue',
+    'theme-light-green':      'Light Green',
+    'theme-forest-green':     'Forest Green',
+    'theme-dark':             'Dark',
   },
 
   'zh-TW': {
@@ -222,12 +229,12 @@ window.LOCALES = {
     'map-target':            '目標',
 
     /* ── Target select options ────────────────────────────────────────── */
-    'opt-web':               'web \u2014 公開 IP 與 DNS',
-    'opt-smtp':              'smtp \u2014 郵件伺服器',
-    'opt-imap':              'imap \u2014 IMAP 伺服器',
-    'opt-pop':               'pop \u2014 POP3 伺服器',
-    'opt-ftp':               'ftp \u2014 FTP / FTPS',
-    'opt-sftp':              'sftp \u2014 SFTP / SSH',
+    'opt-web':               'WEB \u2014 公開 IP 與 DNS',
+    'opt-smtp':              'SMTP \u2014 郵件伺服器',
+    'opt-imap':              'IMAP \u2014 IMAP 伺服器',
+    'opt-pop':               'POP \u2014 POP3 伺服器',
+    'opt-ftp':               'FTP \u2014 FTP / FTPS',
+    'opt-sftp':              'SFTP \u2014 SFTP / SSH',
 
     /* ── Language switcher button labels ─────────────────────────────── */
     'btn-lang-en':           '英文',
@@ -241,5 +248,12 @@ window.LOCALES = {
     'ph-ftp':                '例：ftp.example.com',
     'ph-sftp':               '例：sftp.example.com',
     'ph-host-default':       '主機名稱或 IP',
+
+    /* ── Theme switcher ─────────────────────────────────────────────── */
+    'theme-default':          '預設',
+    'theme-deep-blue':        '深藍',
+    'theme-light-green':      '淡綠',
+    'theme-forest-green':     '墨綠',
+    'theme-dark':             '暗黑',
   },
 };

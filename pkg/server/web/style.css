@@ -1,16 +1,26 @@
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 :root {
-  --bg:        #f4f6f9;
-  --surface:   #ffffff;
-  --border:    #dde1e8;
-  --text:      #1a1f2e;
-  --muted:     #6b7280;
-  --primary:   #3b6cf6;
-  --primary-h: #274fcf;
-  --ok:        #16a34a;
-  --fail:      #dc2626;
-  --r:         8px;
-  --shadow:    0 1px 4px rgba(0,0,0,.07);
+  /* Colour palette */
+  --bg:             #f4f6f9;
+  --surface:        #ffffff;
+  --surface-alt:    #f5f6f8;
+  --border:         #dde1e8;
+  --text:           #1a1f2e;
+  --muted:          #6b7280;
+  --primary:        #3b6cf6;
+  --primary-h:      #274fcf;
+  --ok:             #16a34a;
+  --fail:           #dc2626;
+  /* Component-level tokens (can be overridden per theme) */
+  --input-bg:       #ffffff;
+  --error-bg:       #fef2f2;
+  --error-border:   #fca5a5;
+  --badge-ok-bg:    #dcfce7;
+  --badge-fail-bg:  #fee2e2;
+  --focus-ring:     rgba(59,108,246,.12);
+  /* Misc */
+  --r:              8px;
+  --shadow:         0 1px 4px rgba(0,0,0,.07);
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -20,9 +30,13 @@ body  { background: var(--bg); color: var(--text);
         font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
-.site-header    { background: var(--primary); color: #fff; padding: .7rem 1.5rem; }
-.header-inner   { max-width: 960px; margin: 0 auto;
-                  display: flex; align-items: center; gap: 1rem; }
+.site-header  { background: var(--primary); color: #fff; padding: .7rem 1.5rem; }
+/* 3-column flex: brand (left, flex:1) | theme-bar (centre) | lang (right, flex:1)
+   All three share the same cross-axis, so align-items: center keeps every item
+   vertically centred in one pass without needing an extra wrapper row. */
+.header-inner { max-width: 960px; margin: 0 auto;
+                display: flex; align-items: center; gap: .75rem; }
+.header-brand { flex: 1; display: flex; align-items: center; gap: .75rem; }
 .site-header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
 .version-badge  { font-size: .72rem; background: rgba(255,255,255,.18);
                   padding: .2rem .6rem; border-radius: 999px; }
@@ -53,12 +67,12 @@ input[type=password],
 select {
   border: 1px solid var(--border); border-radius: 5px;
   padding: .42rem .65rem; font-size: .9rem;
-  color: var(--text); background: #fff; width: 100%;
+  color: var(--text); background: var(--input-bg); width: 100%;
   transition: border-color .15s;
 }
 input:focus, select:focus {
   outline: none; border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59,108,246,.12);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .checkbox-row       { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem;
@@ -97,7 +111,7 @@ fieldset.target-fields legend {
 
 /* ── Error banner ───────────────────────────────────────────────────────── */
 .error-banner {
-  background: #fef2f2; border: 1px solid #fca5a5; color: var(--fail);
+  background: var(--error-bg); border: 1px solid var(--error-border); color: var(--fail);
   padding: .7rem 1rem; border-radius: var(--r); font-size: .9rem;
 }
 
@@ -133,8 +147,8 @@ fieldset.target-fields legend {
 /* ── Badges ─────────────────────────────────────────────────────────────── */
 .badge      { display: inline-block; padding: .14rem .5rem; border-radius: 999px;
               font-size: .77rem; font-weight: 700; }
-.badge-ok   { background: #dcfce7; color: var(--ok);   }
-.badge-fail { background: #fee2e2; color: var(--fail);  }
+.badge-ok   { background: var(--badge-ok-bg);   color: var(--ok);   }
+.badge-fail { background: var(--badge-fail-bg);  color: var(--fail);  }
 
 /* ── Results — geo section ──────────────────────────────────────────────── */
 .geo-grid       { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -287,7 +301,7 @@ fieldset.target-fields legend {
 .history-item .hi-time { color: var(--muted); font-size: .78rem; white-space: nowrap; }
 
 /*  Language switcher  */
-.lang-switcher { margin-left: auto; display: flex; gap: .3rem; }
+.lang-switcher { flex: 1; display: flex; justify-content: flex-end; gap: .3rem; }
 .lang-btn {
   background: rgba(255,255,255,.15); color: #fff;
   border: 1px solid rgba(255,255,255,.35); border-radius: 4px;
@@ -299,3 +313,118 @@ fieldset.target-fields legend {
 }
 .lang-btn:hover  { background: rgba(255,255,255,.28); }
 .lang-btn.active { background: rgba(255,255,255,.32); border-color: #fff; }
+
+/* ── Theme bar (inline, vertically centred inside .header-inner) ────────── */
+/* The theme-bar sits as the middle child of the 3-col header-inner flex.
+   No padding or extra block height — it inherits the row’s align-items: center. */
+.theme-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+}
+.theme-btn {
+  /* Flat circle swatch — solid colour only, no gradients, no scale transforms.
+     Size kept modest (.85rem) to match the surrounding text rhythm. */
+  width: .85rem; height: .85rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.35);
+  cursor: pointer; flex-shrink: 0;
+  transition: border-color .15s, box-shadow .15s;
+}
+.theme-btn:hover  { border-color: rgba(255,255,255,.75); }
+.theme-btn.active {
+  border-color: rgba(255,255,255,.95);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.4);
+}
+/* Per-theme swatch: a single representative flat colour for each theme.
+   These values are intentionally hardcoded — they are the visual identity
+   of each option and must remain recognisable regardless of active page theme. */
+.theme-btn[data-theme="forest-green"] { background: #4caf50; }
+.theme-btn[data-theme="light-green"]  { background: #9ccc65; }
+.theme-btn[data-theme="default"]      { background: rgba(255,255,255,.65); }
+.theme-btn[data-theme="deep-blue"]    { background: #2d5a8e; }
+.theme-btn[data-theme="dark"]         { background: #4a4a4a; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Themes — each block overrides only the design-token variables; all
+   component rules automatically pick up the new values via var().
+   To add a new theme: (1) add a [data-theme="id"] block here, (2) add the
+   i18n label, (3) add the <option> in index.html. No JS changes needed.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Theme: deep-blue (深藍，白色文字) ───────────────────────────────────── */
+[data-theme="deep-blue"] {
+  --bg:            #0d1b2a;
+  --surface:       #1b2b40;
+  --surface-alt:   #1f3249;
+  --border:        #2a3f58;
+  --text:          #e8f0fe;
+  --muted:         #8ba3c1;
+  --primary:       #4a90d9;
+  --primary-h:     #3578c0;
+  --input-bg:      #162235;
+  --error-bg:      #2d1010;
+  --error-border:  #7a2020;
+  --badge-ok-bg:   #0a2e14;
+  --badge-fail-bg: #2d0a0a;
+  --focus-ring:    rgba(74,144,217,.25);
+  --shadow:        0 1px 6px rgba(0,0,0,.35);
+}
+
+/* ── Theme: light-green (淺綠，深灰色文字) ───────────────────────────────── */
+[data-theme="light-green"] {
+  --bg:            #e8f5e9;
+  --surface:       #ffffff;
+  --surface-alt:   #d4edda;
+  --border:        #c8e6c9;
+  --text:          #263238;
+  --muted:         #546e7a;
+  --primary:       #2e7d32;
+  --primary-h:     #1b5e20;
+  --input-bg:      #ffffff;
+  --error-bg:      #fef2f2;
+  --error-border:  #fca5a5;
+  --badge-ok-bg:   #c8e6c9;
+  --badge-fail-bg: #fee2e2;
+  --focus-ring:    rgba(46,125,50,.18);
+  --shadow:        0 1px 4px rgba(0,0,0,.08);
+}
+
+/* ── Theme: forest-green (墨綠，白色文字) ────────────────────────────────── */
+[data-theme="forest-green"] {
+  --bg:            #1a2e1a;
+  --surface:       #243524;
+  --surface-alt:   #2b3e2b;
+  --border:        #2d4a2d;
+  --text:          #e8f5e8;
+  --muted:         #8cb88c;
+  --primary:       #4caf50;
+  --primary-h:     #388e3c;
+  --input-bg:      #1e341e;
+  --error-bg:      #2d1010;
+  --error-border:  #7a2020;
+  --badge-ok-bg:   #0a2e0a;
+  --badge-fail-bg: #2d0a0a;
+  --focus-ring:    rgba(76,175,80,.25);
+  --shadow:        0 1px 6px rgba(0,0,0,.35);
+}
+
+/* ── Theme: dark (暗黑，白色文字) ────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:            #121212;
+  --surface:       #1e1e1e;
+  --surface-alt:   #252525;
+  --border:        #333333;
+  --text:          #e0e0e0;
+  --muted:         #9e9e9e;
+  --primary:       #bb86fc;
+  --primary-h:     #a064e8;
+  --input-bg:      #252525;
+  --error-bg:      #2d1010;
+  --error-border:  #7a2020;
+  --badge-ok-bg:   #0a2e0a;
+  --badge-fail-bg: #2d0a0a;
+  --focus-ring:    rgba(187,134,252,.25);
+  --shadow:        0 1px 6px rgba(0,0,0,.45);
+}

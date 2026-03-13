@@ -78,6 +78,46 @@ function initLocale() {
   applyLocale();
 }
 
+// ── Theme management ──────────────────────────────────────────────────────
+/**
+ * All valid theme IDs. The CSS file drives the actual appearance; adding a
+ * new theme only requires a new [data-theme="id"] block there — no JS change.
+ */
+const THEMES = ['default', 'deep-blue', 'light-green', 'forest-green', 'dark'];
+
+/**
+ * Fallback theme used when (a) no user preference is stored and (b) the HTML
+ * data-default-theme attribute is absent or invalid.  Mirrors the value that
+ * the server embeds in <html data-default-theme>.
+ */
+const DEFAULT_THEME = 'default';
+
+/** Apply themeId to <html data-theme> and persist to localStorage. */
+function applyTheme(themeId) {
+  const id = THEMES.includes(themeId) ? themeId : DEFAULT_THEME;
+  document.documentElement.dataset.theme = id;
+  try { localStorage.setItem('pp-theme', id); } catch (_) {}
+  // Highlight the matching dot-button; clear all others.
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === id);
+  });
+}
+
+/** Public entry point called by the <select onchange> handler. */
+function setTheme(themeId) { applyTheme(themeId); }
+
+/** Restore saved theme from localStorage; fall back to the server-declared
+ *  default (data-default-theme on <html>) so a service restart always starts
+ *  on the intended theme when no user preference exists. */
+function initTheme() {
+  // Server-declared default: read from HTML attribute set by the server.
+  const htmlDefault = (document.documentElement.dataset.defaultTheme || '').trim();
+  const serverDefault = THEMES.includes(htmlDefault) ? htmlDefault : DEFAULT_THEME;
+  let saved = serverDefault;
+  try { saved = localStorage.getItem('pp-theme') || serverDefault; } catch (_) {}
+  applyTheme(saved);
+}
+
 // ── Initialisation ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Track whether the user has manually edited the auto-filled fields.
@@ -89,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   onTargetChange(); // populate defaults for initial selection
   fetchVersion();   // async version badge
   loadHistory();    // populate history panel
+  initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
 });
 

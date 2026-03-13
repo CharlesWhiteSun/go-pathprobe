@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-default-theme="default">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,8 +11,20 @@
 
 <header class="site-header">
   <div class="header-inner">
-    <h1>PathProbe</h1>
-    <span class="version-badge" id="version-badge"></span>
+    <!-- Left: brand -->
+    <div class="header-brand">
+      <h1>PathProbe</h1>
+      <span class="version-badge" id="version-badge"></span>
+    </div>
+    <!-- Centre: theme dot-buttons -->
+    <div class="theme-bar">
+      <button class="theme-btn" data-theme="forest-green" onclick="setTheme('forest-green')" aria-label="Forest Green"></button>
+      <button class="theme-btn" data-theme="light-green"  onclick="setTheme('light-green')"  aria-label="Light Green"></button>
+      <button class="theme-btn" data-theme="default"      onclick="setTheme('default')"      aria-label="Default"></button>
+      <button class="theme-btn" data-theme="deep-blue"    onclick="setTheme('deep-blue')"    aria-label="Deep Blue"></button>
+      <button class="theme-btn" data-theme="dark"         onclick="setTheme('dark')"         aria-label="Dark"></button>
+    </div>
+    <!-- Right: language switcher -->
     <div class="lang-switcher">
       <button class="lang-btn" data-lang="en" data-i18n="btn-lang-en" onclick="setLocale('en')">EN</button>
       <button class="lang-btn" data-lang="zh-TW" data-i18n="btn-lang-zh" onclick="setLocale('zh-TW')">TW</button>
