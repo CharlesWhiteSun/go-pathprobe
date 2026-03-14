@@ -78,6 +78,10 @@
       </div>
     </div>
 
+    <!-- target-specific fieldsets — wrapped in panel-stage so JS can animate
+         the container height alongside the panel fade transitions. -->
+    <div class="panel-stage" id="panel-stage">
+
     <!-- web-specific fields -->
     <fieldset class="target-fields" id="fields-web">
       <legend data-i18n="legend-web">Web / DNS Options</legend>
@@ -211,6 +215,23 @@
         </div>
       </div>
     </fieldset>
+
+    <!-- imap-specific fields -->
+    <!-- data-panel-empty: fieldset has no form controls beyond the common
+         host/ports row; JS will hide all departing panels but skip the reveal
+         step so the user is never shown a blank bordered box. -->
+    <fieldset class="target-fields" id="fields-imap" hidden data-panel-empty="true">
+      <legend data-i18n="legend-imap">IMAP Options</legend>
+      <!-- No protocol-specific options beyond the common host / ports fields -->
+    </fieldset>
+
+    <!-- pop-specific fields -->
+    <fieldset class="target-fields" id="fields-pop" hidden data-panel-empty="true">
+      <legend data-i18n="legend-pop">POP3 Options</legend>
+      <!-- No protocol-specific options beyond the common host / ports fields -->
+    </fieldset>
+
+    </div><!-- /.panel-stage -->
 
     <!-- advanced options (shared, collapsible) -->
     <details class="advanced-opts">

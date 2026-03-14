@@ -310,6 +310,17 @@ fieldset.target-fields legend {
   padding: 0 .4rem; color: var(--muted);
 }
 
+/* ── Panel stage (height-animated container for target-fields) ─────────── */
+/* The panel-stage wraps all .target-fields fieldsets and enables smooth
+   height transitions when the active panel changes.  overflow:hidden also
+   clips the panel-leaving upward-slide at the container edge for a natural
+   retract effect.  The height property is driven by JS; the transition only
+   fires when JS sets an explicit pixel value (auto→auto never animates). */
+.panel-stage {
+  overflow: hidden;
+  transition: height var(--panel-anim-dur) ease;
+}
+
 /* ── Panel transition ────────────────────────────────────────────────────── */
 /* target-fields panels cross-fade when the user switches target type.
    Entering panel slides in from below (translateY → 0) while the departing

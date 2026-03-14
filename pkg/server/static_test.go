@@ -1177,6 +1177,18 @@ func TestStaticCSS_PanelTransition(t *testing.T) {
 	if !strings.Contains(body, "var(--panel-anim-dist)") {
 		t.Error("style.css: panel-appear keyframe must consume var(--panel-anim-dist) instead of a hard-coded pixel offset")
 	}
+	// The panel-stage wrapper must clip exiting panels and animate its own
+	// height smoothly so the card never jumps when switching between panels of
+	// different heights.
+	if !strings.Contains(body, ".panel-stage") {
+		t.Error("style.css: .panel-stage rule must be declared to wrap all .target-fields fieldsets")
+	}
+	if !strings.Contains(body, "overflow: hidden") {
+		t.Error("style.css: .panel-stage must set overflow: hidden to clip the exit animation")
+	}
+	if !strings.Contains(body, "transition: height var(--panel-anim-dur)") {
+		t.Error("style.css: .panel-stage must animate height via transition: height var(--panel-anim-dur)")
+	}
 }
 
 // TestStaticJS_CustomSelectFunctions verifies that app.js defines
@@ -1626,7 +1638,8 @@ func TestStaticCSS_PanelLeaveAnimation(t *testing.T) {
 
 // TestStaticJS_PanelLeaveAnimation verifies that app.js manages the
 // panel-leaving class in onTargetChange() so the departing panel animates out
-// before being hidden, and includes an animationend guard for rapid switching.
+// before being hidden.  Also checks that the _pendingReveal cleanup guard
+// exists for safe rapid target-switching.
 func TestStaticJS_PanelLeaveAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
@@ -1643,14 +1656,226 @@ func TestStaticJS_PanelLeaveAnimation(t *testing.T) {
 	if !strings.Contains(body, "animationend") {
 		t.Error("app.js: onTargetChange must listen for animationend to hide the departing panel after its exit animation")
 	}
-	// Rapid-switch guard: only hide if the panel is still in a leaving state.
-	if !strings.Contains(body, "panel-leaving") || !strings.Contains(body, "classList.contains") {
-		t.Error("app.js: animationend handler must guard with classList.contains('panel-leaving') to handle rapid target switching")
+	// Rapid-switch guard: _pendingReveal cleanup cancels in-flight transitions.
+	if !strings.Contains(body, "_pendingReveal") {
+		t.Error("app.js: _pendingReveal must be defined to cancel in-flight transitions on rapid target switching")
 	}
 	// Toggle functions must be absent — vivid mode is now the HTML-level default.
 	for _, sym := range []string{"cycleAnim", "initAnim", "applyAnim", "ANIM_MODES"} {
 		if strings.Contains(body, sym) {
 			t.Errorf("app.js: %s must be removed; animation mode is now a static HTML attribute, not a runtime toggle", sym)
 		}
+	}
+}
+
+// TestStaticJS_PanelSequentialTransition verifies that app.js implements a
+// strictly sequential panel transition in onTargetChange(): the incoming panel
+// is kept hidden (incoming.hidden = true) while the departing panel is still
+// animating, ensuring the two panels never coexist in the layout flow.  The
+// test also confirms the revealIncoming helper function exists to decouple the
+// "show new panel" step from the departure listener, and that _pendingReveal
+// stores a cleanup callback that can be invoked by a subsequent call to cancel
+// the in-flight transition and prevent a stale reveal from running.
+func TestStaticJS_PanelSequentialTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The incoming panel must be explicitly hidden while the outgoing panel
+	// is animating so both panels never occupy layout space at the same time.
+	if !strings.Contains(body, "incoming.hidden = true") {
+		t.Error("app.js: incoming.hidden must be set to true during the departure phase to prevent simultaneous layout overlap")
+	}
+	// revealIncoming encapsulates the deferred show+animate step and is the
+	// sole entry point for making the incoming panel visible.
+	if !strings.Contains(body, "revealIncoming") {
+		t.Error("app.js: revealIncoming helper must be defined to decouple the reveal step from the animationend listener")
+	}
+	// _pendingReveal stores the listener cleanup for the in-flight transition
+	// so that a rapid switch can cancel the previous departure and reveal.
+	if !strings.Contains(body, "_pendingReveal") {
+		t.Error("app.js: _pendingReveal cleanup variable must store the cancel function for the active transition")
+	}
+	// removeEventListener must be called inside the cleanup to stop stale
+	// animationend handlers from triggering an outdated revealIncoming.
+	if !strings.Contains(body, "removeEventListener") {
+		t.Error("app.js: cleanup must call removeEventListener to prevent stale animationend handlers from triggering on rapid switch")
+	}
+	// Height animation: measurePanelHeight must exist to off-screen-measure the
+	// incoming panel before revealing it.
+	if !strings.Contains(body, "measurePanelHeight") {
+		t.Error("app.js: measurePanelHeight function must be defined to measure the incoming panel height off-screen")
+	}
+	// measurePanelHeight must include CSS margins in the returned value so the
+	// stage height transition target matches the panel's true occupied layout
+	// space and does not jump when height: auto is restored afterwards.
+	if !strings.Contains(body, "getComputedStyle") || !strings.Contains(body, "marginBottom") {
+		t.Error("app.js: measurePanelHeight must use getComputedStyle to include marginTop/marginBottom in the height total")
+	}
+	// measurePanelHeight must use clone.offsetHeight (not clone.scrollHeight).
+	// offsetHeight includes the element's border, while scrollHeight does not;
+	// the parent stage's scrollHeight accounts for the child's full offsetHeight,
+	// so using scrollHeight would leave the stage 2 px short (border top+bottom),
+	// causing a visible snap when height:auto is restored at animation end.
+	if !strings.Contains(body, "clone.offsetHeight") {
+		t.Error("app.js: measurePanelHeight must use clone.offsetHeight (includes border) not clone.scrollHeight to avoid a 2px snap at animation end")
+	}
+	// stage.scrollHeight captures the current panel height before locking it.
+	if !strings.Contains(body, "stage.scrollHeight") {
+		t.Error("app.js: stage.scrollHeight must be read to capture current height before locking for the transition")
+	}
+	// stage.offsetWidth is passed to measurePanelHeight to simulate the correct layout width.
+	if !strings.Contains(body, "stage.offsetWidth") {
+		t.Error("app.js: stage.offsetWidth must be passed to measurePanelHeight to simulate the correct layout width")
+	}
+	// stage.style.height must be set and then cleared after the transition.
+	if !strings.Contains(body, "stage.style.height = ") {
+		t.Error("app.js: stage.style.height must be set during the height transition")
+	}
+	if !strings.Contains(body, "stage.style.height = ''") {
+		t.Error("app.js: stage.style.height must be cleared to auto after the panel transition completes")
+	}
+}
+
+// TestStaticHTML_ImapPopFieldsets verifies that index.html contains hidden
+// fieldsets for the imap and pop targets so onTargetChange() can always find
+// them via getElementById and cleanly hide any previously active panel.
+func TestStaticHTML_ImapPopFieldsets(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="fields-imap"`) {
+		t.Error("index.html: fieldset id=fields-imap must be present for the imap target type")
+	}
+	if !strings.Contains(body, `id="fields-pop"`) {
+		t.Error("index.html: fieldset id=fields-pop must be present for the pop target type")
+	}
+	// Both fieldsets must start hidden so they are invisible until selected.
+	imapHiddenIdx := strings.Index(body, `id="fields-imap"`)
+	popHiddenIdx := strings.Index(body, `id="fields-pop"`)
+	if imapHiddenIdx == -1 || !strings.Contains(body[imapHiddenIdx:imapHiddenIdx+200], "hidden") {
+		t.Error("index.html: fields-imap fieldset must carry the hidden attribute")
+	}
+	if popHiddenIdx == -1 || !strings.Contains(body[popHiddenIdx:popHiddenIdx+200], "hidden") {
+		t.Error("index.html: fields-pop fieldset must carry the hidden attribute")
+	}
+	// Both fieldsets must carry data-panel-empty="true" so JS skips the reveal
+	// step and never presents an empty bordered box to the user when imap/pop
+	// is selected.
+	if imapHiddenIdx == -1 || !strings.Contains(body[imapHiddenIdx:imapHiddenIdx+300], `data-panel-empty="true"`) {
+		t.Error(`index.html: fields-imap fieldset must carry data-panel-empty="true" to suppress the blank reveal`)
+	}
+	if popHiddenIdx == -1 || !strings.Contains(body[popHiddenIdx:popHiddenIdx+300], `data-panel-empty="true"`) {
+		t.Error(`index.html: fields-pop fieldset must carry data-panel-empty="true" to suppress the blank reveal`)
+	}
+	// legend keys must be referenced so i18n can label the fieldsets.
+	if !strings.Contains(body, "legend-imap") {
+		t.Error("index.html: fields-imap fieldset must reference legend-imap i18n key")
+	}
+	if !strings.Contains(body, "legend-pop") {
+		t.Error("index.html: fields-pop fieldset must reference legend-pop i18n key")
+	}
+}
+
+// TestStaticI18n_ImapPopLegendKeys verifies that i18n.js defines legend-imap
+// and legend-pop translation keys for both the English and zh-TW locales.
+func TestStaticI18n_ImapPopLegendKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "legend-imap") {
+		t.Error("i18n.js: legend-imap key must be defined (needed by fields-imap fieldset)")
+	}
+	if !strings.Contains(body, "legend-pop") {
+		t.Error("i18n.js: legend-pop key must be defined (needed by fields-pop fieldset)")
+	}
+	// English translations.
+	if !strings.Contains(body, "IMAP Options") {
+		t.Error("i18n.js: English translation for legend-imap must be 'IMAP Options'")
+	}
+	if !strings.Contains(body, "POP3 Options") {
+		t.Error("i18n.js: English translation for legend-pop must be 'POP3 Options'")
+	}
+	// Traditional Chinese translations.
+	if !strings.Contains(body, "IMAP \u9078\u9805") {
+		t.Error("i18n.js: zh-TW translation for legend-imap must be 'IMAP \u9078\u9805'")
+	}
+	if !strings.Contains(body, "POP3 \u9078\u9805") {
+		t.Error("i18n.js: zh-TW translation for legend-pop must be 'POP3 \u9078\u9805'")
+	}
+}
+
+// TestStaticJS_EmptyPanelHandling verifies that app.js honours the
+// data-panel-empty attribute: when the target resolves to a content-free
+// fieldset (imap, pop) all departing panels are still hidden and the stage
+// height collapses smoothly, but the blank fieldset is never made visible so
+// the user is never presented with an empty bordered box.
+func TestStaticJS_EmptyPanelHandling(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// JS reads dataset.panelEmpty to decide whether to reveal the incoming panel.
+	if !strings.Contains(body, "dataset.panelEmpty") {
+		t.Error("app.js: onTargetChange must read dataset.panelEmpty to detect content-free panels")
+	}
+	// isEmptyPanel is the local flag derived from the attribute.
+	if !strings.Contains(body, "isEmptyPanel") {
+		t.Error("app.js: onTargetChange must define isEmptyPanel flag to branch the reveal path")
+	}
+	// When the incoming panel is empty the stage height target must be 0 so the
+	// stage collapses smoothly rather than leaving residual whitespace.
+	if !strings.Contains(body, "isEmptyPanel ? 0") {
+		t.Error("app.js: empty panel transition must use incomingH=0 to collapse the stage smoothly")
+	}
+	// revealIncoming must guard on isEmptyPanel and return early without
+	// unhiding the blank fieldset.
+	if !strings.Contains(body, "if (isEmptyPanel)") {
+		t.Error("app.js: revealIncoming must check isEmptyPanel and return early without showing the blank fieldset")
+	}
+}
+
+// TestStaticJS_EmptyToContentTransition verifies that app.js smoothly
+// animates the stage height from 0 to the incoming panel height when
+// switching from a content-free panel (e.g. pop → ftp).  Without this
+// branch the stage jumps directly from height:0 to height:auto, causing
+// the card border to appear instantly instead of growing in.
+func TestStaticJS_EmptyToContentTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The grow-from-empty branch must lock the stage at '0px' before
+	// triggering the transition, so CSS has an explicit start value to
+	// animate from (auto→auto never animates).
+	if !strings.Contains(body, "stage.style.height = '0px'") {
+		t.Error("app.js: grow-from-empty branch must set stage.style.height = '0px' to give CSS transition an explicit start value")
+	}
+	// The branch must measure the incoming panel so the stage knows its
+	// target height before the transition starts.
+	if !strings.Contains(body, "!isEmptyPanel && stage") {
+		t.Error("app.js: grow-from-empty branch must guard on !isEmptyPanel && stage to ensure it only runs for content panels")
 	}
 }

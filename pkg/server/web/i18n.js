@@ -49,6 +49,8 @@ window.LOCALES = {
     'label-smtp-mx-all':     'Probe all MX records',
 
     /* ── FTP fieldset ─────────────────────────────────────────────────── */
+    'legend-imap':           'IMAP Options',
+    'legend-pop':            'POP3 Options',
     'legend-ftp':            'FTP / FTPS Options',
     'label-ftp-mode':        'Detection Mode',
     'ftp-mode-login':        'Connect & login',
@@ -195,6 +197,8 @@ window.LOCALES = {
     'label-smtp-mx-all':     '探測所有 MX 記錄',
 
     /* ── FTP fieldset ─────────────────────────────────────────────────── */
+    'legend-imap':           'IMAP 選項',
+    'legend-pop':            'POP3 選項',
     'legend-ftp':            'FTP / FTPS 選項',
     'label-ftp-mode':        '偵測模式',
     'ftp-mode-login':        '連線並登入',

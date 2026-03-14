@@ -262,53 +262,188 @@ function applyModePanels(target) {
 // page load (the form's initial state is already fully visible in the HTML).
 let _initTargetDone = false;
 
+/**
+ * Cleanup function for any in-flight sequential panel transition.
+ * Calling it cancels the pending animationend listeners and immediately
+ * hides all departing panels so a rapid target switch always wins.
+ */
+let _pendingReveal = null;
+
+/**
+ * Measure the layout height a panel element would occupy inside the stage
+ * when visible.  The value matches what panel-stage.scrollHeight returns with
+ * that panel present: offsetHeight (content + padding + border) plus any CSS
+ * margins.  Using scrollHeight instead would be off by the border widths,
+ * causing a visible snap when height:auto is restored after the transition.
+ * Uses a detached clone so the live DOM is never modified.
+ * @param  {HTMLElement} el         The panel to measure.
+ * @param  {number}      stageWidth The layout width to simulate (matches .panel-stage).
+ * @returns {number} Height in CSS pixels.
+ */
+function measurePanelHeight(el, stageWidth) {
+  const clone = el.cloneNode(true);
+  clone.hidden = false;
+  clone.style.cssText = [
+    'position: absolute',
+    'top: -9999px',
+    'left: 0',
+    'width: ' + (stageWidth || 300) + 'px',
+    'visibility: hidden',
+    'pointer-events: none',
+  ].join('; ');
+  document.body.appendChild(clone);
+  // offsetHeight includes content + padding + border (unlike scrollHeight which
+  // excludes border), so it exactly matches the child's contribution to the
+  // parent container's scrollHeight.  Add CSS margins on top to get the total
+  // space the element occupies inside an overflow:hidden stage.
+  const cs           = getComputedStyle(clone);
+  const marginTop    = parseFloat(cs.marginTop)    || 0;
+  const marginBottom = parseFloat(cs.marginBottom) || 0;
+  const h            = clone.offsetHeight + marginTop + marginBottom;
+  document.body.removeChild(clone);
+  return h;
+}
+
 function onTargetChange() {
   const target  = val('target');
   const animate = _initTargetDone;
   _initTargetDone = true;
 
-  // Show the fieldset for the current target; hide all others.
-  document.querySelectorAll('.target-fields').forEach(fs => {
-    if (fs.id === 'fields-' + target) {
-      // Cancel any in-progress leave animation and make the panel visible.
-      fs.classList.remove('panel-leaving');
-      fs.hidden = false;
-      if (animate) {
-        fs.classList.remove('panel-entering');
-        void fs.offsetWidth; // force reflow so animation restarts cleanly
-        fs.classList.add('panel-entering');
-      }
-    } else {
-      if (animate && !fs.hidden) {
-        // Fade the departing panel upward; hide it once the animation ends.
-        fs.classList.remove('panel-entering');
-        fs.classList.add('panel-leaving');
-        fs.addEventListener('animationend', () => {
-          // Guard: a rapid switch may have re-shown this panel already.
-          if (fs.classList.contains('panel-leaving')) {
-            fs.hidden = true;
-            fs.classList.remove('panel-leaving');
-          }
-        }, { once: true });
-      } else {
+  // Cancel any previous in-flight transition before starting a new one.
+  if (_pendingReveal) {
+    _pendingReveal();
+    _pendingReveal = null;
+  }
+
+  const incoming = document.getElementById('fields-' + target);
+  if (!incoming) return;
+
+  // Panels marked data-panel-empty carry no form content (e.g. imap, pop).
+  // All departing panels are still hidden, but the incoming panel is never
+  // revealed — so the user never sees an empty bordered box.
+  const isEmptyPanel = incoming.dataset.panelEmpty === 'true';
+
+  const stage = document.getElementById('panel-stage');
+
+  // Collect all currently-visible panels that need to depart.
+  const departing = Array.from(document.querySelectorAll('.target-fields'))
+    .filter(fs => fs !== incoming && !fs.hidden);
+
+  /**
+   * Reveal the incoming panel with an optional enter animation.
+   * Called only after all departing panels have finished their exit, so the
+   * two animations are strictly sequential — no layout overlap.
+   * The stage height is already at the incoming panel\'s measured height
+   * (set during the departure phase), so no visual jump occurs on reveal.
+   */
+  function revealIncoming() {
+    _pendingReveal = null;
+    incoming.classList.remove('panel-leaving');
+    if (isEmptyPanel) {
+      // Empty panel: keep the fieldset hidden; collapse the stage back to
+      // auto height (naturally 0 since no visible children remain).
+      if (stage) stage.style.height = '';
+      return;
+    }
+    incoming.hidden = false;
+    if (animate) {
+      incoming.classList.remove('panel-entering');
+      void incoming.offsetWidth; // force reflow so animation restarts cleanly
+      incoming.classList.add('panel-entering');
+      // Restore auto height once the entrance animation is done so the stage
+      // can grow/shrink naturally afterwards (e.g. sub-mode panel toggles).
+      incoming.addEventListener('animationend', () => {
+        if (stage) stage.style.height = '';
+      }, { once: true });
+    } else if (stage) {
+      stage.style.height = '';
+    }
+  }
+
+  if (animate && departing.length > 0) {
+    // ── Sequential + height-animated transition ──────────────────────────
+    // 1. Lock the stage at its current pixel height (enables CSS transition).
+    // 2. Measure the incoming panel height via a detached clone.
+    // 3. Set stage to the incoming height — both the height transition and the
+    //    departure animation run in parallel over the same --panel-anim-dur.
+    // 4. After all departing panels finish, reveal the incoming panel.
+    if (stage) {
+      const currentH  = stage.scrollHeight;
+      // Empty panels target height 0 so the stage collapses smoothly.
+      const incomingH = isEmptyPanel ? 0 : measurePanelHeight(incoming, stage.offsetWidth);
+      stage.style.height = currentH + 'px';   // lock to pixels so transition works
+      void stage.offsetHeight;                 // force reflow
+      stage.style.height = incomingH + 'px';  // trigger height CSS transition
+    }
+
+    // Keep the incoming panel hidden while the outgoing content departs.
+    incoming.hidden = true;
+
+    let pending = departing.length;
+    const listeners = [];
+
+    departing.forEach(fs => {
+      fs.classList.remove('panel-entering');
+      fs.classList.add('panel-leaving');
+
+      const handler = () => {
+        fs.hidden = true;
+        fs.classList.remove('panel-leaving');
+        pending -= 1;
+        if (pending === 0) revealIncoming();
+      };
+
+      fs.addEventListener('animationend', handler, { once: true });
+      listeners.push({ fs, handler });
+    });
+
+    // Store cleanup so a rapid switch can cancel this flight.
+    _pendingReveal = () => {
+      if (stage) stage.style.height = '';
+      listeners.forEach(({ fs, handler }) => {
+        fs.removeEventListener('animationend', handler);
+        fs.hidden = true;
+        fs.classList.remove('panel-leaving', 'panel-entering');
+      });
+    };
+  } else if (animate && !isEmptyPanel && stage) {
+    // ── Grow from empty stage ─────────────────────────────────────────────
+    // The previous target was an empty panel (never revealed, so departing=[]).
+    // The stage is at height 0; animate it up to the incoming panel height
+    // while the incoming panel fades in — producing the same smooth effect as
+    // the symmetric "collapse to empty" transition in the opposite direction.
+    document.querySelectorAll('.target-fields').forEach(fs => {
+      if (fs !== incoming) {
         fs.hidden = true;
         fs.classList.remove('panel-entering', 'panel-leaving');
       }
-    }
-  });
+    });
+    const incomingH = measurePanelHeight(incoming, stage.offsetWidth);
+    stage.style.height = '0px';       // lock at 0 so CSS transition has a start
+    void stage.offsetHeight;           // force reflow
+    stage.style.height = incomingH + 'px'; // trigger height CSS transition
+    revealIncoming();
+  } else {
+    // Cold load or no visible departing panel and no animation: instant switch.
+    document.querySelectorAll('.target-fields').forEach(fs => {
+      if (fs !== incoming) {
+        fs.hidden = true;
+        fs.classList.remove('panel-entering', 'panel-leaving');
+      }
+    });
+    if (stage) stage.style.height = '';
+    revealIncoming();
+  }
 
-  // Auto-fill ports only when the user has not overridden them.
+  // Non-animation updates — apply immediately, do not wait for transition.
   const portEl = document.getElementById('ports');
   if (portEl && portEl.dataset.userEdited !== 'true') {
     portEl.value = (TARGET_PORTS[target] || []).join(', ');
   }
-
-  // Update host placeholder based on target.
   const hostEl = document.getElementById('host');
   if (hostEl) {
     hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
   }
-  // Sync sub-mode panel visibility for the active target.
   applyModePanels(target);
 }
 
