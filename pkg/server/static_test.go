@@ -1011,3 +1011,200 @@ func TestStaticHTML_SelectWrapMarkup(t *testing.T) {
 		t.Error("index.html: .select-wrap wrapper must appear before the #target select in source order")
 	}
 }
+
+// ── Footer tests ─────────────────────────────────────────────────────────
+
+// TestStaticHTML_FooterPresent verifies that the embedded index.html contains
+// a <footer class="site-footer"> element with the .footer-inner wrapper.
+// The footer must appear after </main> so the HTML document structure follows
+// the natural reading order: header → main content → footer.
+func TestStaticHTML_FooterPresent(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `class="site-footer"`) {
+		t.Error(`index.html: <footer class="site-footer"> must be present`)
+	}
+	if !strings.Contains(body, `class="footer-inner"`) {
+		t.Error(`index.html: .footer-inner wrapper must be present inside .site-footer`)
+	}
+	if !strings.Contains(body, `class="footer-copy"`) {
+		t.Error(`index.html: .footer-copy paragraph must be present inside .footer-inner`)
+	}
+
+	// Footer must appear after the closing </main> tag.
+	mainIdx := strings.Index(body, "</main>")
+	footerIdx := strings.Index(body, `class="site-footer"`)
+	if mainIdx == -1 || footerIdx == -1 {
+		t.Fatal("index.html: </main> or .site-footer is missing")
+	}
+	if footerIdx < mainIdx {
+		t.Error("index.html: .site-footer must appear after </main> in source order")
+	}
+}
+
+// TestStaticHTML_FooterCopyright verifies that the footer element contains the
+// copyright notice with the data-i18n key and the expected English fallback
+// text.  The copyright text must include the © symbol, the year, and the
+// author name "Charles" so the notice is legally unambiguous.
+func TestStaticHTML_FooterCopyright(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `data-i18n="footer-copyright"`) {
+		t.Error("index.html: footer copyright paragraph must carry data-i18n=\"footer-copyright\"")
+	}
+	// The fallback text must contain the essential copyright elements.
+	for _, want := range []string{"\u00a9", "2026", "Charles"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("index.html: footer fallback text must contain %q for a valid copyright notice", want)
+		}
+	}
+}
+
+// TestStaticCSS_FooterStyles verifies that the embedded style.css defines the
+// three footer component rules (.site-footer, .footer-inner, .footer-copy) and
+// the --footer-shadow design token.  This ensures the footer can be restyled by
+// changing a single token just like the header.
+func TestStaticCSS_FooterStyles(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// All three footer component selectors must be defined.
+	for _, rule := range []string{".site-footer", ".footer-inner", ".footer-copy"} {
+		if !strings.Contains(body, rule) {
+			t.Errorf("style.css: %s rule must be defined", rule)
+		}
+	}
+	// Footer must reuse the same --header-py token for vertical rhythm parity.
+	if !strings.Contains(body, "var(--header-py)") {
+		t.Error("style.css: .site-footer must reuse var(--header-py) for vertically consistent rhythm with the header")
+	}
+	// The --footer-shadow token must be declared and consumed.
+	if !strings.Contains(body, "--footer-shadow") {
+		t.Error("style.css: --footer-shadow token must be declared in :root")
+	}
+	if !strings.Contains(body, "var(--footer-shadow)") {
+		t.Error("style.css: .site-footer must consume var(--footer-shadow)")
+	}
+	// Footer must NOT be sticky or fixed — it should flow with the document.
+	// We narrow the check to only the footer CSS section by using the section
+	// comment marker "/* ── Footer" as the start boundary and the next "/* ──"
+	// section marker as the end boundary.  This avoids false positives from
+	// the header section which legitimately declares position: sticky.
+	sectionMark := "/* \u2500\u2500 Footer"
+	footerSecStart := strings.Index(body, sectionMark)
+	if footerSecStart == -1 {
+		t.Fatal("style.css: '/* ── Footer' section comment not found")
+	}
+	footerSec := body[footerSecStart+len(sectionMark):]
+	if nextSec := strings.Index(footerSec, "/* \u2500\u2500"); nextSec != -1 {
+		footerSec = footerSec[:nextSec]
+	}
+	if strings.Contains(footerSec, "position: sticky") || strings.Contains(footerSec, "position: fixed") {
+		t.Error("style.css: .site-footer must NOT be sticky or fixed — it must flow with the document")
+	}
+}
+
+// TestStaticCSS_BodyFlushBottom verifies that the embedded style.css configures
+// the body as a flex-column container with min-height: 100vh, and that .main
+// carries flex: 1 and width: 100%.  Together these rules guarantee:
+//   - the footer is always pressed to the viewport bottom on short pages, and
+//   - .main fills the full available width (up to max-width: 960px) instead of
+//     shrinking to its intrinsic content width (flex cross-axis shrink-to-fit).
+func TestStaticCSS_BodyFlushBottom(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "min-height: 100vh") {
+		t.Error("style.css: body must declare 'min-height: 100vh' so the footer reaches the bottom on short pages")
+	}
+	if !strings.Contains(body, "flex-direction: column") {
+		t.Error("style.css: body must declare 'flex-direction: column' for the header-main-footer stack")
+	}
+	if !strings.Contains(body, "flex: 1") {
+		t.Error("style.css: .main must declare 'flex: 1' to fill remaining space above the footer")
+	}
+	// width: 100% is required so that margin: auto on the cross axis of the body
+	// flex container does not trigger shrink-to-fit, which would squeeze the
+	// diagnostic and history cards narrower than their intended 960px maximum.
+	if !strings.Contains(body, "width: 100%") {
+		t.Error("style.css: .main must declare 'width: 100%' to prevent shrink-to-fit inside the body flex container")
+	}
+}
+
+// TestStaticCSS_ChromeHeightParity verifies that the embedded style.css
+// declares a --chrome-inner-h design token and applies it as min-height to
+// both .header-inner and .footer-inner.  This single token guarantees the
+// visible chrome bars (header + footer) have identical height regardless of
+// their text content size difference, producing a visually balanced bookend.
+func TestStaticCSS_ChromeHeightParity(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Token must be declared in :root so themes can override it.
+	if !strings.Contains(body, "--chrome-inner-h") {
+		t.Error("style.css: --chrome-inner-h token must be declared in :root for header/footer height parity")
+	}
+	// Both inner containers must consume the token.
+	count := strings.Count(body, "var(--chrome-inner-h)")
+	if count < 2 {
+		t.Errorf("style.css: var(--chrome-inner-h) must appear at least twice (header-inner + footer-inner), got %d", count)
+	}
+}
+
+// TestStaticI18n_FooterCopyrightKey verifies that the embedded i18n.js carries
+// the footer-copyright key in both the en and zh-TW locales, and that each
+// value contains the required legal elements (© symbol, year, author name).
+func TestStaticI18n_FooterCopyrightKey(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "'footer-copyright'") {
+		t.Error("i18n.js: 'footer-copyright' key must be present")
+	}
+	// Both locales must include the mandatory copyright elements.
+	for _, want := range []string{"\u00a9", "2026", "Charles"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("i18n.js: footer-copyright value must contain %q", want)
+		}
+	}
+	// en locale must carry the All Rights Reserved statement.
+	if !strings.Contains(body, "All Rights Reserved") {
+		t.Error("i18n.js en: footer-copyright must contain 'All Rights Reserved'")
+	}
+	// zh-TW locale must have a Chinese-language variant using the corresponding phrase.
+	if !strings.Contains(body, "保留所有權利") {
+		t.Error("i18n.js zh-TW: footer-copyright must contain '保留所有權利'")
+	}
+}

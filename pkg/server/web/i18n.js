@@ -148,6 +148,9 @@ window.LOCALES = {
     'theme-light-green':      'Light Green',
     'theme-forest-green':     'Forest Green',
     'theme-dark':             'Dark',
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    'footer-copyright':       '© 2026 Charles. All Rights Reserved.',
   },
 
   'zh-TW': {
@@ -291,5 +294,8 @@ window.LOCALES = {
     'theme-light-green':      '淡綠',
     'theme-forest-green':     '墨綠',
     'theme-dark':             '暗黑',
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    'footer-copyright':       '© 2026 Charles．保留所有權利。',
   },
 };

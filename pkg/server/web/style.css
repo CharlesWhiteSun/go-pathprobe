@@ -27,15 +27,26 @@
   --header-py:      .92rem;
   /* Header shadow — multi-layer keeps it crisp at the edge, diffuse further out */
   --header-shadow:  0 2px 8px rgba(0,0,0,.20), 0 1px 2px rgba(0,0,0,.10);
+  /* Footer shadow — y-direction inverted so the shadow rises toward the content above */
+  --footer-shadow:  0 -2px 8px rgba(0,0,0,.12), 0 -1px 2px rgba(0,0,0,.08);
   /* Brand logo size — Path 1 step up, Probe 1 step down from h1 baseline (1.3rem) */
   --brand-logo-size:  1.5rem;
+  /* Chrome inner height — the content-area height shared by both header and footer.
+     Set to --brand-logo-size so the footer inner row is the same height as the
+     brand logo row in the header, producing visually identical chrome bars. */
+  --chrome-inner-h:   var(--brand-logo-size);
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html  { font-size: 15px; }
+/* flex-column + min-height: 100vh: ensures .site-footer is always pushed to the
+   viewport bottom even when page content is shorter than the window height.
+   position: sticky on .site-header is unaffected — the scroll container
+   remains the viewport, not the body flex container. */
 body  { background: var(--bg); color: var(--text);
-        font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; }
+        font-family: system-ui, -apple-system, sans-serif; line-height: 1.5;
+        display: flex; flex-direction: column; min-height: 100vh; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
 /* position: sticky keeps the header attached to the top of the viewport as the
@@ -49,7 +60,8 @@ body  { background: var(--bg); color: var(--text);
    All three share the same cross-axis, so align-items: center keeps every item
    vertically centred in one pass without needing an extra wrapper row. */
 .header-inner { max-width: 960px; margin: 0 auto;
-                display: flex; align-items: center; gap: .75rem; }
+                display: flex; align-items: center; gap: .75rem;
+                min-height: var(--chrome-inner-h); }
 .header-brand { flex: 1; display: flex; align-items: center; gap: .75rem; }
 /* ── Brand typography ─────────────────────────────────────────────────────
    --brand-font drives the h1 typeface.  To swap in a custom web font:
@@ -82,8 +94,27 @@ body  { background: var(--bg); color: var(--text);
 .version-badge  { font-size: .72rem; background: rgba(255,255,255,.18);
                   padding: .2rem .6rem; border-radius: 999px; }
 
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+/* .site-footer mirrors the header visual language — same primary background,
+   same horizontal rhythm — so the page feels bookended by matching chrome.
+   No sticky/fixed positioning: it flows naturally at the document end.
+   body flex-column + .main flex:1 (see above) guarantee it always sits at
+   the viewport bottom without needing an explicit margin or padding trick. */
+.site-footer  { background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
+                box-shadow: var(--footer-shadow); }
+.footer-inner { max-width: 960px; margin: 0 auto;
+                display: flex; align-items: center; justify-content: center;
+                min-height: var(--chrome-inner-h); }
+/* Slightly muted so it reads as legal boilerplate rather than primary content */
+.footer-copy  { font-size: .78rem; opacity: .85; letter-spacing: .03em; }
+
 /* ── Main layout ────────────────────────────────────────────────────────── */
-.main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem;
+/* flex: 1 — grows to fill all vertical space between header and footer so
+   the footer is always pushed to the bottom of the viewport. */
+/* width: 100% ensures .main fills the body flex container (cross-axis width)
+   before max-width clamps it.  Without it, margin: auto on a flex item cross-
+   axis triggers shrink-to-fit, squeezing the cards narrower than 960px. */
+.main { flex: 1; width: 100%; max-width: 960px; margin: 1.5rem auto; padding: 0 1rem;
         display: flex; flex-direction: column; gap: 1.2rem; }
 
 /* ── Card ───────────────────────────────────────────────────────────────── */
