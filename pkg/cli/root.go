@@ -58,7 +58,11 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 	// When invoked with no subcommand (e.g. double-clicking the binary),
 	// behave as if the user ran "pathprobe serve" so the web UI opens
 	// immediately without requiring any flags.
+	// serveCmd.SetContext propagates the root command's context (set by Cobra's
+	// ExecuteC) to serveCmd before calling its RunE directly, preventing a nil-
+	// context panic in signal.NotifyContext.
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		serveCmd.SetContext(cmd.Context())
 		return serveCmd.RunE(serveCmd, args)
 	}
 

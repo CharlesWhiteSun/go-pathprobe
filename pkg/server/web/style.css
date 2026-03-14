@@ -38,7 +38,12 @@ body  { background: var(--bg); color: var(--text);
         font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
-.site-header  { background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
+/* position: sticky keeps the header attached to the top of the viewport as the
+   page scrolls.  z-index: 100 ensures it layers above all card/form content.
+   Unlike position: fixed, sticky participates in normal flow, so .main needs
+   no extra margin-top to compensate for the header height. */
+.site-header  { position: sticky; top: 0; z-index: 100;
+                background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
                 box-shadow: var(--header-shadow); }
 /* 3-column flex: brand (left, flex:1) | theme-bar (centre) | lang (right, flex:1)
    All three share the same cross-axis, so align-items: center keeps every item
@@ -109,6 +114,33 @@ select {
 input:focus, select:focus {
   outline: none; border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* ── Select wrapper — custom chevron follows active theme via mask+var(--primary) ── */
+/* The wrapper provides a positioning context for the ::after pseudo-element.
+   appearance: none removes the native OS dropdown arrow; the custom chevron
+   rendered via mask-image + background-color: var(--primary) replaces it and
+   automatically adopts the active theme colour with zero extra JS. */
+.select-wrap          { position: relative; width: 100%; }
+.select-wrap select   { width: 100%; padding-right: 2.2rem;
+                        appearance: none; -webkit-appearance: none;
+                        cursor: pointer; font-weight: 500;
+                        transition: border-color .15s, box-shadow .15s; }
+.select-wrap select:hover:not(:disabled) { border-color: var(--primary); }
+/* Chevron rendered via CSS mask so colour tracks --primary across all themes.
+   The SVG is a simple two-segment downward caret (5-point apex at bottom).
+   pointer-events: none lets clicks reach the <select> beneath. */
+.select-wrap::after {
+  content: '';
+  position: absolute; right: .65rem; top: 50%;
+  transform: translateY(-50%);
+  width: .75rem; height: .75rem;
+  pointer-events: none;
+  background-color: var(--primary);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpolyline points='0 0 5 6 10 0' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpolyline points='0 0 5 6 10 0' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat; mask-size: contain; mask-position: center;
+  -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center;
 }
 
 .checkbox-row       { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem;

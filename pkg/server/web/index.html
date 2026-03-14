@@ -41,14 +41,16 @@
     <div class="form-grid">
       <div class="field-group">
         <label for="target" data-i18n="label-target">Target</label>
-        <select id="target" onchange="onTargetChange()">
-          <option value="web" data-i18n="opt-web">web — Public IP &amp; DNS</option>
-          <option value="smtp" data-i18n="opt-smtp">smtp — Mail server</option>
-          <option value="imap" data-i18n="opt-imap">imap — IMAP server</option>
-          <option value="pop" data-i18n="opt-pop">pop — POP3 server</option>
-          <option value="ftp" data-i18n="opt-ftp">ftp — FTP / FTPS</option>
-          <option value="sftp" data-i18n="opt-sftp">sftp — SFTP / SSH</option>
-        </select>
+        <div class="select-wrap">
+          <select id="target" onchange="onTargetChange()">
+            <option value="web" data-i18n="opt-web">web — Public IP &amp; DNS</option>
+            <option value="smtp" data-i18n="opt-smtp">smtp — Mail server</option>
+            <option value="imap" data-i18n="opt-imap">imap — IMAP server</option>
+            <option value="pop" data-i18n="opt-pop">pop — POP3 server</option>
+            <option value="ftp" data-i18n="opt-ftp">ftp — FTP / FTPS</option>
+            <option value="sftp" data-i18n="opt-sftp">sftp — SFTP / SSH</option>
+          </select>
+        </div>
       </div>
 
       <div class="field-group">

@@ -923,3 +923,91 @@ func TestStaticCSS_HeaderShadow(t *testing.T) {
 		t.Error("style.css: .site-header must consume var(--header-shadow)")
 	}
 }
+
+// TestStaticCSS_StickyHeader verifies that the embedded style.css makes the
+// site header stick to the top of the viewport while the page is scrolled.
+// position: sticky + top: 0 achieves this without removing the header from
+// normal document flow (unlike position: fixed), so .main requires no extra
+// margin-top compensation.  z-index ensures the header layers above all cards.
+func TestStaticCSS_StickyHeader(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "position: sticky") {
+		t.Error("style.css: .site-header must declare 'position: sticky' to stay visible during scroll")
+	}
+	if !strings.Contains(body, "top: 0") {
+		t.Error("style.css: .site-header must declare 'top: 0' to anchor at the viewport top")
+	}
+	if !strings.Contains(body, "z-index: 100") {
+		t.Error("style.css: .site-header must declare 'z-index: 100' to layer above page content")
+	}
+}
+
+// TestStaticCSS_SelectCustomChevron verifies that the embedded style.css
+// removes the native OS dropdown arrow and replaces it with a custom chevron
+// that follows the active theme's --primary colour via CSS mask-image.
+// This guarantees visual consistency across all five themes without any JS.
+func TestStaticCSS_SelectCustomChevron(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Native arrow must be suppressed.
+	if !strings.Contains(body, "appearance: none") {
+		t.Error("style.css: select must declare 'appearance: none' to remove the native OS arrow")
+	}
+	if !strings.Contains(body, "-webkit-appearance: none") {
+		t.Error("style.css: select must declare '-webkit-appearance: none' for Safari/Chrome compat")
+	}
+
+	// Wrapper provides positioning context for the pseudo-element chevron.
+	if !strings.Contains(body, ".select-wrap") {
+		t.Error("style.css: .select-wrap rule must exist as a positioning context for the chevron")
+	}
+
+	// Custom chevron uses mask-image so background-color: var(--primary) provides
+	// the colour — automatically correct for every theme.
+	if !strings.Contains(body, "mask-image") {
+		t.Error("style.css: .select-wrap::after must use mask-image for the theme-aware chevron")
+	}
+	if !strings.Contains(body, "background-color: var(--primary)") {
+		t.Error("style.css: chevron must use background-color: var(--primary) so colour tracks the active theme")
+	}
+}
+
+// TestStaticHTML_SelectWrapMarkup verifies that the target type <select> in
+// index.html is wrapped in a <div class="select-wrap"> so the CSS positioning
+// context for the custom chevron pseudo-element is always present.
+func TestStaticHTML_SelectWrapMarkup(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The wrapper div must be present.
+	if !strings.Contains(body, `class="select-wrap"`) {
+		t.Error(`index.html: <div class="select-wrap"> must wrap the #target select element`)
+	}
+	// The wrapper must precede the select in the source order.
+	wrapIdx := strings.Index(body, `class="select-wrap"`)
+	selectIdx := strings.Index(body, `id="target"`)
+	if wrapIdx == -1 || selectIdx == -1 {
+		t.Fatal("index.html: .select-wrap or #target is missing")
+	}
+	if wrapIdx > selectIdx {
+		t.Error("index.html: .select-wrap wrapper must appear before the #target select in source order")
+	}
+}
