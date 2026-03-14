@@ -179,6 +179,7 @@ function initAdvancedOpts() {
 
     if (details.open) {
       // ── Collapse: animate from current height to 0, then toggle off ────
+      details.classList.remove('adv-is-open'); // start chevron rotation immediately
       const currentH = body.scrollHeight;
       body.style.height = currentH + 'px';
       void body.offsetHeight;                    // flush reflow before transition
@@ -194,6 +195,7 @@ function initAdvancedOpts() {
     } else {
       // ── Expand: open, measure, animate from 0 to full height ───────────
       details.open = true;
+      details.classList.add('adv-is-open');    // start chevron rotation immediately
       const targetH = body.scrollHeight;
       body.style.height = '0px';
       void body.offsetHeight;                    // flush reflow before transition

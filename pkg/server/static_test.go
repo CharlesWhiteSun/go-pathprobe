@@ -1941,6 +1941,39 @@ func TestStaticCSS_AdvancedOptsAnimation(t *testing.T) {
 	if !strings.Contains(body, "panel-leave") {
 		t.Error("style.css: adv-leaving animation must reuse the panel-leave keyframes")
 	}
+	// The native browser triangle marker must be suppressed so the custom
+	// ::before chevron is the only visible indicator.
+	if !strings.Contains(body, "::-webkit-details-marker") {
+		t.Error("style.css: .advanced-opts > summary::-webkit-details-marker must be hidden to suppress the native Chrome/Safari triangle")
+	}
+	if !strings.Contains(body, "list-style: none") {
+		t.Error("style.css: .advanced-opts > summary must set list-style:none to suppress the native Firefox triangle marker")
+	}
+	// summary::before must carry the animated chevron.
+	if !strings.Contains(body, "summary::before") {
+		t.Error("style.css: .advanced-opts > summary::before rule must exist to render the custom animated chevron")
+	}
+	// The native Firefox ::marker must also be suppressed (belt-and-suspenders).
+	if !strings.Contains(body, "summary::marker") {
+		t.Error("style.css: .advanced-opts > summary::marker must blank the native Firefox arrow")
+	}
+	// Chevron rotation must use ease-in-out for an elegant deceleration.
+	if !strings.Contains(body, "ease-in-out") {
+		t.Error("style.css: summary::before transition must use ease-in-out for a graceful rotation feel")
+	}
+	// Duration is driven by --panel-anim-dur (via calc) so vivid/off cascade.
+	// The multiplier must be 1.2 (= original 1.8 ÷ 1.5, i.e. 50% faster).
+	if !strings.Contains(body, "* 1.2") {
+		t.Error("style.css: summary::before transition duration multiplier must be 1.2 (50% faster than the original 1.8x setting)")
+	}
+	if !strings.Contains(body, "var(--panel-anim-dur)") {
+		t.Error("style.css: summary::before transition duration must consume var(--panel-anim-dur) so vivid/off modes apply automatically")
+	}
+	// .adv-is-open class (not [open] attribute) drives the open rotation so
+	// the chevron is always in sync with the height transition direction.
+	if !strings.Contains(body, "adv-is-open") {
+		t.Error("style.css: .adv-is-open class must be declared to rotate the chevron in sync with the height animation")
+	}
 }
 
 // TestStaticJS_AdvancedOptsAnimation verifies that app.js defines
@@ -1984,6 +2017,12 @@ func TestStaticJS_AdvancedOptsAnimation(t *testing.T) {
 	// e.preventDefault() prevents the browser from toggling open/closed natively.
 	if !strings.Contains(body, "e.preventDefault") {
 		t.Error("app.js: initAdvancedOpts click handler must call e.preventDefault() to suppress native toggle")
+	}
+	// adv-is-open class controls the chevron rotation and must be added at
+	// expand-start and removed at collapse-start (not at transitionend) so
+	// the chevron rotation is always in sync with the height animation.
+	if !strings.Contains(body, "adv-is-open") {
+		t.Error("app.js: initAdvancedOpts must manage adv-is-open class to drive the chevron rotation in sync with height animation")
 	}
 }
 

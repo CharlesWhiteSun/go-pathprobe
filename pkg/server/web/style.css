@@ -427,8 +427,37 @@ fieldset.target-fields legend {
 }
 
 .advanced-opts           { margin-top: .4rem; }
+/* display:flex so ::before chevron and text sit on one flex row.
+   list-style:none hides the native Firefox/Chrome triangle marker. */
 .advanced-opts > summary { font-size: .84rem; font-weight: 500; cursor: pointer;
-                           color: var(--muted); user-select: none; padding: .25rem 0; }
+                           color: var(--muted); user-select: none; padding: .25rem 0;
+                           list-style: none;
+                           display: flex; align-items: center; gap: .35rem; }
+.advanced-opts > summary::-webkit-details-marker { display: none; } /* Chrome/Safari */
+.advanced-opts > summary::marker              { content: ''; }          /* Firefox  */
+
+/* Animated chevron indicator.
+   Uses the border-right + border-bottom trick to produce a ›-style corner
+   that elegantly rotates 90° between the closed (› right) and open (∨ down) state.
+   Duration: 1.2× --panel-anim-dur (1.8× ÷ 1.5 = 50% faster than the previous
+   setting) so the rotation feels snappy yet still smooth;
+   vivid/off modes cascade automatically. */
+.advanced-opts > summary::before {
+  content: '';
+  flex-shrink: 0;
+  display: inline-block;
+  width:  .46rem;
+  height: .46rem;
+  border-right:  1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);           /* default: right-pointing › */
+  transform-origin: center;
+  transition: transform calc(var(--panel-anim-dur) * 1.2) ease-in-out;
+}
+.advanced-opts.adv-is-open > summary::before {
+  transform: rotate(45deg);            /* open: down-pointing \u2304 */
+}
+
 .advanced-opts[open] > summary { color: var(--text); }
 .advanced-opts .checkbox-row   { margin-top: .5rem; }
 
