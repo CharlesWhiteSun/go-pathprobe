@@ -42,6 +42,12 @@
      --select-popup-r defaults to the global --r, allowing per-theme override. */
   --select-popup-shadow: 0 4px 18px rgba(0,0,0,.14), 0 1px 4px rgba(0,0,0,.07);
   --select-popup-r:      var(--r);
+  /* Checkbox custom styling tokens — box size, corner radius, and the
+     check/uncheck transition speed driven by the same anim-control system
+     as panels and popups so vivid/off modes apply automatically. */
+  --cb-size:     1.05rem;
+  --cb-radius:   4px;
+  --cb-anim-dur: .14s;
   /* Animation speed tokens — controlled by [data-anim] on <html>.
      data-anim="vivid" : slower + larger motion, useful for verifying effects
      data-anim="off"   : near-instant (0.001s), equivalent to prefers-reduced-motion
@@ -277,10 +283,86 @@ select option:checked {
   background: var(--primary); color: var(--option-checked-fg); font-weight: 600;
 }
 
+/* ── Custom checkbox ─────────────────────────────────────────────────────── */
+/* The native <input type=checkbox> is hidden and replaced by a fully styled
+   box drawn via span::before.  All sizing, colour and speed are token-driven
+   so theme overrides and vivid/off animation modes work automatically.       */
+
+/* Visually hide the native input while keeping it focusable / clickable.
+   position:absolute + 0-size means it doesn't affect layout; the parent
+   <label> still forwards all mouse events to the real checkbox. */
+.checkbox-row input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  width: 0; height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .checkbox-row       { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem;
                       font-size: .88rem; margin-bottom: .5rem; }
-.checkbox-row label { display: flex; align-items: center;
+/* position:relative on label lets the 0×0 hidden input stay at (0,0)
+   without pushing any visible content. */
+.checkbox-row label { position: relative;
+                      display: flex; align-items: center;
                       gap: .35rem; font-weight: 400; cursor: pointer; }
+
+/* The <span> immediately after the hidden input carries both the custom box
+   (::before) and the label text, keeping them on one flex row. */
+.checkbox-row input[type=checkbox] + span {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  line-height: 1.3;
+  user-select: none;
+}
+
+/* ─ Custom box ─ */
+.checkbox-row input[type=checkbox] + span::before {
+  content: '';
+  flex-shrink: 0;
+  display: inline-block;
+  width:  var(--cb-size);
+  height: var(--cb-size);
+  border: 1.5px solid var(--border);
+  border-radius: var(--cb-radius);
+  background-color: var(--input-bg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 72%;
+  transition: border-color     var(--cb-anim-dur) ease,
+              background-color var(--cb-anim-dur) ease,
+              box-shadow       var(--cb-anim-dur) ease;
+}
+
+/* ─ Hover (unchecked): border highlights to primary ─ */
+.checkbox-row label:hover input[type=checkbox]:not(:checked) + span::before {
+  border-color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 6%, var(--input-bg));
+}
+
+/* ─ Checked: filled primary background + white SVG checkmark ─ */
+.checkbox-row input[type=checkbox]:checked + span::before {
+  background-color: var(--primary);
+  border-color:     var(--primary);
+  /* Inline SVG checkmark — stroke colour must stay white for contrast on all
+     supported themes (all primaries are saturated enough for #fff legibility). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2 7 L5.5 10.5 L12 3' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+}
+
+/* ─ Hover (checked): darken slightly ─ */
+.checkbox-row label:hover input[type=checkbox]:checked + span::before {
+  background-color: var(--primary-h);
+  border-color:     var(--primary-h);
+}
+
+/* ─ Keyboard focus ring ─ */
+.checkbox-row input[type=checkbox]:focus-visible + span::before {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-color: var(--primary);
+}
 
 /* ── Mode selector (replaces old .radio-row for sub-mode selection) ─────── */
 /* Vertical stacked cards — each option is a pill-shaped selectable row.    */
@@ -349,6 +431,24 @@ fieldset.target-fields legend {
                            color: var(--muted); user-select: none; padding: .25rem 0; }
 .advanced-opts[open] > summary { color: var(--text); }
 .advanced-opts .checkbox-row   { margin-top: .5rem; }
+
+/* Advanced-options animated collapse/expand.
+   .adv-body is the height-animated container (mirrors .panel-stage so the
+   same --panel-anim-dur token drives the speed in all modes).
+   .adv-inner carries the opacity + slide animation, reusing panel-appear /
+   panel-leave keyframes so vivid / off mode applies automatically without
+   any extra JS or CSS changes. */
+.advanced-opts .adv-body {
+  overflow: hidden;
+  transition: height var(--panel-anim-dur) ease;
+}
+.advanced-opts .adv-body.adv-entering .adv-inner {
+  animation: panel-appear var(--panel-anim-dur) ease forwards;
+}
+.advanced-opts .adv-body.adv-leaving .adv-inner {
+  animation: panel-leave var(--panel-anim-dur) ease forwards;
+  pointer-events: none;
+}
 
 .form-actions { display: flex; justify-content: flex-end; margin-top: .9rem; }
 
@@ -577,6 +677,7 @@ fieldset.target-fields legend {
   --panel-anim-dist:     22px;
   --cs-popup-anim-dur:   .40s;
   --cs-popup-anim-scale: .72;
+  --cb-anim-dur:         .32s;
 }
 /* data-anim="off": near-zero timing collapses all transitions to instant,
    matching the spirit of prefers-reduced-motion without a media query. */
@@ -585,6 +686,7 @@ fieldset.target-fields legend {
   --panel-anim-dist:     0px;
   --cs-popup-anim-dur:   0.001s;
   --cs-popup-anim-scale: 1;
+  --cb-anim-dur:         0.001s;
 }
 
 /* ── Theme bar (內嵌「標頭內」橫向居中排列) ─────────────────────────────────── */

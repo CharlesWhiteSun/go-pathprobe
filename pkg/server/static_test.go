@@ -1879,3 +1879,192 @@ func TestStaticJS_EmptyToContentTransition(t *testing.T) {
 		t.Error("app.js: grow-from-empty branch must guard on !isEmptyPanel && stage to ensure it only runs for content panels")
 	}
 }
+
+// TestStaticHTML_AdvancedOptsStructure verifies that index.html wraps the
+// Advanced Options content inside .adv-body / .adv-inner elements so that
+// JS-driven height + fade animations work correctly.
+func TestStaticHTML_AdvancedOptsStructure(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The details element must have a stable id so initAdvancedOpts() can find it.
+	if !strings.Contains(body, `id="advanced-opts"`) {
+		t.Error(`index.html: <details> must have id="advanced-opts" for JS to wire up the animation`)
+	}
+	// .adv-body is the height-transition container (mirrors .panel-stage).
+	if !strings.Contains(body, `class="adv-body"`) {
+		t.Error("index.html: Advanced Options content must be wrapped in <div class=\"adv-body\"> for height animation")
+	}
+	// .adv-inner is the opacity+slide animation target (mirrors .target-fields inside .panel-stage).
+	if !strings.Contains(body, `class="adv-inner"`) {
+		t.Error("index.html: Advanced Options content must be wrapped in <div class=\"adv-inner\"> for fade+slide animation")
+	}
+}
+
+// TestStaticCSS_AdvancedOptsAnimation verifies that style.css declares the
+// rules required for the Advanced Options animated expand/collapse, and that
+// they reuse the shared panel-appear / panel-leave keyframes and
+// --panel-anim-dur token so vivid / off modes apply automatically.
+func TestStaticCSS_AdvancedOptsAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The height-animated container must have overflow:hidden to clip the content.
+	if !strings.Contains(body, ".advanced-opts .adv-body") {
+		t.Error("style.css: .advanced-opts .adv-body rule must be declared as the height-transition container")
+	}
+	// Height transition must consume the shared token, not a hard-coded value.
+	if !strings.Contains(body, "transition: height var(--panel-anim-dur)") {
+		t.Error("style.css: .adv-body must use transition: height var(--panel-anim-dur) so vivid/off modes apply")
+	}
+	// Entering animation must reuse panel-appear so the feel matches panel transitions.
+	if !strings.Contains(body, "adv-entering") {
+		t.Error("style.css: .adv-body.adv-entering rule must be declared to trigger the entrance animation")
+	}
+	if !strings.Contains(body, "adv-leaving") {
+		t.Error("style.css: .adv-body.adv-leaving rule must be declared to trigger the exit animation")
+	}
+	// Both states must delegate to the shared keyframes to avoid duplication.
+	if !strings.Contains(body, "panel-appear") {
+		t.Error("style.css: adv-entering animation must reuse the panel-appear keyframes")
+	}
+	if !strings.Contains(body, "panel-leave") {
+		t.Error("style.css: adv-leaving animation must reuse the panel-leave keyframes")
+	}
+}
+
+// TestStaticJS_AdvancedOptsAnimation verifies that app.js defines
+// initAdvancedOpts() and implements the expected animated expand/collapse
+// behaviour: intercepts summary clicks, drives height transition and
+// adv-entering / adv-leaving CSS classes, and calls transitionend cleanup.
+func TestStaticJS_AdvancedOptsAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Core function must be defined and called from DOMContentLoaded.
+	if !strings.Contains(body, "initAdvancedOpts") {
+		t.Error("app.js: initAdvancedOpts function must be defined to wire up the Advanced Options animation")
+	}
+	// The function must look up the details element by id.
+	if !strings.Contains(body, `getElementById('advanced-opts')`) {
+		t.Error("app.js: initAdvancedOpts must find the details element via getElementById('advanced-opts')")
+	}
+	// CSS classes adv-entering and adv-leaving drive the animations.
+	if !strings.Contains(body, "adv-entering") {
+		t.Error("app.js: initAdvancedOpts must apply adv-entering class on expand")
+	}
+	if !strings.Contains(body, "adv-leaving") {
+		t.Error("app.js: initAdvancedOpts must apply adv-leaving class on collapse")
+	}
+	// details.open must be managed manually so the browser does not instantly
+	// show/hide content before the animation can run.
+	if !strings.Contains(body, "details.open") {
+		t.Error("app.js: initAdvancedOpts must manage details.open manually to prevent instant browser toggle")
+	}
+	// transitionend cleanup ensures height:auto is restored after the animation
+	// so the panel can resize naturally (e.g. if the viewport width changes).
+	if !strings.Contains(body, "transitionend") {
+		t.Error("app.js: initAdvancedOpts must listen for transitionend to restore height:auto after animation")
+	}
+	// e.preventDefault() prevents the browser from toggling open/closed natively.
+	if !strings.Contains(body, "e.preventDefault") {
+		t.Error("app.js: initAdvancedOpts click handler must call e.preventDefault() to suppress native toggle")
+	}
+}
+
+// TestStaticCSS_CustomCheckbox verifies that style.css replaces the native
+// checkbox appearance with a fully themed custom box driven by design tokens.
+// Specifically it checks:
+//   - The native input is hidden (appearance:none + position:absolute + opacity:0)
+//   - span::before draws the custom box sized by --cb-size token
+//   - The --cb-radius token controls the corner radius
+//   - The --cb-anim-dur token drives the transition so vivid/off modes apply
+//   - The checked state applies the primary background colour
+//   - A white SVG checkmark is embedded as a background-image data-URI
+//   - A focus-visible rule adds the focus ring via box-shadow + --focus-ring token
+//   - Hover states exist for both unchecked (border highlight) and checked (darken)
+func TestStaticCSS_CustomCheckbox(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Design tokens must be declared so they can be overridden per theme / anim mode.
+	if !strings.Contains(body, "--cb-size") {
+		t.Error("style.css: --cb-size token must be declared in :root for the custom checkbox box dimensions")
+	}
+	if !strings.Contains(body, "--cb-radius") {
+		t.Error("style.css: --cb-radius token must be declared in :root for the custom checkbox corner radius")
+	}
+	if !strings.Contains(body, "--cb-anim-dur") {
+		t.Error("style.css: --cb-anim-dur token must be declared in :root so vivid/off animation modes apply to checkboxes")
+	}
+	// Vivid and off modes must each override --cb-anim-dur so the token
+	// system is consistent with panel and popup animation tokens.
+	// Search from the opening brace of each selector to avoid matching the
+	// inline comment in :root that also contains the literal text.
+	vividStart := strings.Index(body, "[data-anim=\"vivid\"] {")
+	offStart := strings.Index(body, "[data-anim=\"off\"] {")
+	if vividStart == -1 || !strings.Contains(body[vividStart:vividStart+400], "--cb-anim-dur") {
+		t.Error("style.css: [data-anim=\"vivid\"] must override --cb-anim-dur")
+	}
+	if offStart == -1 || !strings.Contains(body[offStart:offStart+400], "--cb-anim-dur") {
+		t.Error("style.css: [data-anim=\"off\"] must override --cb-anim-dur")
+	}
+	// Native checkbox must be visually hidden.
+	if !strings.Contains(body, "appearance: none") {
+		t.Error("style.css: .checkbox-row input[type=checkbox] must set appearance:none to suppress native rendering")
+	}
+	// span::before must be declared as the custom visual box target.
+	if !strings.Contains(body, "input[type=checkbox] + span::before") {
+		t.Error("style.css: input[type=checkbox] + span::before selector must exist to draw the custom checkbox box")
+	}
+	// Box dimensions must reference the --cb-size token.
+	if !strings.Contains(body, "var(--cb-size)") {
+		t.Error("style.css: span::before must use var(--cb-size) for width/height so the box dimension is token-driven")
+	}
+	// Corner radius must reference the --cb-radius token.
+	if !strings.Contains(body, "var(--cb-radius)") {
+		t.Error("style.css: span::before must use var(--cb-radius) for border-radius so the shape is token-driven")
+	}
+	// Transition must consume --cb-anim-dur so speed is token-controlled.
+	if !strings.Contains(body, "var(--cb-anim-dur)") {
+		t.Error("style.css: span::before transition must reference var(--cb-anim-dur)")
+	}
+	// Checked state must apply the primary colour.
+	if !strings.Contains(body, "input[type=checkbox]:checked + span::before") {
+		t.Error("style.css: :checked + span::before selector must exist to fill the box with the primary colour")
+	}
+	if !strings.Contains(body, "background-color: var(--primary)") {
+		t.Error("style.css: checked state must set background-color: var(--primary)")
+	}
+	// White SVG checkmark embedded as a data-URI background-image.
+	if !strings.Contains(body, "data:image/svg+xml") {
+		t.Error("style.css: checked span::before must embed an SVG checkmark via background-image data-URI")
+	}
+	// Keyboard focus ring via :focus-visible.
+	if !strings.Contains(body, "focus-visible + span::before") {
+		t.Error("style.css: :focus-visible + span::before rule must be declared to show the keyboard focus ring on the custom box")
+	}
+	if !strings.Contains(body, "var(--focus-ring)") {
+		t.Error("style.css: focus-visible rule must use var(--focus-ring) for the box-shadow so focus colour matches the global token")
+	}
+}

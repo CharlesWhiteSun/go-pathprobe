@@ -152,11 +152,62 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // Initialise all custom-select widgets on the page.
   document.querySelectorAll('.cs-wrap').forEach(wrap => initCustomSelect(wrap));
+  initAdvancedOpts();   // animated expand/collapse for the advanced options panel
   fetchVersion();   // async version badge
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
 });
+
+// ── Advanced-options animated expand/collapse ────────────────────────────────
+/**
+ * Wire up animated open/close for the Advanced Options <details> element.
+ * Intercepts summary clicks and drives a height transition on .adv-body
+ * (mirroring the panel-stage mechanism) together with a fade+slide animation
+ * on .adv-inner, reusing the panel-appear / panel-leave keyframes and the
+ * --panel-anim-dur token so vivid / off modes apply automatically.
+ */
+function initAdvancedOpts() {
+  const details = document.getElementById('advanced-opts');
+  if (!details) return;
+  const summary = details.querySelector(':scope > summary');
+  const body    = details.querySelector('.adv-body');
+  if (!summary || !body) return;
+
+  summary.addEventListener('click', e => {
+    e.preventDefault();
+
+    if (details.open) {
+      // ── Collapse: animate from current height to 0, then toggle off ────
+      const currentH = body.scrollHeight;
+      body.style.height = currentH + 'px';
+      void body.offsetHeight;                    // flush reflow before transition
+      body.classList.remove('adv-entering');
+      body.classList.add('adv-leaving');
+      body.style.height = '0px';
+
+      body.addEventListener('transitionend', () => {
+        details.open = false;
+        body.classList.remove('adv-leaving');
+        body.style.height = '';
+      }, { once: true });
+    } else {
+      // ── Expand: open, measure, animate from 0 to full height ───────────
+      details.open = true;
+      const targetH = body.scrollHeight;
+      body.style.height = '0px';
+      void body.offsetHeight;                    // flush reflow before transition
+      body.classList.remove('adv-leaving');
+      body.classList.add('adv-entering');
+      body.style.height = targetH + 'px';
+
+      body.addEventListener('transitionend', () => {
+        body.classList.remove('adv-entering');
+        body.style.height = '';
+      }, { once: true });
+    }
+  });
+}
 
 // ── Custom select component (cs-*) ──────────────────────────────────────────
 /**
