@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-default-theme="default">
+<html lang="en" data-default-theme="default" data-anim="vivid">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -41,14 +41,28 @@
     <div class="form-grid">
       <div class="field-group">
         <label for="target" data-i18n="label-target">Target</label>
-        <div class="select-wrap">
-          <select id="target" onchange="onTargetChange()">
-            <option value="web" data-i18n="opt-web">web — Public IP &amp; DNS</option>
-            <option value="smtp" data-i18n="opt-smtp">smtp — Mail server</option>
-            <option value="imap" data-i18n="opt-imap">imap — IMAP server</option>
-            <option value="pop" data-i18n="opt-pop">pop — POP3 server</option>
-            <option value="ftp" data-i18n="opt-ftp">ftp — FTP / FTPS</option>
-            <option value="sftp" data-i18n="opt-sftp">sftp — SFTP / SSH</option>
+        <div class="cs-wrap" id="target-wrap">
+          <button class="cs-trigger" type="button"
+                  aria-haspopup="listbox" aria-expanded="false"
+                  aria-controls="target-list">
+            <span class="cs-label" data-i18n="opt-web">web — Public IP &amp; DNS</span>
+          </button>
+          <ul class="cs-list" id="target-list" role="listbox">
+            <li class="cs-item" role="option" data-value="web"  data-i18n="opt-web"  aria-selected="true" >web — Public IP &amp; DNS</li>
+            <li class="cs-item" role="option" data-value="smtp" data-i18n="opt-smtp"                      >smtp — Mail server</li>
+            <li class="cs-item" role="option" data-value="imap" data-i18n="opt-imap"                      >imap — IMAP server</li>
+            <li class="cs-item" role="option" data-value="pop"  data-i18n="opt-pop"                       >pop — POP3 server</li>
+            <li class="cs-item" role="option" data-value="ftp"  data-i18n="opt-ftp"                       >ftp — FTP / FTPS</li>
+            <li class="cs-item" role="option" data-value="sftp" data-i18n="opt-sftp"                      >sftp — SFTP / SSH</li>
+          </ul>
+          <!-- Hidden native select: preserves val('target') read compatibility -->
+          <select id="target" hidden tabindex="-1" aria-hidden="true">
+            <option value="web"  selected></option>
+            <option value="smtp"></option>
+            <option value="imap"></option>
+            <option value="pop" ></option>
+            <option value="ftp" ></option>
+            <option value="sftp"></option>
           </select>
         </div>
       </div>

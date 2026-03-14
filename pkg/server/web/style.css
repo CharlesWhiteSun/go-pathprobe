@@ -35,6 +35,23 @@
      Set to --brand-logo-size so the footer inner row is the same height as the
      brand logo row in the header, producing visually identical chrome bars. */
   --chrome-inner-h:   var(--brand-logo-size);
+  /* Foreground colour for option:checked — #fff on most themes; dark themes
+     with a light primary colour override this to maintain legible contrast. */
+  --option-checked-fg: #fff;
+  /* Custom select popup — shadow depth and corner radius for the .cs-list popup.
+     --select-popup-r defaults to the global --r, allowing per-theme override. */
+  --select-popup-shadow: 0 4px 18px rgba(0,0,0,.14), 0 1px 4px rgba(0,0,0,.07);
+  --select-popup-r:      var(--r);
+  /* Animation speed tokens — controlled by [data-anim] on <html>.
+     data-anim="vivid" : slower + larger motion, useful for verifying effects
+     data-anim="off"   : near-instant (0.001s), equivalent to prefers-reduced-motion
+     Default (no attribute) = subtle mode.
+     All animation rules reference these tokens so changing the attribute is the
+     only required code path — zero JS animation timing is hard-coded. */
+  --panel-anim-dur:       .22s;
+  --panel-anim-dist:      6px;
+  --cs-popup-anim-dur:    .17s;
+  --cs-popup-anim-scale:  .92;
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -174,6 +191,92 @@ input:focus, select:focus {
   -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center;
 }
 
+/* ── Select option theming ───────────────────────────────────────────────── */
+/* background-color and color on <option> nodes are honoured by Chromium and
+   Firefox; macOS Safari renders the dropdown via the OS native layer and ignores
+   these declarations, degrading gracefully to the system default (always legible).
+   Referencing CSS custom-property tokens means every [data-theme] block
+   automatically applies its palette to the option list with zero extra CSS blocks
+   — fully token-driven and decoupled from per-theme duplication. */
+select option {
+  background-color: var(--input-bg);
+  color: var(--text);
+}
+select option:checked {
+  background-color: var(--primary);
+  color: var(--option-checked-fg);
+}
+
+/* ── Custom select (cs-*) ───────────────────────────────────────────────── */
+/* A fully-styled replacement for the native <select> dropdown.
+   .cs-trigger: always-visible button matching input/select visual language.
+   .cs-list:    absolutely-positioned <ul> with theme-aware surface colour,
+                rounded corners (--select-popup-r), and layered shadow
+                (--select-popup-shadow) — impossible with OS-native rendering.
+   The .cs-wrap::after chevron rotates 180° when the popup is open.
+   All colours reference CSS tokens so every [data-theme] applies automatically.
+   macOS Safari gracefully degrades to OS-native if JS fails. */
+.cs-wrap         { position: relative; width: 100%; }
+.cs-trigger      { display: flex; align-items: center; width: 100%;
+                   padding: .42rem .65rem; padding-right: 2.2rem;
+                   border: 1px solid var(--border); border-radius: 5px;
+                   background: var(--input-bg); color: var(--text);
+                   font-size: .9rem; font-weight: 500; font-family: inherit;
+                   cursor: pointer; text-align: left; line-height: 1.5;
+                   transition: border-color .15s, box-shadow .15s; }
+.cs-trigger:hover:not(:disabled) { border-color: var(--primary); }
+/* Persistent selection indicator: mirrors .mode-option:has(:checked) behaviour —
+   once a value is chosen the border stays primary regardless of keyboard focus,
+   giving the same stable visual cue as the radio-button checked state. */
+.cs-wrap.has-selection .cs-trigger {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, var(--input-bg));
+}
+.cs-trigger:focus,
+.cs-wrap.open .cs-trigger        { outline: none; border-color: var(--primary);
+                                   box-shadow: 0 0 0 3px var(--focus-ring); }
+/* Chevron: same mask-image as .select-wrap::after, adding open-state rotation */
+.cs-wrap::after {
+  content: '';
+  position: absolute; right: .65rem; top: 50%;
+  transform: translateY(-50%);
+  width: .75rem; height: .75rem;
+  pointer-events: none;
+  background-color: var(--primary);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpolyline points='0 0 5 6 10 0' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpolyline points='0 0 5 6 10 0' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat; mask-size: contain; mask-position: center;
+  -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center;
+  transition: transform .18s ease;
+}
+.cs-wrap.open::after { transform: translateY(-50%) rotate(180deg); }
+/* Popup list */
+.cs-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 200;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--select-popup-r); box-shadow: var(--select-popup-shadow);
+  padding: .3rem; list-style: none; margin: 0; overflow: hidden;
+  /* Entrance: subtle scale + fade from the top-centre origin */
+  opacity: 0; transform: scaleY(var(--cs-popup-anim-scale)) translateY(-4px);
+  transform-origin: top center;
+  transition: opacity var(--cs-popup-anim-dur) ease, transform var(--cs-popup-anim-dur) ease;
+  pointer-events: none;
+}
+.cs-wrap.open .cs-list { opacity: 1; transform: none; pointer-events: auto; }
+/* Individual option items */
+.cs-item {
+  padding: .42rem .65rem;
+  border-radius: calc(var(--select-popup-r) - 3px);
+  cursor: pointer; font-size: .9rem; color: var(--text);
+  user-select: none; outline-offset: -2px;
+  transition: background .1s, color .1s;
+}
+.cs-item:hover,
+.cs-item:focus        { background: var(--surface-alt); outline: none; }
+.cs-item[aria-selected="true"] {
+  background: var(--primary); color: var(--option-checked-fg); font-weight: 600;
+}
+
 .checkbox-row       { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem;
                       font-size: .88rem; margin-bottom: .5rem; }
 .checkbox-row label { display: flex; align-items: center;
@@ -205,6 +308,29 @@ fieldset.target-fields {
 fieldset.target-fields legend {
   font-size: .82rem; font-weight: 600;
   padding: 0 .4rem; color: var(--muted);
+}
+
+/* ── Panel transition ────────────────────────────────────────────────────── */
+/* target-fields panels cross-fade when the user switches target type.
+   Entering panel slides in from below (translateY → 0) while the departing
+   panel fades upward simultaneously.  Both animations consume the same
+   --panel-anim-dur / --panel-anim-dist tokens so vivid/off modes apply
+   uniformly.  The departing panel is removed from interaction (pointer-events:
+   none) and from flow (hidden=true) once its animationend fires. */
+@keyframes panel-appear {
+  from { opacity: 0; transform: translateY(var(--panel-anim-dist)); }
+  to   { opacity: 1; transform: none; }
+}
+.target-fields.panel-entering {
+  animation: panel-appear var(--panel-anim-dur) ease forwards;
+}
+@keyframes panel-leave {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(calc(-1 * var(--panel-anim-dist))); }
+}
+.target-fields.panel-leaving {
+  animation: panel-leave var(--panel-anim-dur) ease forwards;
+  pointer-events: none; /* prevent stray clicks during fade-out */
 }
 
 .advanced-opts           { margin-top: .4rem; }
@@ -432,7 +558,25 @@ fieldset.target-fields legend {
 .lang-btn:hover  { background: rgba(255,255,255,.28); }
 .lang-btn.active { background: rgba(255,255,255,.32); border-color: #fff; }
 
-/* ── Theme bar (inline, vertically centred inside .header-inner) ────────── */
+/* ── Animation control ────────────────────────────────────────────────── */
+/* data-anim="vivid": slower timing + larger distance makes every animation
+   clearly perceptible — intended for verifying the motion during development. */
+[data-anim="vivid"] {
+  --panel-anim-dur:      .55s;
+  --panel-anim-dist:     22px;
+  --cs-popup-anim-dur:   .40s;
+  --cs-popup-anim-scale: .72;
+}
+/* data-anim="off": near-zero timing collapses all transitions to instant,
+   matching the spirit of prefers-reduced-motion without a media query. */
+[data-anim="off"] {
+  --panel-anim-dur:      0.001s;
+  --panel-anim-dist:     0px;
+  --cs-popup-anim-dur:   0.001s;
+  --cs-popup-anim-scale: 1;
+}
+
+/* ── Theme bar (內嵌「標頭內」橫向居中排列) ─────────────────────────────────── */
 /* The theme-bar sits as the middle child of the 3-col header-inner flex.
    No padding or extra block height — it inherits the row’s align-items: center. */
 .theme-bar {
@@ -545,4 +689,7 @@ fieldset.target-fields legend {
   --badge-fail-bg: #2d0a0a;
   --focus-ring:    rgba(187,134,252,.25);
   --shadow:        0 1px 6px rgba(0,0,0,.45);
+  /* #bb86fc (dark-theme primary) is a light pastel — dark surface text gives
+     a 7.5:1 contrast ratio on that background, far above the WCAG AA bar. */
+  --option-checked-fg: var(--surface);
 }

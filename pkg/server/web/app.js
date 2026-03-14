@@ -150,13 +150,100 @@ document.addEventListener('DOMContentLoaded', () => {
       applyModePanels(target);
     });
   });
+  // Initialise all custom-select widgets on the page.
+  document.querySelectorAll('.cs-wrap').forEach(wrap => initCustomSelect(wrap));
   fetchVersion();   // async version badge
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
 });
 
-// ── Form dynamics ─────────────────────────────────────────────────────────
+// ── Custom select component (cs-*) ──────────────────────────────────────────
+/**
+ * Initialise one .cs-wrap widget.
+ * Syncs the hidden native <select> so val() continues to work without
+ * modifications elsewhere.  Full keyboard support (Enter/Space to open,
+ * ↑↓ to navigate, Escape/Tab to close).
+ */
+function initCustomSelect(wrap) {
+  const trigger = wrap.querySelector('.cs-trigger');
+  const label   = wrap.querySelector('.cs-label');
+  const list    = wrap.querySelector('.cs-list');
+  const select  = wrap.querySelector('select');
+  const items   = Array.from(wrap.querySelectorAll('.cs-item'));
+  if (!trigger || !list || !items.length) return;
+
+  // Mark the widget as having a selection as soon as it is initialised.
+  // This applies the persistent primary-border indicator (like radio :checked)
+  // regardless of keyboard focus state.
+  wrap.classList.add('has-selection');
+
+  /**
+   * Close the popup.
+   * @param {boolean} [restoreFocus=true] When true, return keyboard focus to
+   *   the trigger (normal close via key or item select).  Pass false when
+   *   closing because the user clicked OUTSIDE the widget so we do not steal
+   *   focus away from whichever element they just clicked.
+   */
+  function close(restoreFocus = true) {
+    wrap.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) trigger.focus();
+  }
+
+  function open() {
+    wrap.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+    const sel = list.querySelector('[aria-selected="true"]') || items[0];
+    if (sel) sel.focus();
+  }
+
+  function selectItem(item) {
+    items.forEach(it => it.removeAttribute('aria-selected'));
+    item.setAttribute('aria-selected', 'true');
+    // Ensure persistent selection indicator remains active after choice.
+    wrap.classList.add('has-selection');
+    // Sync the visible label (keep data-i18n so applyLocale() can re-translate).
+    if (label) {
+      label.textContent  = item.textContent;
+      label.dataset.i18n = item.dataset.i18n || '';
+    }
+    // Sync hidden native select so val('target') always reads the correct value.
+    if (select) select.value = item.dataset.value || '';
+    // Trigger dependent logic directly (no change event on a hidden element).
+    if (wrap.id === 'target-wrap') onTargetChange();
+    close();
+  }
+
+  trigger.addEventListener('click', () => {
+    wrap.classList.contains('open') ? close() : open();
+  });
+
+  trigger.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowDown') { e.preventDefault(); open(); }
+  });
+
+  items.forEach((item, idx) => {
+    item.setAttribute('tabindex', '-1');
+    item.addEventListener('click', () => selectItem(item));
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ')  { e.preventDefault(); selectItem(item); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[idx]).focus(); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); (items[idx - 1] || items[idx]).focus(); }
+      if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); close(); }
+    });
+  });
+
+  // Close when focus moves outside the widget via an outside click.
+  // restoreFocus=false: do NOT steal focus from the element the user just clicked.
+  document.addEventListener('click', e => {
+    if (!wrap.contains(e.target)) close(false);
+  }, true);
+}
+
+// ── Form dynamics ────────────────────────────────────────────────────────────
 function getModeFor(target) {
   const el = document.querySelector(`input[name="${target}-mode"]:checked`);
   return el ? el.value : '';
@@ -171,12 +258,43 @@ function applyModePanels(target) {
   });
 }
 
+// Track the first onTargetChange() call so no enter-animation plays on cold
+// page load (the form's initial state is already fully visible in the HTML).
+let _initTargetDone = false;
+
 function onTargetChange() {
-  const target = val('target');
+  const target  = val('target');
+  const animate = _initTargetDone;
+  _initTargetDone = true;
 
   // Show the fieldset for the current target; hide all others.
   document.querySelectorAll('.target-fields').forEach(fs => {
-    fs.hidden = (fs.id !== 'fields-' + target);
+    if (fs.id === 'fields-' + target) {
+      // Cancel any in-progress leave animation and make the panel visible.
+      fs.classList.remove('panel-leaving');
+      fs.hidden = false;
+      if (animate) {
+        fs.classList.remove('panel-entering');
+        void fs.offsetWidth; // force reflow so animation restarts cleanly
+        fs.classList.add('panel-entering');
+      }
+    } else {
+      if (animate && !fs.hidden) {
+        // Fade the departing panel upward; hide it once the animation ends.
+        fs.classList.remove('panel-entering');
+        fs.classList.add('panel-leaving');
+        fs.addEventListener('animationend', () => {
+          // Guard: a rapid switch may have re-shown this panel already.
+          if (fs.classList.contains('panel-leaving')) {
+            fs.hidden = true;
+            fs.classList.remove('panel-leaving');
+          }
+        }, { once: true });
+      } else {
+        fs.hidden = true;
+        fs.classList.remove('panel-entering', 'panel-leaving');
+      }
+    }
   });
 
   // Auto-fill ports only when the user has not overridden them.

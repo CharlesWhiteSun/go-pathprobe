@@ -317,7 +317,36 @@ func TestStaticCSS_ThemeBarButtons(t *testing.T) {
 	}
 
 	// Flat-design: no scale transform on hover/active (avoids flashy zoom).
-	if strings.Contains(body, "transform: scale") {
+	// Scope the check to only the theme-bar section to avoid false positives
+	// from other components that legitimately use scale transforms (e.g.
+	// the custom-select popup uses scaleY for its entrance animation).
+	// The section comment may carry an inline description after the mark;
+	// search only for the fixed prefix that will always be present.
+	themeSectionMark := "/* \u2500\u2500 Theme bar"
+	themeSecStart := strings.Index(body, themeSectionMark)
+	if themeSecStart == -1 {
+		t.Fatalf("style.css: '/* ── Theme bar …' section comment not found; snippet around 'theme-btn':\n%s",
+			func() string {
+				idx := strings.Index(body, ".theme-btn")
+				if idx == -1 {
+					return "(.theme-btn not found)"
+				}
+				start := idx - 120
+				if start < 0 {
+					start = 0
+				}
+				end := idx + 120
+				if end > len(body) {
+					end = len(body)
+				}
+				return body[start:end]
+			}())
+	}
+	themeBarSec := body[themeSecStart:]
+	if nextSec := strings.Index(themeBarSec[len(themeSectionMark):], "/* \u2500\u2500"); nextSec != -1 {
+		themeBarSec = themeBarSec[:len(themeSectionMark)+nextSec]
+	}
+	if strings.Contains(themeBarSec, "transform: scale") {
 		t.Error("style.css: .theme-btn must not use transform: scale — flat transition only")
 	}
 
@@ -952,7 +981,8 @@ func TestStaticCSS_StickyHeader(t *testing.T) {
 // TestStaticCSS_SelectCustomChevron verifies that the embedded style.css
 // removes the native OS dropdown arrow and replaces it with a custom chevron
 // that follows the active theme's --primary colour via CSS mask-image.
-// This guarantees visual consistency across all five themes without any JS.
+// Both .select-wrap and .cs-wrap must carry this chevron so legacy native
+// selects and the new custom-select widget look identical.
 func TestStaticCSS_SelectCustomChevron(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
@@ -970,25 +1000,32 @@ func TestStaticCSS_SelectCustomChevron(t *testing.T) {
 		t.Error("style.css: select must declare '-webkit-appearance: none' for Safari/Chrome compat")
 	}
 
-	// Wrapper provides positioning context for the pseudo-element chevron.
-	if !strings.Contains(body, ".select-wrap") {
-		t.Error("style.css: .select-wrap rule must exist as a positioning context for the chevron")
+	// Both wrapper classes must be defined.
+	for _, cls := range []string{".select-wrap", ".cs-wrap"} {
+		if !strings.Contains(body, cls) {
+			t.Errorf("style.css: %s rule must exist as a positioning context for the chevron", cls)
+		}
 	}
 
 	// Custom chevron uses mask-image so background-color: var(--primary) provides
 	// the colour — automatically correct for every theme.
 	if !strings.Contains(body, "mask-image") {
-		t.Error("style.css: .select-wrap::after must use mask-image for the theme-aware chevron")
+		t.Error("style.css: chevron must use mask-image for the theme-aware colouring")
 	}
 	if !strings.Contains(body, "background-color: var(--primary)") {
 		t.Error("style.css: chevron must use background-color: var(--primary) so colour tracks the active theme")
 	}
+	// Rotation signal: cs-wrap.open must rotate the chevron 180°.
+	if !strings.Contains(body, "rotate(180deg)") {
+		t.Error("style.css: .cs-wrap.open::after must rotate the chevron 180deg to indicate open state")
+	}
 }
 
-// TestStaticHTML_SelectWrapMarkup verifies that the target type <select> in
-// index.html is wrapped in a <div class="select-wrap"> so the CSS positioning
-// context for the custom chevron pseudo-element is always present.
-func TestStaticHTML_SelectWrapMarkup(t *testing.T) {
+// TestStaticHTML_CustomSelectMarkup verifies that the target <select> in
+// index.html has been replaced with the custom .cs-wrap widget and that the
+// hidden native <select id="target"> is still present so val('target')
+// continues to work without any other JS changes.
+func TestStaticHTML_CustomSelectMarkup(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -997,18 +1034,191 @@ func TestStaticHTML_SelectWrapMarkup(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// The wrapper div must be present.
-	if !strings.Contains(body, `class="select-wrap"`) {
-		t.Error(`index.html: <div class="select-wrap"> must wrap the #target select element`)
+	// Custom-select wrapper must be present.
+	if !strings.Contains(body, `class="cs-wrap"`) {
+		t.Error(`index.html: <div class="cs-wrap"> must be present for the custom dropdown`)
 	}
-	// The wrapper must precede the select in the source order.
-	wrapIdx := strings.Index(body, `class="select-wrap"`)
-	selectIdx := strings.Index(body, `id="target"`)
-	if wrapIdx == -1 || selectIdx == -1 {
-		t.Fatal("index.html: .select-wrap or #target is missing")
+	if !strings.Contains(body, `class="cs-trigger"`) {
+		t.Error(`index.html: .cs-trigger button must be present inside .cs-wrap`)
 	}
-	if wrapIdx > selectIdx {
-		t.Error("index.html: .select-wrap wrapper must appear before the #target select in source order")
+	if !strings.Contains(body, `class="cs-list"`) {
+		t.Error(`index.html: .cs-list popup must be present inside .cs-wrap`)
+	}
+	if !strings.Contains(body, `class="cs-label"`) {
+		t.Error(`index.html: .cs-label span must be present inside .cs-trigger`)
+	}
+
+	// All six target values must appear as cs-item options.
+	for _, v := range []string{"web", "smtp", "imap", "pop", "ftp", "sftp"} {
+		want := `data-value="` + v + `"`
+		if !strings.Contains(body, want) {
+			t.Errorf("index.html: cs-item with %s not found", want)
+		}
+	}
+
+	// The hidden native select must still be present for val('target') compat.
+	if !strings.Contains(body, `id="target"`) {
+		t.Fatal("index.html: hidden <select id=\"target\"> must be present for val() compatibility")
+	}
+
+	// cs-wrap must precede the hidden select in source order.
+	csIdx := strings.Index(body, `class="cs-wrap"`)
+	selIdx := strings.Index(body, `id="target"`)
+	if csIdx == -1 || selIdx == -1 {
+		t.Fatal("index.html: .cs-wrap or #target is missing")
+	}
+	if csIdx > selIdx {
+		t.Error("index.html: .cs-wrap must appear before the hidden #target in source order")
+	}
+
+	// Accessibility: trigger must have aria-haspopup and aria-expanded.
+	if !strings.Contains(body, `aria-haspopup="listbox"`) {
+		t.Error(`index.html: .cs-trigger must carry aria-haspopup="listbox" for screen-reader disclosure`)
+	}
+	if !strings.Contains(body, `aria-expanded="false"`) {
+		t.Error(`index.html: .cs-trigger must start with aria-expanded="false"`)
+	}
+	// cs-list must have role=listbox.
+	if !strings.Contains(body, `role="listbox"`) {
+		t.Error(`index.html: .cs-list must carry role="listbox"`)
+	}
+}
+
+// TestStaticCSS_CustomSelectPopup verifies that style.css defines the
+// cs-* component rules with theme-aware tokens for the popup's visual style.
+// Specifically: rounded corners (--select-popup-r), layered shadow
+// (--select-popup-shadow), surface background, and a smooth opacity+scale
+// entrance transition that is impossible with the OS-native dropdown.
+func TestStaticCSS_CustomSelectPopup(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Token declarations in :root.
+	for _, token := range []string{"--select-popup-shadow", "--select-popup-r"} {
+		if !strings.Contains(body, token) {
+			t.Errorf("style.css: %s token must be declared in :root", token)
+		}
+	}
+
+	// Component rules.
+	for _, rule := range []string{".cs-wrap", ".cs-trigger", ".cs-list", ".cs-item"} {
+		if !strings.Contains(body, rule) {
+			t.Errorf("style.css: %s rule must be defined for the custom-select component", rule)
+		}
+	}
+
+	// Popup uses theme tokens for background and shadow.
+	if !strings.Contains(body, "var(--select-popup-shadow)") {
+		t.Error("style.css: .cs-list must consume var(--select-popup-shadow)")
+	}
+	if !strings.Contains(body, "var(--select-popup-r)") {
+		t.Error("style.css: .cs-list must consume var(--select-popup-r) for themed corner radius")
+	}
+
+	// Popup entrance is driven by opacity + transform transitions.
+	if !strings.Contains(body, "scaleY") {
+		t.Error("style.css: .cs-list entrance animation must include a scaleY transform for a natural dropdown feel")
+	}
+	// Popup animation duration and scale are driven by CSS tokens.
+	if !strings.Contains(body, "var(--cs-popup-anim-dur)") {
+		t.Error("style.css: .cs-list transition must consume var(--cs-popup-anim-dur) instead of a hard-coded value")
+	}
+	if !strings.Contains(body, "var(--cs-popup-anim-scale)") {
+		t.Error("style.css: .cs-list transform must consume var(--cs-popup-anim-scale) instead of a hard-coded value")
+	}
+	// .cs-wrap.open reveals the list.
+	if !strings.Contains(body, ".cs-wrap.open .cs-list") {
+		t.Error("style.css: .cs-wrap.open .cs-list selector must make the popup visible")
+	}
+	// Selected item uses primary colour.
+	if !strings.Contains(body, `.cs-item[aria-selected="true"]`) {
+		t.Error("style.css: cs-item[aria-selected=\"true\"] must be styled for the active selection")
+	}
+}
+
+// TestStaticCSS_PanelTransition verifies that style.css declares the
+// panel-appear @keyframes and the .target-fields.panel-entering rule so
+// onTargetChange() can trigger the fade-in animation without extra CSS.
+func TestStaticCSS_PanelTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "@keyframes panel-appear") {
+		t.Error("style.css: @keyframes panel-appear must be declared for the target fieldset entrance animation")
+	}
+	if !strings.Contains(body, ".target-fields.panel-entering") {
+		t.Error("style.css: .target-fields.panel-entering must consume the panel-appear animation")
+	}
+	// Exit animation: departing panel must also animate out.
+	if !strings.Contains(body, "@keyframes panel-leave") {
+		t.Error("style.css: @keyframes panel-leave must be declared for the target fieldset exit animation")
+	}
+	if !strings.Contains(body, ".target-fields.panel-leaving") {
+		t.Error("style.css: .target-fields.panel-leaving must consume the panel-leave animation")
+	}
+	// Animation must use opacity (fade) and a vertical transform (slide).
+	if !strings.Contains(body, "translateY") {
+		t.Error("style.css: panel animations must include translateY for the entrance/exit slide effect")
+	}
+	// Duration and distance must be driven by CSS tokens (not hard-coded values).
+	if !strings.Contains(body, "var(--panel-anim-dur)") {
+		t.Error("style.css: panel transition must consume var(--panel-anim-dur) instead of a hard-coded duration")
+	}
+	if !strings.Contains(body, "var(--panel-anim-dist)") {
+		t.Error("style.css: panel-appear keyframe must consume var(--panel-anim-dist) instead of a hard-coded pixel offset")
+	}
+}
+
+// TestStaticJS_CustomSelectFunctions verifies that app.js defines
+// initCustomSelect(), selectItem() logic, and the _initTargetDone guard that
+// prevents the entrance animation from firing on the cold page load.
+func TestStaticJS_CustomSelectFunctions(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "initCustomSelect") {
+		t.Error("app.js: initCustomSelect function must be defined")
+	}
+	if !strings.Contains(body, "_initTargetDone") {
+		t.Error("app.js: _initTargetDone guard must be present to skip animation on cold page load")
+	}
+	if !strings.Contains(body, "panel-entering") {
+		t.Error("app.js: onTargetChange must manage the panel-entering CSS class for the entrance animation")
+	}
+	// Custom select must sync the hidden native select so val('target') stays valid.
+	if !strings.Contains(body, "select.value") {
+		t.Error("app.js: initCustomSelect must sync the hidden native select .value")
+	}
+	// Keyboard navigation arrows must be wired.
+	if !strings.Contains(body, "ArrowDown") || !strings.Contains(body, "ArrowUp") {
+		t.Error("app.js: initCustomSelect must handle ArrowDown and ArrowUp keyboard navigation")
+	}
+	// has-selection class must be managed to give persistent primary-border indicator.
+	if !strings.Contains(body, "has-selection") {
+		t.Error("app.js: initCustomSelect must add 'has-selection' class to .cs-wrap for persistent selection indicator")
+	}
+	// close() must accept a restoreFocus parameter so outside clicks don't steal focus.
+	if !strings.Contains(body, "restoreFocus") {
+		t.Error("app.js: close() in initCustomSelect must accept a restoreFocus parameter")
+	}
+	// Document click handler must call close(false) to avoid stealing focus on outside click.
+	if !strings.Contains(body, "close(false)") {
+		t.Error("app.js: outside-click document listener must call close(false) to avoid focus theft")
 	}
 }
 
@@ -1206,5 +1416,241 @@ func TestStaticI18n_FooterCopyrightKey(t *testing.T) {
 	// zh-TW locale must have a Chinese-language variant using the corresponding phrase.
 	if !strings.Contains(body, "保留所有權利") {
 		t.Error("i18n.js zh-TW: footer-copyright must contain '保留所有權利'")
+	}
+}
+
+// ── Select option theming tests ───────────────────────────────────────────
+
+// TestStaticCSS_SelectOptionTheming verifies that style.css defines theme-aware
+// option styling using only CSS custom-property tokens.  A single pair of rules
+// (select option + option:checked) automatically covers every theme because
+// each [data-theme] block overrides the tokens they reference — no per-theme
+// CSS duplication is needed.
+func TestStaticCSS_SelectOptionTheming(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Locate the option-theming section so assertions are scoped to it.
+	sectionMark := "/* \u2500\u2500 Select option theming"
+	secStart := strings.Index(body, sectionMark)
+	if secStart == -1 {
+		t.Fatal("style.css: '/* ── Select option theming' section comment not found")
+	}
+	sec := body[secStart+len(sectionMark):]
+	if nextSec := strings.Index(sec, "/* \u2500\u2500"); nextSec != -1 {
+		sec = sec[:nextSec]
+	}
+
+	// Base rule: options must display the theme's input-surface background and text colour.
+	if !strings.Contains(sec, "select option") {
+		t.Error("style.css: 'select option' selector must be present in the option-theming section")
+	}
+	if !strings.Contains(sec, "var(--input-bg)") {
+		t.Error("style.css: select option background-color must reference var(--input-bg) to track the theme's input surface")
+	}
+	if !strings.Contains(sec, "var(--text)") {
+		t.Error("style.css: select option color must reference var(--text) for legible text across all themes")
+	}
+
+	// Checked/selected state must highlight using the primary colour.
+	if !strings.Contains(sec, "option:checked") {
+		t.Error("style.css: 'option:checked' selector must be defined for the selected-option highlight")
+	}
+	if !strings.Contains(sec, "var(--primary)") {
+		t.Error("style.css: option:checked background-color must reference var(--primary)")
+	}
+	// Foreground must use the --option-checked-fg token so themes with a light
+	// primary colour can override it for adequate contrast without a new CSS block.
+	if !strings.Contains(sec, "var(--option-checked-fg)") {
+		t.Error("style.css: option:checked color must reference var(--option-checked-fg) for per-theme contrast control")
+	}
+}
+
+// TestStaticCSS_OptionCheckedFgToken verifies that --option-checked-fg is
+// declared in :root (defaulting to #fff) and that [data-theme="dark"] overrides
+// it to a dark tint.  The dark theme's primary is #bb86fc (light purple), so
+// white text would give only ~2.8:1 contrast; the surface override raises this
+// to ~7.5:1, well above the WCAG AA threshold.
+func TestStaticCSS_OptionCheckedFgToken(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Token must be declared somewhere in the stylesheet.
+	if !strings.Contains(body, "--option-checked-fg") {
+		t.Error("style.css: --option-checked-fg token must be declared in :root")
+	}
+
+	// Locate the dark-theme block and verify it overrides the token.
+	// Search for the standalone block (prefixed with newline + selector + space)
+	// to avoid accidentally matching .theme-btn[data-theme="dark"] which appears
+	// earlier in the CSS for the header swatch buttons.
+	darkMark := "\n[data-theme=\"dark\"] {"
+	darkIdx := strings.Index(body, darkMark)
+	if darkIdx == -1 {
+		t.Fatalf("style.css: standalone [data-theme=\"dark\"] { block not found")
+	}
+	darkBlock := body[darkIdx:]
+	// Trim to just this block (ends at the first bare closing brace on its own line).
+	if closeIdx := strings.Index(darkBlock, "\n}"); closeIdx != -1 {
+		darkBlock = darkBlock[:closeIdx+2]
+	}
+	if !strings.Contains(darkBlock, "--option-checked-fg") {
+		t.Errorf("style.css: [data-theme=\"dark\"] must override --option-checked-fg for legible text on the light-purple primary (#bb86fc)")
+	}
+}
+
+// ── Animation control tests ───────────────────────────────────────────────
+
+// TestStaticCSS_AnimationTokens verifies that style.css declares the four
+// animation design tokens in :root and implements the [data-anim="vivid"] and
+// [data-anim="off"] override blocks so JS can switch animation intensity by
+// toggling a single HTML attribute.
+func TestStaticCSS_AnimationTokens(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// All four tokens must be declared in :root.
+	for _, token := range []string{
+		"--panel-anim-dur",
+		"--panel-anim-dist",
+		"--cs-popup-anim-dur",
+		"--cs-popup-anim-scale",
+	} {
+		if !strings.Contains(body, token) {
+			t.Errorf("style.css: animation token %s must be declared in :root", token)
+		}
+	}
+
+	// vivid and off mode blocks must exist.
+	if !strings.Contains(body, `[data-anim="vivid"]`) {
+		t.Error(`style.css: [data-anim="vivid"] override block must be present`)
+	}
+	if !strings.Contains(body, `[data-anim="off"]`) {
+		t.Error(`style.css: [data-anim="off"] override block must be present`)
+	}
+}
+
+// TestStaticCSS_CustomSelectHasSelection verifies that style.css defines a
+// persistent visual indicator for .cs-wrap.has-selection .cs-trigger so the
+// widget looks "selected" even when it does not have keyboard focus — mirroring
+// the always-visible highlight of a checked radio button.
+func TestStaticCSS_CustomSelectHasSelection(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, ".cs-wrap.has-selection .cs-trigger") {
+		t.Error("style.css: .cs-wrap.has-selection .cs-trigger rule must be defined for persistent selection indicator")
+	}
+	if !strings.Contains(body, "border-color: var(--primary)") {
+		t.Error("style.css: .cs-wrap.has-selection .cs-trigger must set border-color: var(--primary)")
+	}
+	// Background tint uses color-mix for accessible, theme-aware contrast.
+	if !strings.Contains(body, "color-mix") {
+		t.Error("style.css: .cs-wrap.has-selection .cs-trigger should use color-mix() for a subtle primary background tint")
+	}
+}
+
+// TestStaticHTML_VividAnimDefault verifies that index.html permanently sets
+// data-anim="vivid" on the <html> element so the vivid animation intensity is
+// active from first paint without any JS initialization.
+func TestStaticHTML_VividAnimDefault(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Vivid animation must be the declared default on the root element.
+	if !strings.Contains(body, `data-anim="vivid"`) {
+		t.Error(`index.html: <html> must carry data-anim="vivid" to apply the vivid animation intensity by default`)
+	}
+	// The temporary toggle button must be absent — it was a developer tool only.
+	if strings.Contains(body, `id="anim-toggle"`) {
+		t.Error(`index.html: temporary anim-toggle button must be removed; vivid mode is now the permanent default`)
+	}
+	if strings.Contains(body, `cycleAnim()`) {
+		t.Error(`index.html: cycleAnim() onclick must be removed along with the toggle button`)
+	}
+}
+
+// TestStaticCSS_PanelLeaveAnimation verifies that style.css defines both
+// halves of the panel cross-fade: @keyframes panel-leave and the
+// .target-fields.panel-leaving rule.  The leave direction (upward slide) must
+// be the mirror of the enter direction so the transition feels directional.
+func TestStaticCSS_PanelLeaveAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "@keyframes panel-leave") {
+		t.Error("style.css: @keyframes panel-leave must be declared for the target fieldset exit animation")
+	}
+	if !strings.Contains(body, ".target-fields.panel-leaving") {
+		t.Error("style.css: .target-fields.panel-leaving rule must consume panel-leave so onTargetChange() can trigger it")
+	}
+	// Leave animation must move upward — opposite direction to the enter slide.
+	if !strings.Contains(body, "calc(-1 * var(--panel-anim-dist))") {
+		t.Error("style.css: panel-leave must use calc(-1 * var(--panel-anim-dist)) for the mirrored upward slide")
+	}
+	// Interaction must be blocked during the fade-out to prevent stray clicks.
+	if !strings.Contains(body, "pointer-events: none") {
+		t.Error("style.css: .target-fields.panel-leaving must declare pointer-events: none to block stray clicks during fade-out")
+	}
+}
+
+// TestStaticJS_PanelLeaveAnimation verifies that app.js manages the
+// panel-leaving class in onTargetChange() so the departing panel animates out
+// before being hidden, and includes an animationend guard for rapid switching.
+func TestStaticJS_PanelLeaveAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "panel-leaving") {
+		t.Error("app.js: onTargetChange must add 'panel-leaving' class to the departing panel for the exit animation")
+	}
+	// animationend fires after the CSS animation completes; hiding then keeps layout clean.
+	if !strings.Contains(body, "animationend") {
+		t.Error("app.js: onTargetChange must listen for animationend to hide the departing panel after its exit animation")
+	}
+	// Rapid-switch guard: only hide if the panel is still in a leaving state.
+	if !strings.Contains(body, "panel-leaving") || !strings.Contains(body, "classList.contains") {
+		t.Error("app.js: animationend handler must guard with classList.contains('panel-leaving') to handle rapid target switching")
+	}
+	// Toggle functions must be absent — vivid mode is now the HTML-level default.
+	for _, sym := range []string{"cycleAnim", "initAnim", "applyAnim", "ANIM_MODES"} {
+		if strings.Contains(body, sym) {
+			t.Errorf("app.js: %s must be removed; animation mode is now a static HTML attribute, not a runtime toggle", sym)
+		}
 	}
 }
