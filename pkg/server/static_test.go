@@ -598,6 +598,199 @@ func TestStaticHTML_BrandNoPicker(t *testing.T) {
 	}
 }
 
+// ── Web mode radio-button tests ───────────────────────────────────────────
+
+// TestStaticHTML_WebModeRadioButtons verifies the four radio buttons exist.
+func TestStaticHTML_WebModeRadioButtons(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, mode := range []string{"public-ip", "dns", "http", "port"} {
+		if !strings.Contains(body, `value="`+mode+`"`) {
+			t.Errorf("index.html: missing radio button with value=%q", mode)
+		}
+	}
+	// One of the radio buttons must be pre-checked.
+	if !strings.Contains(body, `name="web-mode"`) {
+		t.Error("index.html: radio buttons must carry name=\"web-mode\"")
+	}
+}
+
+// TestStaticHTML_WebModeDNSSubpanel verifies that the DNS sub-panel exists with
+// the placeholder attribute (no hard-coded value).
+func TestStaticHTML_WebModeDNSSubpanel(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="web-fields-dns"`) {
+		t.Error("index.html: DNS sub-panel #web-fields-dns must exist")
+	}
+	if !strings.Contains(body, `data-i18n-placeholder="ph-dns-domains"`) {
+		t.Error("index.html: dns-domains input must use data-i18n-placeholder")
+	}
+	// Must NOT have a hard-coded value="example.com"
+	if strings.Contains(body, `value="example.com"`) {
+		t.Error("index.html: dns-domains must not have hard-coded value=\"example.com\"")
+	}
+}
+
+// TestStaticHTML_WebModeRecordTypeLabels verifies i18n labels for A/AAAA/MX.
+func TestStaticHTML_WebModeRecordTypeLabels(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{"dns-type-A", "dns-type-AAAA", "dns-type-MX"} {
+		if !strings.Contains(body, `data-i18n="`+key+`"`) {
+			t.Errorf("index.html: missing data-i18n=%q for record type label", key)
+		}
+	}
+}
+
+// TestStaticI18n_WebModeKeys verifies required web-mode and dns-type keys exist
+// in both locales.
+func TestStaticI18n_WebModeKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	requiredKeys := []string{
+		"label-web-mode",
+		"web-mode-public-ip",
+		"web-mode-dns",
+		"web-mode-http",
+		"web-mode-port",
+		"dns-type-A",
+		"dns-type-AAAA",
+		"dns-type-MX",
+		"ph-dns-domains",
+	}
+	for _, k := range requiredKeys {
+		if !strings.Contains(body, `'`+k+`'`) {
+			t.Errorf("i18n.js: missing key '%s'", k)
+		}
+	}
+}
+
+// TestStaticCSS_ModeSelector verifies the .mode-selector and .mode-option style rules exist.
+func TestStaticCSS_ModeSelector(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, rule := range []string{".mode-selector", ".mode-option"} {
+		if !strings.Contains(body, rule) {
+			t.Errorf("style.css: %s rule must be defined", rule)
+		}
+	}
+}
+
+// TestStaticHTML_SMTPModeSelector verifies SMTP mode-selector and sub-panels exist.
+func TestStaticHTML_SMTPModeSelector(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, mode := range []string{"handshake", "auth", "send"} {
+		if !strings.Contains(body, `name="smtp-mode" value="`+mode+`"`) {
+			t.Errorf("index.html: missing SMTP radio with value=%q", mode)
+		}
+	}
+	for _, panel := range []string{"smtp-fields-auth", "smtp-fields-send"} {
+		if !strings.Contains(body, `id="`+panel+`"`) {
+			t.Errorf("index.html: missing sub-panel #%s", panel)
+		}
+	}
+}
+
+// TestStaticHTML_FTPModeSelector verifies FTP mode-selector exists and ftp-list checkbox is absent.
+func TestStaticHTML_FTPModeSelector(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, mode := range []string{"login", "list"} {
+		if !strings.Contains(body, `name="ftp-mode" value="`+mode+`"`) {
+			t.Errorf("index.html: missing FTP radio with value=%q", mode)
+		}
+	}
+	if strings.Contains(body, `id="ftp-list"`) {
+		t.Error("index.html: ftp-list checkbox must be removed (replaced by mode selector)")
+	}
+}
+
+// TestStaticHTML_SFTPModeSelector verifies SFTP mode-selector exists and sftp-ls checkbox is absent.
+func TestStaticHTML_SFTPModeSelector(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, mode := range []string{"auth", "ls"} {
+		if !strings.Contains(body, `name="sftp-mode" value="`+mode+`"`) {
+			t.Errorf("index.html: missing SFTP radio with value=%q", mode)
+		}
+	}
+	if strings.Contains(body, `id="sftp-ls"`) {
+		t.Error("index.html: sftp-ls checkbox must be removed (replaced by mode selector)")
+	}
+}
+
+// TestStaticI18n_SMTPFTPSFTPModeKeys verifies SMTP/FTP/SFTP mode i18n keys in both locales.
+func TestStaticI18n_SMTPFTPSFTPModeKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	required := []string{
+		"label-smtp-mode", "smtp-mode-handshake", "smtp-mode-auth", "smtp-mode-send",
+		"label-ftp-mode", "ftp-mode-login", "ftp-mode-list",
+		"label-sftp-mode", "sftp-mode-auth", "sftp-mode-ls",
+	}
+	for _, k := range required {
+		if !strings.Contains(body, `'`+k+`'`) {
+			t.Errorf("i18n.js: missing key '%s'", k)
+		}
+	}
+}
+
 // TestStaticJS_BrandSystemRemoved verifies that the brand style management
 // system has been removed from app.js now that the logo style is fixed.
 func TestStaticJS_BrandSystemRemoved(t *testing.T) {

@@ -8,6 +8,26 @@ import (
 	"go-pathprobe/pkg/netprobe"
 )
 
+// SMTPMode controls which part of the SMTP flow the runner executes.
+// An empty value retains legacy behaviour (full flow based on provided options).
+type SMTPMode string
+
+const (
+	SMTPModeAll       SMTPMode = ""          // legacy: full flow determined by options
+	SMTPModeHandshake SMTPMode = "handshake" // TCP connect + EHLO banner only
+	SMTPModeAuth      SMTPMode = "auth"      // EHLO + authentication
+	SMTPModeSend      SMTPMode = "send"      // full send flow (EHLO + AUTH + MAIL FROM + RCPT TO)
+)
+
+// IsValidSMTPMode reports whether m is a recognised SMTP sub-mode value.
+func IsValidSMTPMode(m SMTPMode) bool {
+	switch m {
+	case SMTPModeAll, SMTPModeHandshake, SMTPModeAuth, SMTPModeSend:
+		return true
+	}
+	return false
+}
+
 // SMTPRunner performs SMTP handshake and mail/rcpt probes.
 type SMTPRunner struct {
 	Prober     netprobe.SMTPProber
@@ -21,11 +41,30 @@ func NewSMTPRunner(prober netprobe.SMTPProber, resolver netprobe.DNSResolver, lo
 }
 
 // Run resolves MX (if needed) and probes each SMTP host.
+// The request mode controls which parts of the SMTP flow are exercised:
+//   - SMTPModeHandshake: strips credentials, from, to — only EHLO banner is tested.
+//   - SMTPModeAuth: strips from/to — EHLO + authentication.
+//   - SMTPModeSend (or legacy ""): full flow as specified by options.
 func (r *SMTPRunner) Run(ctx context.Context, req Request) error {
 	if r.Prober == nil {
 		return ErrRunnerNotFound
 	}
 	opts := req.Options.SMTP
+
+	// Apply mode overrides: remove fields irrelevant for the chosen sub-mode.
+	switch opts.Mode {
+	case SMTPModeHandshake:
+		opts.Username = ""
+		opts.Password = ""
+		opts.From = ""
+		opts.To = nil
+		opts.MXProbeAll = false
+	case SMTPModeAuth:
+		opts.From = ""
+		opts.To = nil
+		opts.MXProbeAll = false
+		// SMTPModeAll and SMTPModeSend pass through as-is.
+	}
 
 	var hosts []string
 	if req.Options.Net.Host != "" {

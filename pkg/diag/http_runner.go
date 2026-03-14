@@ -21,9 +21,16 @@ func NewHTTPRunner(prober netprobe.HTTPProber, logger *slog.Logger) *HTTPRunner 
 }
 
 // Run executes HTTP probe using Web options.
+// It is a no-op for any explicit web mode other than WebModeHTTP so that
+// single-select web diagnostics do not unexpectedly trigger an HTTP probe.
 func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	if r.Prober == nil {
 		return ErrRunnerNotFound
+	}
+	// Skip when an explicit web mode is set that is not the HTTP probe mode.
+	mode := req.Options.Web.Mode
+	if mode != WebModeAll && mode != WebModeHTTP {
+		return nil
 	}
 	url := req.Options.Web.URL
 	if url == "" {

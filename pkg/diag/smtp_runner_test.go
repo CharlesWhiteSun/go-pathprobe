@@ -126,6 +126,125 @@ func (a *authCaptureProber) Probe(_ context.Context, req netprobe.SMTPProbeReque
 	return netprobe.SMTPProbeResult{}, nil
 }
 
+// smtpFullCaptureProber captures the full SMTPProbeRequest for assertion.
+type smtpFullCaptureProber struct {
+	last netprobe.SMTPProbeRequest
+}
+
+func (p *smtpFullCaptureProber) Probe(_ context.Context, req netprobe.SMTPProbeRequest) (netprobe.SMTPProbeResult, error) {
+	p.last = req
+	return netprobe.SMTPProbeResult{}, nil
+}
+
+// TestIsValidSMTPMode verifies mode validation.
+func TestIsValidSMTPMode(t *testing.T) {
+	for _, tc := range []struct {
+		m    SMTPMode
+		want bool
+	}{
+		{"", true},
+		{"handshake", true},
+		{"auth", true},
+		{"send", true},
+		{"invalid", false},
+	} {
+		if got := IsValidSMTPMode(tc.m); got != tc.want {
+			t.Errorf("IsValidSMTPMode(%q) = %v, want %v", tc.m, got, tc.want)
+		}
+	}
+}
+
+// TestSMTPHandshakeModeStripsCredentials verifies that handshake mode clears auth/from/to.
+func TestSMTPHandshakeModeStripsCredentials(t *testing.T) {
+	prober := &smtpFullCaptureProber{}
+	runner := NewSMTPRunner(prober, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := Request{
+		Target: TargetSMTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "mail.test", Ports: []int{25}},
+			SMTP: SMTPOptions{
+				Mode:     SMTPModeHandshake,
+				Username: "user",
+				Password: "secret",
+				From:     "from@test",
+				To:       []string{"to@test"},
+				Domain:   "example.com",
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prober.last.Username != "" || prober.last.Password != "" {
+		t.Errorf("handshake mode must clear credentials, got user=%q pass=%q", prober.last.Username, prober.last.Password)
+	}
+	if prober.last.From != "" || len(prober.last.To) != 0 {
+		t.Errorf("handshake mode must clear from/to, got from=%q to=%v", prober.last.From, prober.last.To)
+	}
+}
+
+// TestSMTPAuthModeStripsFromTo verifies that auth mode clears from/to but preserves credentials.
+func TestSMTPAuthModeStripsFromTo(t *testing.T) {
+	prober := &smtpFullCaptureProber{}
+	runner := NewSMTPRunner(prober, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := Request{
+		Target: TargetSMTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "mail.test", Ports: []int{587}},
+			SMTP: SMTPOptions{
+				Mode:     SMTPModeAuth,
+				Username: "user",
+				Password: "secret",
+				From:     "from@test",
+				To:       []string{"to@test"},
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prober.last.Username != "user" || prober.last.Password != "secret" {
+		t.Errorf("auth mode must preserve credentials, got user=%q pass=%q", prober.last.Username, prober.last.Password)
+	}
+	if prober.last.From != "" || len(prober.last.To) != 0 {
+		t.Errorf("auth mode must clear from/to, got from=%q to=%v", prober.last.From, prober.last.To)
+	}
+}
+
+// TestSMTPSendModePreservesAll verifies that send mode passes all fields through.
+func TestSMTPSendModePreservesAll(t *testing.T) {
+	prober := &smtpFullCaptureProber{}
+	runner := NewSMTPRunner(prober, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := Request{
+		Target: TargetSMTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "mail.test", Ports: []int{587}},
+			SMTP: SMTPOptions{
+				Mode:     SMTPModeSend,
+				Username: "user",
+				Password: "secret",
+				From:     "from@test",
+				To:       []string{"to@test"},
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if prober.last.Username != "user" || prober.last.Password != "secret" {
+		t.Errorf("send mode must preserve credentials, got user=%q pass=%q", prober.last.Username, prober.last.Password)
+	}
+	if prober.last.From != "from@test" || len(prober.last.To) != 1 || prober.last.To[0] != "to@test" {
+		t.Errorf("send mode must preserve from/to, got from=%q to=%v", prober.last.From, prober.last.To)
+	}
+}
+
 // TestSMTPRunnerAuthMethodsPropagated verifies AuthMethods from SMTPOptions flow into the prober.
 func TestSMTPRunnerAuthMethodsPropagated(t *testing.T) {
 	prober := &authCaptureProber{}

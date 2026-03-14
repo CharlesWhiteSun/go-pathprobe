@@ -23,6 +23,71 @@ func (s *stubSFTPProber) Probe(_ context.Context, req netprobe.SFTPProbeRequest)
 	return s.result, s.err
 }
 
+// TestIsValidSFTPMode verifies mode validation.
+func TestIsValidSFTPMode(t *testing.T) {
+	for _, tc := range []struct {
+		m    SFTPMode
+		want bool
+	}{
+		{"", true},
+		{"auth", true},
+		{"ls", true},
+		{"bad", false},
+	} {
+		if got := IsValidSFTPMode(tc.m); got != tc.want {
+			t.Errorf("IsValidSFTPMode(%q) = %v, want %v", tc.m, got, tc.want)
+		}
+	}
+}
+
+// TestSFTPAuthModeDisablesRunLS verifies that SFTPModeAuth forces RunLS=false.
+func TestSFTPAuthModeDisablesRunLS(t *testing.T) {
+	stub := &stubSFTPProber{}
+	runner := NewSFTPRunner(stub, newDiscardLogger())
+
+	req := Request{
+		Target: TargetSFTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "sftp.test"},
+			SFTP: SFTPOptions{
+				Mode:  SFTPModeAuth,
+				RunLS: true, // should be overridden
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stub.lastRequest.RunLS {
+		t.Error("SFTPModeAuth must force RunLS=false")
+	}
+}
+
+// TestSFTPLSModeEnablesRunLS verifies that SFTPModeLS forces RunLS=true.
+func TestSFTPLSModeEnablesRunLS(t *testing.T) {
+	stub := &stubSFTPProber{}
+	runner := NewSFTPRunner(stub, newDiscardLogger())
+
+	req := Request{
+		Target: TargetSFTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "sftp.test"},
+			SFTP: SFTPOptions{
+				Mode:  SFTPModeLS,
+				RunLS: false, // should be overridden
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !stub.lastRequest.RunLS {
+		t.Error("SFTPModeLS must force RunLS=true")
+	}
+}
+
 // TestSFTPRunnerNilProber ensures ErrRunnerNotFound is returned when the prober is nil.
 func TestSFTPRunnerNilProber(t *testing.T) {
 	runner := &SFTPRunner{Logger: newDiscardLogger()}

@@ -27,6 +27,19 @@ const TARGET_PORTS = {
   sftp: [22],
 };
 
+// Maps target → { panelId: [modes that show it] }.
+// Only panels that are conditionally visible need an entry here.
+const TARGET_MODE_PANELS = {
+  web: {
+    'web-fields-dns':   ['dns'],
+    'web-fields-http':  ['http'],
+  },
+  smtp: {
+    'smtp-fields-auth': ['auth', 'send'],
+    'smtp-fields-send': ['send'],
+  },
+};
+
 // ── Per-target host placeholder i18n keys ─────────────────────────────────
 const TARGET_PLACEHOLDER_KEYS = {
   web:  'ph-web',
@@ -50,6 +63,9 @@ function t(key) {
 function applyLocale() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
   });
   // Refresh host placeholder (depends on current target selection)
   const target = val('target');
@@ -127,6 +143,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   onTargetChange(); // populate defaults for initial selection
+  // Hook up all sub-mode radio buttons generically.
+  document.querySelectorAll('input[type="radio"][name$="-mode"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const target = radio.name.replace(/-mode$/, '');
+      applyModePanels(target);
+    });
+  });
   fetchVersion();   // async version badge
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
@@ -134,6 +157,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Form dynamics ─────────────────────────────────────────────────────────
+function getModeFor(target) {
+  const el = document.querySelector(`input[name="${target}-mode"]:checked`);
+  return el ? el.value : '';
+}
+
+function applyModePanels(target) {
+  const mode = getModeFor(target);
+  const panels = (TARGET_MODE_PANELS[target] || {});
+  Object.entries(panels).forEach(([id, visibleModes]) => {
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = !visibleModes.includes(mode);
+  });
+}
+
 function onTargetChange() {
   const target = val('target');
 
@@ -153,6 +190,8 @@ function onTargetChange() {
   if (hostEl) {
     hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
   }
+  // Sync sub-mode panel visibility for the active target.
+  applyModePanels(target);
 }
 
 // ── Request building ──────────────────────────────────────────────────────
@@ -186,13 +225,21 @@ function buildRequest() {
 }
 
 function buildWebOpts() {
-  const types   = ['A', 'AAAA', 'MX'].filter(t => checked('dns-' + t));
-  const domains = val('dns-domains').split(',').map(s => s.trim()).filter(Boolean);
-  return { domains, types, url: val('http-url') };
+  const mode = getModeFor('web') || 'public-ip';
+  const opts = { mode };
+  if (mode === 'dns') {
+    opts.domains = val('dns-domains').split(',').map(s => s.trim()).filter(Boolean);
+    opts.types   = ['A', 'AAAA', 'MX'].filter(t => checked('dns-' + t));
+  } else if (mode === 'http') {
+    opts.url = val('http-url');
+  }
+  return opts;
 }
 
 function buildSMTPOpts() {
+  const mode = getModeFor('smtp') || 'handshake';
   return {
+    mode,
     domain:       val('smtp-domain'),
     username:     val('smtp-user'),
     password:     val('smtp-pass'),
@@ -205,20 +252,22 @@ function buildSMTPOpts() {
 }
 
 function buildFTPOpts() {
+  const mode = getModeFor('ftp') || 'login';
   return {
+    mode,
     username: val('ftp-user'),
     password: val('ftp-pass'),
     use_tls:  checked('ftp-ssl'),
     auth_tls: checked('ftp-auth-tls'),
-    run_list: checked('ftp-list'),
   };
 }
 
 function buildSFTPOpts() {
+  const mode = getModeFor('sftp') || 'auth';
   return {
+    mode,
     username: val('sftp-user'),
     password: val('sftp-pass'),
-    run_ls:   checked('sftp-ls'),
   };
 }
 

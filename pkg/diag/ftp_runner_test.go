@@ -137,6 +137,71 @@ func TestFTPRunnerOptionsPropagated(t *testing.T) {
 	}
 }
 
+// TestIsValidFTPMode verifies mode validation.
+func TestIsValidFTPMode(t *testing.T) {
+	for _, tc := range []struct {
+		m    FTPMode
+		want bool
+	}{
+		{"", true},
+		{"login", true},
+		{"list", true},
+		{"bad", false},
+	} {
+		if got := IsValidFTPMode(tc.m); got != tc.want {
+			t.Errorf("IsValidFTPMode(%q) = %v, want %v", tc.m, got, tc.want)
+		}
+	}
+}
+
+// TestFTPLoginModeDisablesList verifies that FTPModeLogin forces RunLIST false.
+func TestFTPLoginModeDisablesList(t *testing.T) {
+	stub := &stubFTPProber{}
+	runner := NewFTPRunner(stub, newDiscardLogger())
+
+	req := Request{
+		Target: TargetFTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "ftp.test"},
+			FTP: FTPOptions{
+				Mode:    FTPModeLogin,
+				RunLIST: true, // should be overridden
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stub.lastRequest.RunLIST {
+		t.Error("FTPModeLogin must force RunLIST=false")
+	}
+}
+
+// TestFTPListModeEnablesList verifies that FTPModeList forces RunLIST true.
+func TestFTPListModeEnablesList(t *testing.T) {
+	stub := &stubFTPProber{}
+	runner := NewFTPRunner(stub, newDiscardLogger())
+
+	req := Request{
+		Target: TargetFTP,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Net:    NetworkOptions{Host: "ftp.test"},
+			FTP: FTPOptions{
+				Mode:    FTPModeList,
+				RunLIST: false, // should be overridden
+			},
+		},
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !stub.lastRequest.RunLIST {
+		t.Error("FTPModeList must force RunLIST=true")
+	}
+}
+
 // TestFTPRunnerProberError verifies that a prober error is returned to the caller.
 func TestFTPRunnerProberError(t *testing.T) {
 	expectedErr := errors.New("connection refused")

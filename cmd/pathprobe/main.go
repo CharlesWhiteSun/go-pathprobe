@@ -42,7 +42,7 @@ func main() {
 		&netprobe.HTTPDNSResolver{Client: httpClient, Endpoint: "https://dns.google/resolve", Name: "doh-8.8.8.8"},
 	}}
 	httpProber := &netprobe.ClientHTTPProber{Client: httpClient}
-	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), diag.NewHTTPRunner(httpProber, logger), connectRunner))
+	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), diag.NewHTTPRunner(httpProber, logger), diag.NewWebPortRunner(connectRunner)))
 
 	// SMTP runner with MX resolution and connectivity.
 	smtpProber := &netprobe.DialSMTPProber{}

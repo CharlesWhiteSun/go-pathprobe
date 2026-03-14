@@ -30,6 +30,7 @@ type ReqOptions struct {
 
 // ReqWeb configures Web / DNS diagnostic parameters.
 type ReqWeb struct {
+	Mode    string   `json:"mode,omitempty"` // "" | "public-ip" | "dns" | "http" | "port"
 	Domains []string `json:"domains,omitempty"`
 	Types   []string `json:"types,omitempty"` // e.g. ["A","AAAA","MX"]
 	URL     string   `json:"url,omitempty"`
@@ -43,6 +44,7 @@ type ReqNet struct {
 
 // ReqSMTP configures SMTP-layer probe parameters.
 type ReqSMTP struct {
+	Mode        string   `json:"mode,omitempty"` // "" | "handshake" | "auth" | "send"
 	Domain      string   `json:"domain,omitempty"`
 	Username    string   `json:"username,omitempty"`
 	Password    string   `json:"password,omitempty"`
@@ -56,6 +58,7 @@ type ReqSMTP struct {
 
 // ReqFTP configures FTP / FTPS probe parameters.
 type ReqFTP struct {
+	Mode     string `json:"mode,omitempty"` // "" | "login" | "list"
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	UseTLS   bool   `json:"use_tls,omitempty"`
@@ -66,6 +69,7 @@ type ReqFTP struct {
 // ReqSFTP configures SFTP / SSH probe parameters.
 // Private-key authentication is intentionally omitted from the HTTP API.
 type ReqSFTP struct {
+	Mode     string `json:"mode,omitempty"` // "" | "auth" | "ls"
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	RunLS    bool   `json:"run_ls,omitempty"`

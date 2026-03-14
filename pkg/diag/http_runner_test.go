@@ -97,3 +97,39 @@ func TestHTTPRunnerDefaultFallbackHost(t *testing.T) {
 		t.Fatalf("expected fallback url, got %s", prober.url)
 	}
 }
+
+// TestHTTPRunnerSkippedOnNonHTTPModes verifies the runner is a no-op when the
+// explicit web mode is not "http".
+func TestHTTPRunnerSkippedOnNonHTTPModes(t *testing.T) {
+	for _, mode := range []WebMode{WebModePublicIP, WebModeDNS, WebModePort} {
+		prober := &stubHTTPProber{}
+		runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		req := Request{Target: TargetWeb, Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Web:    WebOptions{Mode: mode, URL: "https://example.com"},
+		}}
+		if err := runner.Run(context.Background(), req); err != nil {
+			t.Fatalf("mode=%q: unexpected error %v", mode, err)
+		}
+		if prober.called {
+			t.Fatalf("mode=%q: prober must not be called when mode is not http", mode)
+		}
+	}
+}
+
+// TestHTTPRunnerCalledOnHTTPMode verifies the runner fires for WebModeHTTP.
+func TestHTTPRunnerCalledOnHTTPMode(t *testing.T) {
+	prober := &stubHTTPProber{}
+	runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	req := Request{Target: TargetWeb, Options: Options{
+		Global: GlobalOptions{Timeout: time.Second},
+		Web:    WebOptions{Mode: WebModeHTTP, URL: "https://example.com"},
+		Net:    NetworkOptions{Host: "example.com"},
+	}}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !prober.called {
+		t.Fatal("prober must fire in http mode")
+	}
+}

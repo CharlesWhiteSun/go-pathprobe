@@ -132,6 +132,11 @@ func buildOptions(r ReqOptions) (diag.Options, error) {
 	}
 
 	if w := r.Web; w != nil {
+		webMode := diag.WebMode(w.Mode)
+		if !diag.IsValidWebMode(webMode) {
+			return diag.Options{}, fmt.Errorf("web.mode: unknown mode %q", w.Mode)
+		}
+		opts.Web.Mode = webMode
 		opts.Web.Domains = w.Domains
 		opts.Web.URL = w.URL
 		if len(w.Types) > 0 {
@@ -149,7 +154,12 @@ func buildOptions(r ReqOptions) (diag.Options, error) {
 	}
 
 	if s := r.SMTP; s != nil {
+		smtpMode := diag.SMTPMode(s.Mode)
+		if !diag.IsValidSMTPMode(smtpMode) {
+			return diag.Options{}, fmt.Errorf("smtp.mode: unknown mode %q", s.Mode)
+		}
 		opts.SMTP = diag.SMTPOptions{
+			Mode:        smtpMode,
 			Domain:      s.Domain,
 			Username:    s.Username,
 			Password:    s.Password,
@@ -163,7 +173,12 @@ func buildOptions(r ReqOptions) (diag.Options, error) {
 	}
 
 	if f := r.FTP; f != nil {
+		ftpMode := diag.FTPMode(f.Mode)
+		if !diag.IsValidFTPMode(ftpMode) {
+			return diag.Options{}, fmt.Errorf("ftp.mode: unknown mode %q", f.Mode)
+		}
 		opts.FTP = diag.FTPOptions{
+			Mode:     ftpMode,
 			Username: f.Username,
 			Password: f.Password,
 			UseTLS:   f.UseTLS,
@@ -173,7 +188,12 @@ func buildOptions(r ReqOptions) (diag.Options, error) {
 	}
 
 	if sf := r.SFTP; sf != nil {
+		sftpMode := diag.SFTPMode(sf.Mode)
+		if !diag.IsValidSFTPMode(sftpMode) {
+			return diag.Options{}, fmt.Errorf("sftp.mode: unknown mode %q", sf.Mode)
+		}
 		opts.SFTP = diag.SFTPOptions{
+			Mode:     sftpMode,
 			Username: sf.Username,
 			Password: sf.Password,
 			RunLS:    sf.RunLS,

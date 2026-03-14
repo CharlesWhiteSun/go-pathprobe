@@ -144,3 +144,102 @@ type fixedResolver struct {
 func (f *fixedResolver) Lookup(_ context.Context, name string, rtype netprobe.RecordType) (netprobe.DNSAnswer, error) {
 	return netprobe.DNSAnswer{Name: name, Type: rtype, Values: f.values, Source: f.name}, nil
 }
+
+// ── WebMode tests ─────────────────────────────────────────────────────────
+
+func makeWebRequest(mode WebMode) Request {
+	return Request{
+		Target: TargetWeb,
+		Options: Options{
+			Global: GlobalOptions{MTRCount: 1, Timeout: time.Second},
+			Web: WebOptions{
+				Mode:    mode,
+				Domains: []string{"example.net"},
+				Types:   []netprobe.RecordType{netprobe.RecordTypeA},
+			},
+		},
+	}
+}
+
+// TestWebRunnerPublicIPMode: only the fetcher should fire; resolver must stay idle.
+func TestWebRunnerPublicIPMode(t *testing.T) {
+	fetcher := &stubFetcher{}
+	resolver := &countingResolver{}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{resolver}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(fetcher, comparator, logger)
+
+	if err := runner.Run(context.Background(), makeWebRequest(WebModePublicIP)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fetcher.called {
+		t.Fatal("expected fetcher to be called in public-ip mode")
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("expected resolver silent in public-ip mode, got %d calls", resolver.calls)
+	}
+}
+
+// TestWebRunnerDNSMode: only the resolver should fire; fetcher must stay idle.
+func TestWebRunnerDNSMode(t *testing.T) {
+	fetcher := &stubFetcher{}
+	resolver := &countingResolver{}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{resolver}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(fetcher, comparator, logger)
+
+	if err := runner.Run(context.Background(), makeWebRequest(WebModeDNS)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetcher.called {
+		t.Fatal("fetcher must not be called in dns mode")
+	}
+	if resolver.calls == 0 {
+		t.Fatal("expected resolver called in dns mode")
+	}
+}
+
+// TestWebRunnerHTTPMode: this runner should be a no-op (HTTP and port handled elsewhere).
+func TestWebRunnerHTTPMode(t *testing.T) {
+	fetcher := &stubFetcher{}
+	resolver := &countingResolver{}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{resolver}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(fetcher, comparator, logger)
+
+	if err := runner.Run(context.Background(), makeWebRequest(WebModeHTTP)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetcher.called || resolver.calls != 0 {
+		t.Fatal("WebRunner must be a no-op in http mode")
+	}
+}
+
+// TestWebRunnerPortMode: this runner should be a no-op.
+func TestWebRunnerPortMode(t *testing.T) {
+	fetcher := &stubFetcher{}
+	resolver := &countingResolver{}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{resolver}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(fetcher, comparator, logger)
+
+	if err := runner.Run(context.Background(), makeWebRequest(WebModePort)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetcher.called || resolver.calls != 0 {
+		t.Fatal("WebRunner must be a no-op in port mode")
+	}
+}
+
+// TestIsValidWebMode verifies the validation helper.
+func TestIsValidWebMode(t *testing.T) {
+	valid := []WebMode{WebModeAll, WebModePublicIP, WebModeDNS, WebModeHTTP, WebModePort}
+	for _, m := range valid {
+		if !IsValidWebMode(m) {
+			t.Errorf("expected %q to be valid", m)
+		}
+	}
+	if IsValidWebMode("bogus") {
+		t.Error("expected \"bogus\" to be invalid")
+	}
+}

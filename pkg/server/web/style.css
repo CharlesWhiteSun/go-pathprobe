@@ -116,6 +116,25 @@ input:focus, select:focus {
 .checkbox-row label { display: flex; align-items: center;
                       gap: .35rem; font-weight: 400; cursor: pointer; }
 
+/* ── Mode selector (replaces old .radio-row for sub-mode selection) ─────── */
+/* Vertical stacked cards — each option is a pill-shaped selectable row.    */
+.mode-selector { display: flex; flex-direction: column; gap: .28rem;
+                 margin-bottom: .55rem; }
+.mode-option   { display: flex; align-items: center; gap: .6rem;
+                 padding: .45rem .8rem;
+                 border: 1.5px solid var(--border); border-radius: var(--r);
+                 cursor: pointer; user-select: none;
+                 font-size: .84rem; font-weight: 500;
+                 transition: border-color .14s, background .14s, color .14s; }
+.mode-option:has(input[type=radio]:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: var(--primary);
+}
+.mode-option input[type=radio] { accent-color: var(--primary);
+                                  width: .9rem; height: .9rem;
+                                  flex-shrink: 0; cursor: pointer; }
+
 fieldset.target-fields {
   border: 1px solid var(--border); border-radius: var(--r);
   padding: .75rem 1rem 1rem; margin-bottom: .85rem;

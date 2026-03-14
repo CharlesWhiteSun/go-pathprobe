@@ -67,20 +67,33 @@
       <legend data-i18n="legend-web">Web / DNS Options</legend>
       <div class="form-grid">
         <div class="field-group">
-          <label for="dns-domains"><span data-i18n="label-dns-domains">DNS Domains</span> <small data-i18n="label-dns-domains-hint">(comma-separated)</small></label>
-          <input type="text" id="dns-domains" value="example.com" placeholder="example.com,google.com">
-        </div>
-        <div class="field-group">
-          <label data-i18n="label-record-types">Record Types</label>
-          <div class="checkbox-row">
-            <label><input type="checkbox" id="dns-A"    checked> A</label>
-            <label><input type="checkbox" id="dns-AAAA" checked> AAAA</label>
-            <label><input type="checkbox" id="dns-MX"   checked> MX</label>
+          <label data-i18n="label-web-mode">Detection Mode</label>
+          <div class="mode-selector">
+            <label class="mode-option"><input type="radio" name="web-mode" value="public-ip" checked> <span data-i18n="web-mode-public-ip">Public IP Detection</span></label>
+            <label class="mode-option"><input type="radio" name="web-mode" value="dns"> <span data-i18n="web-mode-dns">DNS Comparison</span></label>
+            <label class="mode-option"><input type="radio" name="web-mode" value="http"> <span data-i18n="web-mode-http">HTTP / HTTPS Probe</span></label>
+            <label class="mode-option"><input type="radio" name="web-mode" value="port"> <span data-i18n="web-mode-port">Port Connectivity</span></label>
           </div>
         </div>
-        <div class="field-group">
-          <label for="http-url"><span data-i18n="label-http-url">HTTP URL</span> <small data-i18n="label-http-url-hint">(optional probe)</small></label>
-          <input type="text" id="http-url" placeholder="https://example.com">
+        <div id="web-fields-dns" hidden>
+          <div class="field-group">
+            <label for="dns-domains"><span data-i18n="label-dns-domains">DNS Domains</span> <small data-i18n="label-dns-domains-hint">(comma-separated)</small></label>
+            <input type="text" id="dns-domains" data-i18n-placeholder="ph-dns-domains" placeholder="e.g. google.com">
+          </div>
+          <div class="field-group">
+            <label data-i18n="label-record-types">Record Types</label>
+            <div class="checkbox-row">
+              <label><input type="checkbox" id="dns-A"    checked> <span data-i18n="dns-type-A">IPv4</span></label>
+              <label><input type="checkbox" id="dns-AAAA" checked> <span data-i18n="dns-type-AAAA">IPv6</span></label>
+              <label><input type="checkbox" id="dns-MX"   checked> <span data-i18n="dns-type-MX">MX</span></label>
+            </div>
+          </div>
+        </div>
+        <div id="web-fields-http" hidden>
+          <div class="field-group">
+            <label for="http-url"><span data-i18n="label-http-url">HTTP URL</span> <small data-i18n="label-http-url-hint">(optional probe)</small></label>
+            <input type="text" id="http-url" placeholder="https://example.com">
+          </div>
         </div>
       </div>
     </fieldset>
@@ -90,30 +103,48 @@
       <legend data-i18n="legend-smtp">SMTP Options</legend>
       <div class="form-grid">
         <div class="field-group">
+          <label data-i18n="label-smtp-mode">Test Mode</label>
+          <div class="mode-selector">
+            <label class="mode-option"><input type="radio" name="smtp-mode" value="handshake" checked> <span data-i18n="smtp-mode-handshake">Banner &amp; EHLO (no auth)</span></label>
+            <label class="mode-option"><input type="radio" name="smtp-mode" value="auth"> <span data-i18n="smtp-mode-auth">Authentication test</span></label>
+            <label class="mode-option"><input type="radio" name="smtp-mode" value="send"> <span data-i18n="smtp-mode-send">Full send simulation</span></label>
+          </div>
+        </div>
+        <div class="field-group">
           <label for="smtp-domain" data-i18n="label-smtp-domain">EHLO Domain</label>
           <input type="text" id="smtp-domain" placeholder="example.com" autocomplete="off">
         </div>
-        <div class="field-group">
-          <label for="smtp-user" data-i18n="label-smtp-user">Username</label>
-          <input type="text" id="smtp-user" placeholder="user@example.com" autocomplete="off">
+      </div>
+      <div id="smtp-fields-auth" hidden>
+        <div class="form-grid">
+          <div class="field-group">
+            <label for="smtp-user" data-i18n="label-smtp-user">Username</label>
+            <input type="text" id="smtp-user" placeholder="user@example.com" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <label for="smtp-pass" data-i18n="label-smtp-pass">Password</label>
+            <input type="password" id="smtp-pass" autocomplete="new-password">
+          </div>
         </div>
-        <div class="field-group">
-          <label for="smtp-pass" data-i18n="label-smtp-pass">Password</label>
-          <input type="password" id="smtp-pass" autocomplete="new-password">
-        </div>
-        <div class="field-group">
-          <label for="smtp-from" data-i18n="label-smtp-from">MAIL FROM</label>
-          <input type="text" id="smtp-from" placeholder="sender@example.com">
-        </div>
-        <div class="field-group">
-          <label for="smtp-to"><span data-i18n="label-smtp-to">RCPT TO</span> <small data-i18n="label-smtp-to-hint">(comma-separated)</small></label>
-          <input type="text" id="smtp-to" placeholder="recipient@example.com">
+        <div class="checkbox-row">
+          <label><input type="checkbox" id="smtp-starttls" checked> <span data-i18n="label-smtp-starttls">STARTTLS</span></label>
+          <label><input type="checkbox" id="smtp-ssl"> <span data-i18n="label-smtp-ssl">Implicit TLS (SMTPS)</span></label>
         </div>
       </div>
-      <div class="checkbox-row">
-        <label><input type="checkbox" id="smtp-starttls" checked> <span data-i18n="label-smtp-starttls">STARTTLS</span></label>
-        <label><input type="checkbox" id="smtp-ssl"> <span data-i18n="label-smtp-ssl">Implicit TLS (SMTPS)</span></label>
-        <label><input type="checkbox" id="smtp-mx-all"> <span data-i18n="label-smtp-mx-all">Probe all MX records</span></label>
+      <div id="smtp-fields-send" hidden>
+        <div class="form-grid">
+          <div class="field-group">
+            <label for="smtp-from" data-i18n="label-smtp-from">MAIL FROM</label>
+            <input type="text" id="smtp-from" placeholder="sender@example.com">
+          </div>
+          <div class="field-group">
+            <label for="smtp-to"><span data-i18n="label-smtp-to">RCPT TO</span> <small data-i18n="label-smtp-to-hint">(comma-separated)</small></label>
+            <input type="text" id="smtp-to" placeholder="recipient@example.com">
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <label><input type="checkbox" id="smtp-mx-all"> <span data-i18n="label-smtp-mx-all">Probe all MX records</span></label>
+        </div>
       </div>
     </fieldset>
 
@@ -121,6 +152,13 @@
     <fieldset class="target-fields" id="fields-ftp" hidden>
       <legend data-i18n="legend-ftp">FTP / FTPS Options</legend>
       <div class="form-grid">
+        <div class="field-group">
+          <label data-i18n="label-ftp-mode">Test Mode</label>
+          <div class="mode-selector">
+            <label class="mode-option"><input type="radio" name="ftp-mode" value="login" checked> <span data-i18n="ftp-mode-login">Connect &amp; login</span></label>
+            <label class="mode-option"><input type="radio" name="ftp-mode" value="list"> <span data-i18n="ftp-mode-list">Login + directory listing</span></label>
+          </div>
+        </div>
         <div class="field-group">
           <label for="ftp-user"><span data-i18n="label-ftp-user">Username</span> <small data-i18n="label-ftp-user-hint">(blank = anonymous)</small></label>
           <input type="text" id="ftp-user" placeholder="anonymous" autocomplete="off">
@@ -133,7 +171,6 @@
       <div class="checkbox-row">
         <label><input type="checkbox" id="ftp-ssl"> <span data-i18n="label-ftp-ssl">Implicit FTPS (port 990)</span></label>
         <label><input type="checkbox" id="ftp-auth-tls"> <span data-i18n="label-ftp-auth-tls">Explicit FTPS (AUTH TLS)</span></label>
-        <label><input type="checkbox" id="ftp-list"> <span data-i18n="label-ftp-list">Attempt PASV + LIST</span></label>
       </div>
     </fieldset>
 
@@ -142,6 +179,13 @@
       <legend data-i18n="legend-sftp">SFTP / SSH Options</legend>
       <div class="form-grid">
         <div class="field-group">
+          <label data-i18n="label-sftp-mode">Test Mode</label>
+          <div class="mode-selector">
+            <label class="mode-option"><input type="radio" name="sftp-mode" value="auth" checked> <span data-i18n="sftp-mode-auth">SSH authentication</span></label>
+            <label class="mode-option"><input type="radio" name="sftp-mode" value="ls"> <span data-i18n="sftp-mode-ls">Auth + list directory</span></label>
+          </div>
+        </div>
+        <div class="field-group">
           <label for="sftp-user" data-i18n="label-sftp-user">Username</label>
           <input type="text" id="sftp-user" autocomplete="off">
         </div>
@@ -149,9 +193,6 @@
           <label for="sftp-pass" data-i18n="label-sftp-pass">Password</label>
           <input type="password" id="sftp-pass" autocomplete="new-password">
         </div>
-      </div>
-      <div class="checkbox-row">
-        <label><input type="checkbox" id="sftp-ls"> <span data-i18n="label-sftp-ls">List remote default directory</span></label>
       </div>
     </fieldset>
 

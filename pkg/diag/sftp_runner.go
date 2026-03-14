@@ -7,6 +7,24 @@ import (
 	"go-pathprobe/pkg/netprobe"
 )
 
+// SFTPMode controls whether the SFTP runner attempts a directory listing.
+type SFTPMode string
+
+const (
+	SFTPModeAll  SFTPMode = ""     // legacy: follow RunLS flag in options
+	SFTPModeAuth SFTPMode = "auth" // SSH handshake + authentication only
+	SFTPModeLS   SFTPMode = "ls"   // SSH + auth + list remote default directory
+)
+
+// IsValidSFTPMode reports whether m is a recognised SFTP sub-mode value.
+func IsValidSFTPMode(m SFTPMode) bool {
+	switch m {
+	case SFTPModeAll, SFTPModeAuth, SFTPModeLS:
+		return true
+	}
+	return false
+}
+
 // SFTPRunner performs SSH handshake and optional SFTP directory listing probe.
 type SFTPRunner struct {
 	Prober netprobe.SFTPProber
@@ -19,6 +37,10 @@ func NewSFTPRunner(prober netprobe.SFTPProber, logger *slog.Logger) *SFTPRunner 
 }
 
 // Run executes the SFTP/SSH probe based on target options.
+// Mode controls the listing behaviour:
+//   - SFTPModeAuth: RunLS is forced false.
+//   - SFTPModeLS: RunLS is forced true.
+//   - SFTPModeAll (legacy ""): RunLS is taken from options as-provided.
 func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 	if r.Prober == nil {
 		return ErrRunnerNotFound
@@ -30,6 +52,14 @@ func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 	}
 	port := choosePort(req.Options.Net.Ports, TargetSFTP)
 	opts := req.Options.SFTP
+
+	// Apply mode override for RunLS.
+	switch opts.Mode {
+	case SFTPModeAuth:
+		opts.RunLS = false
+	case SFTPModeLS:
+		opts.RunLS = true
+	}
 
 	req.Emitf("sftp", "Connecting to SFTP %s:%d …", host, port)
 

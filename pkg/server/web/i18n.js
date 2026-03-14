@@ -17,14 +17,27 @@ window.LOCALES = {
 
     /* ── Web / DNS fieldset ───────────────────────────────────────────── */
     'legend-web':            'Web / DNS Options',
+    'label-web-mode':        'Detection Mode',
+    'web-mode-public-ip':    'Public IP Detection',
+    'web-mode-dns':          'DNS Comparison',
+    'web-mode-http':         'HTTP / HTTPS Probe',
+    'web-mode-port':         'Port Connectivity',
     'label-dns-domains':     'DNS Domains',
     'label-dns-domains-hint':'(comma-separated)',
     'label-record-types':    'Record Types',
+    'dns-type-A':            'IPv4',
+    'dns-type-AAAA':         'IPv6',
+    'dns-type-MX':           'MX',
+    'ph-dns-domains':        'e.g. google.com',
     'label-http-url':        'HTTP URL',
     'label-http-url-hint':   '(optional probe)',
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
     'legend-smtp':           'SMTP Options',
+    'label-smtp-mode':       'Test Mode',
+    'smtp-mode-handshake':   'Banner & EHLO (no auth)',
+    'smtp-mode-auth':        'Authentication test',
+    'smtp-mode-send':        'Full send simulation',
     'label-smtp-domain':     'EHLO Domain',
     'label-smtp-user':       'Username',
     'label-smtp-pass':       'Password',
@@ -37,15 +50,20 @@ window.LOCALES = {
 
     /* ── FTP fieldset ─────────────────────────────────────────────────── */
     'legend-ftp':            'FTP / FTPS Options',
+    'label-ftp-mode':        'Test Mode',
+    'ftp-mode-login':        'Connect & login',
+    'ftp-mode-list':         'Login + directory listing',
     'label-ftp-user':        'Username',
     'label-ftp-user-hint':   '(blank = anonymous)',
     'label-ftp-pass':        'Password',
     'label-ftp-ssl':         'Implicit FTPS (port 990)',
     'label-ftp-auth-tls':    'Explicit FTPS (AUTH TLS)',
-    'label-ftp-list':        'Attempt PASV + LIST',
 
     /* ── SFTP fieldset ────────────────────────────────────────────────── */
     'legend-sftp':           'SFTP / SSH Options',
+    'label-sftp-mode':       'Test Mode',
+    'sftp-mode-auth':        'SSH authentication',
+    'sftp-mode-ls':          'Auth + list directory',
     'label-sftp-user':       'Username',
     'label-sftp-pass':       'Password',
     'label-sftp-ls':         'List remote default directory',
@@ -142,9 +160,18 @@ window.LOCALES = {
 
     /* ── Web / DNS fieldset ───────────────────────────────────────────── */
     'legend-web':            'Web / DNS 選項',
+    'label-web-mode':        '偵測模式',
+    'web-mode-public-ip':    '公開 IP 偵測',
+    'web-mode-dns':          'DNS 跨解析器比對',
+    'web-mode-http':         'HTTP / HTTPS 探測',
+    'web-mode-port':         '連接埠連通性',
     'label-dns-domains':     'DNS 網域',
     'label-dns-domains-hint':'（逗號分隔）',
     'label-record-types':    '記錄類型',
+    'dns-type-A':            'IPv4',
+    'dns-type-AAAA':         'IPv6',
+    'dns-type-MX':           'MX',
+    'ph-dns-domains':        '例如 google.com',
     'label-http-url':        'HTTP URL',
     'label-http-url-hint':   '（選填探測）',
 

@@ -7,6 +7,24 @@ import (
 	"go-pathprobe/pkg/netprobe"
 )
 
+// FTPMode controls whether the FTP runner attempts a directory listing.
+type FTPMode string
+
+const (
+	FTPModeAll   FTPMode = ""      // legacy: follow RunLIST flag in options
+	FTPModeLogin FTPMode = "login" // connect + login, no listing
+	FTPModeList  FTPMode = "list"  // connect + login + PASV/LIST
+)
+
+// IsValidFTPMode reports whether m is a recognised FTP sub-mode value.
+func IsValidFTPMode(m FTPMode) bool {
+	switch m {
+	case FTPModeAll, FTPModeLogin, FTPModeList:
+		return true
+	}
+	return false
+}
+
 // FTPRunner performs FTP/FTPS control-channel probe and optional directory listing.
 type FTPRunner struct {
 	Prober netprobe.FTPProber
@@ -19,6 +37,10 @@ func NewFTPRunner(prober netprobe.FTPProber, logger *slog.Logger) *FTPRunner {
 }
 
 // Run executes the FTP/FTPS probe based on target options.
+// Mode controls the listing behaviour:
+//   - FTPModeLogin: RunLIST is forced false regardless of options.
+//   - FTPModeList: RunLIST is forced true regardless of options.
+//   - FTPModeAll (legacy ""): RunLIST is taken from options as-provided.
 func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 	if r.Prober == nil {
 		return ErrRunnerNotFound
@@ -30,6 +52,14 @@ func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 	}
 	port := choosePort(req.Options.Net.Ports, TargetFTP)
 	opts := req.Options.FTP
+
+	// Apply mode override for RunLIST.
+	switch opts.Mode {
+	case FTPModeLogin:
+		opts.RunLIST = false
+	case FTPModeList:
+		opts.RunLIST = true
+	}
 
 	req.Emitf("ftp", "Connecting to FTP %s:%d …", host, port)
 

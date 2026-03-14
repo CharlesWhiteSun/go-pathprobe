@@ -52,6 +52,7 @@ type NetworkOptions struct {
 
 // SMTPOptions carries mail probe configuration.
 type SMTPOptions struct {
+	Mode        SMTPMode // "" | "handshake" | "auth" | "send"
 	Domain      string
 	Username    string
 	Password    string
@@ -65,6 +66,7 @@ type SMTPOptions struct {
 
 // FTPOptions carries FTP/FTPS probe configuration.
 type FTPOptions struct {
+	Mode     FTPMode // "" | "login" | "list"
 	Username string
 	Password string
 	UseTLS   bool // implicit FTPS
@@ -74,6 +76,7 @@ type FTPOptions struct {
 
 // SFTPOptions carries SFTP/SSH probe configuration.
 type SFTPOptions struct {
+	Mode       SFTPMode // "" | "auth" | "ls"
 	Username   string
 	Password   string
 	PrivateKey []byte // PEM-encoded private key for public-key auth
