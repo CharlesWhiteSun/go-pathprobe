@@ -34,7 +34,7 @@ window.LOCALES = {
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
     'legend-smtp':           'SMTP Options',
-    'label-smtp-mode':       'Test Mode',
+    'label-smtp-mode':       'Detection Mode',
     'smtp-mode-handshake':   'Banner & EHLO (no auth)',
     'smtp-mode-auth':        'Authentication test',
     'smtp-mode-send':        'Full send simulation',
@@ -50,7 +50,7 @@ window.LOCALES = {
 
     /* ── FTP fieldset ─────────────────────────────────────────────────── */
     'legend-ftp':            'FTP / FTPS Options',
-    'label-ftp-mode':        'Test Mode',
+    'label-ftp-mode':        'Detection Mode',
     'ftp-mode-login':        'Connect & login',
     'ftp-mode-list':         'Login + directory listing',
     'label-ftp-user':        'Username',
@@ -61,7 +61,7 @@ window.LOCALES = {
 
     /* ── SFTP fieldset ────────────────────────────────────────────────── */
     'legend-sftp':           'SFTP / SSH Options',
-    'label-sftp-mode':       'Test Mode',
+    'label-sftp-mode':       'Detection Mode',
     'sftp-mode-auth':        'SSH authentication',
     'sftp-mode-ls':          'Auth + list directory',
     'label-sftp-user':       'Username',
@@ -177,6 +177,10 @@ window.LOCALES = {
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
     'legend-smtp':           'SMTP 選項',
+    'label-smtp-mode':       '偵測模式',
+    'smtp-mode-handshake':   'Banner & EHLO（無驗證）',
+    'smtp-mode-auth':        '身分驗證測試',
+    'smtp-mode-send':        '完整傳送流程模擬',
     'label-smtp-domain':     'EHLO 網域',
     'label-smtp-user':       '使用者名稱',
     'label-smtp-pass':       '密碼',
@@ -189,15 +193,20 @@ window.LOCALES = {
 
     /* ── FTP fieldset ─────────────────────────────────────────────────── */
     'legend-ftp':            'FTP / FTPS 選項',
+    'label-ftp-mode':        '偵測模式',
+    'ftp-mode-login':        '連線並登入',
+    'ftp-mode-list':         '登入 + 目錄列表',
     'label-ftp-user':        '使用者名稱',
     'label-ftp-user-hint':   '（留空 = 匿名）',
     'label-ftp-pass':        '密碼',
     'label-ftp-ssl':         '隱式 FTPS（連接埠 990）',
     'label-ftp-auth-tls':    '顯式 FTPS（AUTH TLS）',
-    'label-ftp-list':        '嘗試 PASV + LIST',
 
     /* ── SFTP fieldset ────────────────────────────────────────────────── */
     'legend-sftp':           'SFTP / SSH 選項',
+    'label-sftp-mode':       '偵測模式',
+    'sftp-mode-auth':        'SSH 身分驗證',
+    'sftp-mode-ls':          '驗證 + 列出目錄',
     'label-sftp-user':       '使用者名稱',
     'label-sftp-pass':       '密碼',
     'label-sftp-ls':         '列出遠端預設目錄',

@@ -791,6 +791,97 @@ func TestStaticI18n_SMTPFTPSFTPModeKeys(t *testing.T) {
 	}
 }
 
+// TestStaticI18n_ModeLabelsDetectionMode verifies that all protocol mode labels
+// use 'Detection Mode' in en and '偵測模式' in zh-TW — consistent with the
+// Web/DNS fieldset wording.  'Test Mode' must not appear for any mode label.
+func TestStaticI18n_ModeLabelsDetectionMode(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Every mode-label key must map to 'Detection Mode' (en) somewhere in the file.
+	for _, k := range []string{"label-smtp-mode", "label-ftp-mode", "label-sftp-mode"} {
+		if !strings.Contains(body, `'`+k+`':`) {
+			t.Errorf("i18n.js: key '%s' missing", k)
+		}
+	}
+	// 'Detection Mode' value must appear at least three times (smtp/ftp/sftp).
+	count := strings.Count(body, "'Detection Mode'")
+	if count < 3 {
+		t.Errorf("i18n.js: expected at least 3 occurrences of 'Detection Mode', got %d", count)
+	}
+	// zh-TW '偵測模式' must appear at least four times (web + smtp + ftp + sftp).
+	zhCount := strings.Count(body, "'偵測模式'")
+	if zhCount < 4 {
+		t.Errorf("i18n.js: expected at least 4 occurrences of '偵測模式' (zh-TW), got %d", zhCount)
+	}
+	// Old wording 'Test Mode' must not appear anywhere.
+	if strings.Contains(body, "'Test Mode'") {
+		t.Error("i18n.js: 'Test Mode' must be replaced by 'Detection Mode'")
+	}
+}
+
+// TestStaticI18n_ZhTWModeTranslations verifies that the zh-TW locale has
+// proper Chinese translations for all SMTP/FTP/SFTP mode option values.
+func TestStaticI18n_ZhTWModeTranslations(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Check zh-TW mode option translations are present.
+	zhTranslations := []struct {
+		key  string
+		want string
+	}{
+		{"label-smtp-mode", "偵測模式"},
+		{"smtp-mode-handshake", "無驗證"}, // partial match is sufficient
+		{"smtp-mode-auth", "身分驗證"},
+		{"smtp-mode-send", "傳送"},
+		{"label-ftp-mode", "偵測模式"},
+		{"ftp-mode-login", "連線並登入"},
+		{"ftp-mode-list", "目錄列表"},
+		{"label-sftp-mode", "偵測模式"},
+		{"sftp-mode-auth", "身分驗證"},
+		{"sftp-mode-ls", "列出目錄"},
+	}
+	for _, tc := range zhTranslations {
+		if !strings.Contains(body, tc.want) {
+			t.Errorf("i18n.js zh-TW: key '%s' — expected Chinese translation containing %q", tc.key, tc.want)
+		}
+	}
+}
+
+// TestStaticHTML_ModeLabelFallbackText verifies that the fallback text for all
+// mode-selector labels in index.html is 'Detection Mode' (not 'Test Mode').
+func TestStaticHTML_ModeLabelFallbackText(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if strings.Contains(body, ">Test Mode<") {
+		t.Error("index.html: fallback text 'Test Mode' must be replaced by 'Detection Mode'")
+	}
+	// Each of the three protocol fieldsets must carry the correct fallback text.
+	for _, key := range []string{"label-smtp-mode", "label-ftp-mode", "label-sftp-mode"} {
+		want := `data-i18n="` + key + `">Detection Mode`
+		if !strings.Contains(body, want) {
+			t.Errorf("index.html: label with data-i18n=%q must have fallback text 'Detection Mode'", key)
+		}
+	}
+}
+
 // TestStaticJS_BrandSystemRemoved verifies that the brand style management
 // system has been removed from app.js now that the logo style is fixed.
 func TestStaticJS_BrandSystemRemoved(t *testing.T) {
