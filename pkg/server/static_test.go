@@ -2916,3 +2916,316 @@ func TestStaticJS_HistoryEntryRevealOrder(t *testing.T) {
 			"#results must be visible so the Leaflet container has layout dimensions")
 	}
 }
+
+// TestStaticJS_MapPointConfigs verifies that app.js declares MAP_POINT_CONFIGS
+// with 'origin' and 'target' keys, forming a data-driven foundation for all
+// map marker styling.  Callers derive visual behaviour from this object rather
+// than hardcoding logic inside renderMap().
+func TestStaticJS_MapPointConfigs(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MAP_POINT_CONFIGS") {
+		t.Error("app.js: MAP_POINT_CONFIGS constant not found — map marker config must be data-driven")
+	}
+	if !strings.Contains(body, "'origin'") {
+		t.Error("app.js: MAP_POINT_CONFIGS must include an 'origin' key for the public-IP marker")
+	}
+	if !strings.Contains(body, "'target'") {
+		t.Error("app.js: MAP_POINT_CONFIGS must include a 'target' key for the destination marker")
+	}
+}
+
+// TestStaticJS_HaversineKm verifies that app.js defines a haversineKm()
+// helper for computing the great-circle distance.  This powers the distance
+// badge displayed below the map between origin and target markers.
+func TestStaticJS_HaversineKm(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function haversineKm(") {
+		t.Error("app.js: haversineKm function not found — distance calculation must be a named helper")
+	}
+	// Earth radius constant must appear to confirm correct formula.
+	if !strings.Contains(body, "6371") {
+		t.Error("app.js: haversineKm must use Earth radius constant 6371 km")
+	}
+}
+
+// TestStaticJS_BuildMarkerIcon verifies that app.js defines buildMarkerIcon()
+// which creates L.divIcon instances driven by MAP_POINT_CONFIGS, replacing the
+// default Leaflet marker pin with a role-coloured dot.
+func TestStaticJS_BuildMarkerIcon(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function buildMarkerIcon(") {
+		t.Error("app.js: buildMarkerIcon function not found — marker icon creation must be a named helper")
+	}
+	if !strings.Contains(body, "L.divIcon(") {
+		t.Error("app.js: buildMarkerIcon must use L.divIcon for custom marker styling")
+	}
+}
+
+// TestStaticJS_BuildPopupHtml verifies that app.js defines buildPopupHtml()
+// which constructs a rich HTML popup from a GeoAnnotation, using the
+// geo-popup__role badge to clearly identify origin vs target.
+func TestStaticJS_BuildPopupHtml(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function buildPopupHtml(") {
+		t.Error("app.js: buildPopupHtml function not found")
+	}
+	if !strings.Contains(body, "geo-popup__role") {
+		t.Error("app.js: buildPopupHtml must emit .geo-popup__role element for visual role identification")
+	}
+	if !strings.Contains(body, "geo-popup__ip") {
+		t.Error("app.js: buildPopupHtml must emit .geo-popup__ip element for the IP address")
+	}
+}
+
+// TestStaticJS_RenderMapPolyline verifies that renderMap() draws a L.polyline
+// between origin and target to give users a clear visual probe direction.
+func TestStaticJS_RenderMapPolyline(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "L.polyline(") {
+		t.Error("app.js: renderMap must draw a L.polyline to connect origin and target markers")
+	}
+	if !strings.Contains(body, "dashArray") {
+		t.Error("app.js: the connection polyline must use dashArray for a visual route style")
+	}
+}
+
+// TestStaticHTML_GeoDistanceElement verifies that index.html includes the
+// #geo-distance element, which renderMap() populates with the great-circle
+// distance between origin and target.
+func TestStaticHTML_GeoDistanceElement(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="geo-distance"`) {
+		t.Error("index.html: #geo-distance element not found — required for the map distance badge")
+	}
+}
+
+// TestStaticCSS_GeoMarkerStyles verifies that style.css defines the custom
+// marker dot classes used by buildMarkerIcon() via L.divIcon.
+func TestStaticCSS_GeoMarkerStyles(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, cls := range []string{".geo-marker--origin", ".geo-marker--target", ".geo-marker__dot"} {
+		if !strings.Contains(body, cls) {
+			t.Errorf("style.css: class %q not found — required for custom Leaflet divIcon styling", cls)
+		}
+	}
+}
+
+// TestStaticCSS_GeoLegendAndDistance verifies that style.css defines the
+// .geo-legend and .geo-distance classes used by the in-map legend control and
+// the distance badge below the map.
+func TestStaticCSS_GeoLegendAndDistance(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, cls := range []string{".geo-legend", ".geo-legend__item", ".geo-legend__dot", ".geo-distance"} {
+		if !strings.Contains(body, cls) {
+			t.Errorf("style.css: class %q not found — required for map legend / distance badge", cls)
+		}
+	}
+}
+
+// TestStaticI18n_MapOriginAndDistanceKeys verifies that both the 'en' and 'zh'
+// locales in i18n.js expose the 'map-origin' and 'map-distance' keys introduced
+// for the enhanced map UX.  Each key must appear at least twice (once per locale).
+func TestStaticI18n_MapOriginAndDistanceKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{"'map-origin'", "'map-distance'"} {
+		first := strings.Index(body, key)
+		if first == -1 {
+			t.Errorf("i18n.js: key %s not found in any locale", key)
+			continue
+		}
+		second := strings.Index(body[first+1:], key)
+		if second == -1 {
+			t.Errorf("i18n.js: key %s found in only one locale — must be present in both en and zh", key)
+		}
+	}
+}
+
+// TestStaticJS_TileLayerConfigs verifies that app.js declares TILE_LAYER_CONFIGS
+// with both 'light' and 'dark' variants pointing to the CARTO basemap service.
+// Tile URLs must not use the raw OSM URL so theme-aware switching works correctly.
+func TestStaticJS_TileLayerConfigs(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "TILE_LAYER_CONFIGS") {
+		t.Error("app.js: TILE_LAYER_CONFIGS constant not found — tile URLs must be data-driven")
+	}
+	if !strings.Contains(body, "'light'") {
+		t.Error("app.js: TILE_LAYER_CONFIGS must include a 'light' variant")
+	}
+	if !strings.Contains(body, "'dark'") {
+		t.Error("app.js: TILE_LAYER_CONFIGS must include a 'dark' variant")
+	}
+	// CARTO attribution must be present to satisfy the tile provider's terms.
+	if !strings.Contains(body, "carto.com/attributions") {
+		t.Error("app.js: CARTO attribution URL must be present in TILE_LAYER_CONFIGS")
+	}
+	// Raw OSM tile URL must not be used directly by renderMap (it is replaced by CARTO).
+	tileIdx := strings.Index(body, "tile.openstreetmap.org")
+	if tileIdx != -1 {
+		t.Error("app.js: raw OSM tile URL must not be used — use TILE_LAYER_CONFIGS instead")
+	}
+}
+
+// TestStaticJS_MapDarkThemes verifies that app.js declares MAP_DARK_THEMES as
+// the authoritative set of theme IDs that map to the dark tile variant.
+func TestStaticJS_MapDarkThemes(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MAP_DARK_THEMES") {
+		t.Error("app.js: MAP_DARK_THEMES constant not found — dark/light tile selection must be data-driven")
+	}
+	// The known dark themes must be listed.
+	for _, id := range []string{"'dark'", "'deep-blue'", "'forest-green'"} {
+		cfg := strings.Index(body, "MAP_DARK_THEMES")
+		if cfg == -1 {
+			break
+		}
+		// look for the id somewhere after MAP_DARK_THEMES declaration
+		if !strings.Contains(body[cfg:cfg+200], id) {
+			t.Errorf("app.js: MAP_DARK_THEMES must include theme id %s", id)
+		}
+	}
+}
+
+// TestStaticJS_GetMapTileVariant verifies that app.js exposes a named
+// getMapTileVariant() function which is the single decision point for
+// mapping the active application theme to a tile-layer variant string.
+func TestStaticJS_GetMapTileVariant(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function getMapTileVariant(") {
+		t.Error("app.js: getMapTileVariant function not found")
+	}
+}
+
+// TestStaticJS_RefreshMapTiles verifies that app.js exposes a named
+// refreshMapTiles() function that swaps the tile layer on the live map.
+// This is what applyTheme() calls to update tiles without rebuilding the map.
+func TestStaticJS_RefreshMapTiles(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function refreshMapTiles(") {
+		t.Error("app.js: refreshMapTiles function not found")
+	}
+}
+
+// TestStaticJS_ApplyThemeCallsRefreshMapTiles verifies that applyTheme() calls
+// refreshMapTiles() so the tile layer updates in real-time when the user
+// switches the colour theme while a map is visible.
+func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function applyTheme(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyTheme function not found")
+	}
+	// Find the closing brace of applyTheme by scanning for the next top-level function.
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "refreshMapTiles()") {
+		t.Error("app.js: applyTheme must call refreshMapTiles() so tile layer updates on theme change")
+	}
+}

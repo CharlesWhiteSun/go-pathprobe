@@ -16,6 +16,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Active Leaflet map instance (one at a time).
 let _map = null;
+// Active tile layer attached to _map; kept separate so it can be swapped on
+// theme change without tearing down the whole map instance.
+let _tileLayer = null;
+
+// ── Map point role configurations ─────────────────────────────────────────
+// Each entry defines the CSS class and i18n label key used for a geocoded
+// point on the Leaflet map.  Adding a new role requires only a new key here —
+// renderMap(), buildMarkerIcon(), buildPopupHtml(), and buildMapLegend() all
+// read this object so no other code needs to change.
+const MAP_POINT_CONFIGS = {
+  origin: { cssClass: 'geo-marker--origin', i18nKey: 'map-origin' },
+  target: { cssClass: 'geo-marker--target', i18nKey: 'map-target' },
+};
+
+// Theme IDs that should use the dark tile variant.  All other themes fall back
+// to the light/neutral style.  Must stay in sync with THEMES (above).
+const MAP_DARK_THEMES = new Set(['dark', 'deep-blue', 'forest-green']);
+
+// Tile layer configurations keyed by variant ('light' | 'dark').
+// Using CARTO basemaps: free, privacy-respecting, and visually harmonious with
+// both light and dark application themes.  Only change the URLs here if a
+// different provider is desired — no other code needs to be touched.
+const TILE_LAYER_CONFIGS = {
+  light: {
+    url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
+  dark: {
+    url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
+};
 
 // ── Per-target default ports ──────────────────────────────────────────────
 const TARGET_PORTS = {
@@ -132,6 +164,8 @@ function applyTheme(themeId) {
   document.querySelectorAll('.theme-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.theme === id);
   });
+  // Swap the map tile layer so it matches the new theme variant (light / dark).
+  refreshMapTiles();
 }
 
 /** Public entry point called by the <select onchange> handler. */
@@ -1005,45 +1039,153 @@ function esc(s) {
 
 // -- Geo Map (Leaflet) --------------------------------------------------------
 
+/** Return 'dark' when the active theme belongs to MAP_DARK_THEMES, else 'light'.
+ *  This is the single decision point that maps application theme → tile variant.
+ */
+function getMapTileVariant() {
+  const theme = document.documentElement.dataset.theme || DEFAULT_THEME;
+  return MAP_DARK_THEMES.has(theme) ? 'dark' : 'light';
+}
+
+/** Replace the tile layer on the live _map with one matching the current theme.
+ *  No-op when no map instance exists yet.  Called by applyTheme() so the map
+ *  updates in real-time whenever the user switches colour theme.
+ */
+function refreshMapTiles() {
+  if (!_map) return;
+  const cfg = TILE_LAYER_CONFIGS[getMapTileVariant()];
+  if (_tileLayer) { _tileLayer.remove(); _tileLayer = null; }
+  _tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 18 });
+  _tileLayer.addTo(_map);
+}
+
+/** Calculate the great-circle distance in km between two lat/lon pairs
+ *  using the Haversine formula.
+ */
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Create a custom Leaflet divIcon for the given point type ('origin'|'target').
+ *  Visual config is read from MAP_POINT_CONFIGS, so no change is needed here
+ *  when new roles are added.
+ */
+function buildMarkerIcon(type) {
+  const cfg = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
+  return L.divIcon({
+    className:   'geo-marker ' + cfg.cssClass,
+    html:        '<span class="geo-marker__dot"></span>',
+    iconSize:    [20, 20],
+    iconAnchor:  [10, 10],
+    popupAnchor: [0, -14],
+  });
+}
+
+/** Build an HTML string for a Leaflet popup from a GeoAnnotation object.
+ *  All dynamic values are escaped via esc() to prevent XSS.
+ */
+function buildPopupHtml(geo, type) {
+  const cfg = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
+  const lines = [
+    '<div class="geo-popup">',
+    '<span class="geo-popup__role geo-popup__role--' + type + '">' + esc(t(cfg.i18nKey)) + '</span>',
+  ];
+  if (geo.IP)          lines.push('<div class="geo-popup__ip">'  + esc(geo.IP)          + '</div>');
+  if (geo.City)        lines.push('<div class="geo-popup__row">' + esc(geo.City)        + '</div>');
+  if (geo.CountryName) lines.push('<div class="geo-popup__row">' + esc(geo.CountryName) + ' (' + esc(geo.CountryCode) + ')' + '</div>');
+  if (geo.OrgName)     lines.push('<div class="geo-popup__asn">' + 'AS' + esc(String(geo.ASN)) + ' ' + esc(geo.OrgName) + '</div>');
+  lines.push('</div>');
+  return lines.join('');
+}
+
+/** Build a Leaflet Control legend for the given set of point types.
+ *  Accepts an array of role strings so only visible marker types are shown.
+ */
+function buildMapLegend(pointTypes) {
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create('div', 'geo-legend');
+    div.innerHTML = pointTypes.map(type => {
+      const cfg = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
+      return '<div class="geo-legend__item">' +
+        '<span class="' + cfg.cssClass + ' geo-legend__dot"></span>' +
+        '<span>' + esc(t(cfg.i18nKey)) + '</span>' +
+        '</div>';
+    }).join('');
+    return div;
+  };
+  return legend;
+}
+
 /** Render (or remove) the Leaflet map based on geo results.
  *  pub / tgt are GeoAnnotation objects that may be null/undefined.
  */
 function renderMap(pub, tgt) {
   const container = document.getElementById('geo-map');
+  const distEl    = document.getElementById('geo-distance');
   if (!container || typeof L === 'undefined') return;
+
+  // Reset distance badge on every render cycle.
+  if (distEl) distEl.hidden = true;
 
   const points = [];
   if (pub && pub.HasLocation) {
-    points.push({ lat: pub.Lat, lon: pub.Lon, label: t('map-public-ip') + ': ' + pub.IP });
+    points.push({ geo: pub, type: 'origin' });
   }
   if (tgt && tgt.HasLocation) {
-    points.push({ lat: tgt.Lat, lon: tgt.Lon, label: t('map-target') + ': ' + tgt.IP });
+    points.push({ geo: tgt, type: 'target' });
   }
 
   // Hide the map when there are no geo-located points.
   if (points.length === 0) {
     container.classList.remove('visible');
-    if (_map) { _map.remove(); _map = null; }
+    if (_map) { _map.remove(); _map = null; _tileLayer = null; }
     return;
   }
 
   container.classList.add('visible');
 
   // Destroy any existing map instance before creating a new one.
-  if (_map) { _map.remove(); _map = null; }
+  if (_map) { _map.remove(); _map = null; _tileLayer = null; }
 
   _map = L.map('geo-map');
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  // Tile layer is driven by the current application theme via TILE_LAYER_CONFIGS.
+  const tileCfg = TILE_LAYER_CONFIGS[getMapTileVariant()];
+  _tileLayer = L.tileLayer(tileCfg.url, {
+    attribution: tileCfg.attribution,
     maxZoom: 18,
   }).addTo(_map);
 
   const latLngs = [];
   for (const p of points) {
-    L.marker([p.lat, p.lon])
+    L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
       .addTo(_map)
-      .bindPopup(esc(p.label));
-    latLngs.push([p.lat, p.lon]);
+      .bindPopup(buildPopupHtml(p.geo, p.type));
+    latLngs.push([p.geo.Lat, p.geo.Lon]);
+  }
+
+  // Draw a dashed polyline and show the distance badge when both endpoints exist.
+  if (latLngs.length === 2) {
+    L.polyline(latLngs, {
+      color: '#5b8dee', weight: 2, dashArray: '6 5', opacity: 0.75,
+    }).addTo(_map);
+    if (distEl) {
+      const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
+      distEl.textContent = t('map-distance') + ': ' + Math.round(km).toLocaleString() + ' km';
+      distEl.hidden = false;
+    }
+  }
+
+  // Add a legend when multiple marker types are present so users can
+  // distinguish origin (偵測起點) from target (偵測目標).
+  if (points.length > 1) {
+    buildMapLegend(points.map(p => p.type)).addTo(_map);
   }
 
   if (latLngs.length === 1) {

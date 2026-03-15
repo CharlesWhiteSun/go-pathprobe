@@ -703,6 +703,87 @@ fieldset.target-fields legend {
 }
 #geo-map.visible { display: block; }
 
+/* Custom Leaflet divIcon marker: replace default pin with a coloured dot.
+   Colours are intentionally fixed (not theme-variable) so the two roles are
+   always visually distinct regardless of the active colour scheme.
+   origin = green (偵測起點)  |  target = red (偵測目標) */
+.geo-marker {
+  background: transparent !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.geo-marker__dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.9);
+  box-shadow: 0 1px 5px rgba(0,0,0,.45);
+}
+.geo-marker--origin .geo-marker__dot { background: #22a55b; }
+.geo-marker--target .geo-marker__dot { background: #e03c3c; }
+
+/* In-map legend control (Leaflet bottomright position) */
+.geo-legend {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius, 6px);
+  padding: .4rem .6rem;
+  font-size: .76rem;
+  line-height: 1.4;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.geo-legend__item {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.geo-legend__item + .geo-legend__item { margin-top: .2rem; }
+.geo-legend__dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.75);
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  flex-shrink: 0;
+}
+.geo-marker--origin.geo-legend__dot { background: #22a55b; }
+.geo-marker--target.geo-legend__dot { background: #e03c3c; }
+
+/* Distance badge displayed below the map */
+.geo-distance {
+  font-size: .82rem;
+  color: var(--muted);
+  text-align: center;
+  margin-top: .5rem;
+  padding: .3rem .75rem;
+  background: var(--surface-alt, #f5f6f8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Popup inner layout */
+.geo-popup { font-size: .84rem; min-width: 130px; line-height: 1.5; }
+.geo-popup__role {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: .1em .4em;
+  border-radius: 3px;
+  margin-bottom: .3rem;
+  color: #fff;
+}
+.geo-popup__role--origin { background: #22a55b; }
+.geo-popup__role--target { background: #e03c3c; }
+.geo-popup__ip  { font-weight: 600; }
+.geo-popup__row { color: #555; font-size: .82rem; }
+.geo-popup__asn { font-size: .74rem; color: #888; margin-top: .15rem; }
+
 /* -- History Panel ----------------------------------------------------------- */
 .history-empty {
   color: var(--muted);

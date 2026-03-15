@@ -136,7 +136,9 @@ window.LOCALES = {
 
     /* ── Map popup labels ─────────────────────────────────────────────── */
     'map-public-ip':         'Public IP',
+    'map-origin':            'Origin',
     'map-target':            'Target',
+    'map-distance':          'Distance',
 
     /* ── Target select options ────────────────────────────────────────── */
     'opt-web':               'WEB \u2014 Public IP & DNS',
@@ -299,7 +301,9 @@ window.LOCALES = {
 
     /* ── Map popup labels ─────────────────────────────────────────────── */
     'map-public-ip':         '公開 IP',
-    'map-target':            '目標',
+    'map-origin':            '偵測起點',
+    'map-target':            '偵測目標',
+    'map-distance':          '連線距離',
 
     /* ── Target select options ────────────────────────────────────────── */
     'opt-web':               'WEB \u2014 公開 IP 與 DNS',
