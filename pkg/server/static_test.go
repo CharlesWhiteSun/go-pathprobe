@@ -2293,3 +2293,261 @@ func TestStaticI18n_RouteSectionKeys(t *testing.T) {
 		t.Error("i18n.js zh-TW: th-ip-host must contain 'IP / 主機'")
 	}
 }
+
+// ── New animation & error-message tests (Phase feature updates) ───────────
+
+// TestStaticCSS_RunAnimations verifies that style.css defines all four
+// run-button animation classes and their associated @keyframes so the picker
+// UI can switch between them without layout shift.
+func TestStaticCSS_RunAnimations(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// All four animation CSS classes must be present.
+	for _, cls := range []string{".spinner", ".anim-pulse", ".anim-dots", ".anim-wave"} {
+		if !strings.Contains(body, cls) {
+			t.Errorf("style.css: animation class %q must be defined", cls)
+		}
+	}
+	// All four @keyframes must be declared.
+	for _, kf := range []string{"@keyframes spin", "@keyframes anim-pulse-ring", "@keyframes anim-dots-bounce", "@keyframes anim-wave-bar"} {
+		if !strings.Contains(body, kf) {
+			t.Errorf("style.css: %q must be declared for the animation to run", kf)
+		}
+	}
+}
+
+// TestStaticCSS_AnimPicker verifies that style.css defines the animation
+// picker strip component rules (.anim-picker, .anim-opt, .anim-opt.active).
+func TestStaticCSS_AnimPicker(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, rule := range []string{".anim-picker", ".anim-opt", ".anim-opt.active"} {
+		if !strings.Contains(body, rule) {
+			t.Errorf("style.css: %s rule must be defined for the animation picker", rule)
+		}
+	}
+}
+
+// TestStaticHTML_AnimPickerPresent verifies that index.html contains the
+// animation picker strip next to the run button inside .form-actions, and that
+// all four .anim-opt buttons with their data-anim attributes are present.
+func TestStaticHTML_AnimPickerPresent(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Picker container must be present.
+	if !strings.Contains(body, `id="anim-picker"`) {
+		t.Error("index.html: #anim-picker must be present in .form-actions")
+	}
+
+	// All four animation choices must be offered.
+	for _, anim := range []string{"spinner", "pulse", "dots", "wave"} {
+		want := `data-anim="` + anim + `"`
+		if !strings.Contains(body, want) {
+			t.Errorf("index.html: anim-picker must contain %s button", want)
+		}
+	}
+
+	// Picker must appear inside .form-actions (before #run-btn).
+	pickerIdx := strings.Index(body, `id="anim-picker"`)
+	runBtnIdx := strings.Index(body, `id="run-btn"`)
+	if pickerIdx == -1 || runBtnIdx == -1 {
+		t.Fatal("index.html: #anim-picker or #run-btn is missing")
+	}
+	if pickerIdx > runBtnIdx {
+		t.Error("index.html: #anim-picker must appear before #run-btn in source order")
+	}
+}
+
+// TestStaticJS_AnimationSystem verifies that app.js declares the animation
+// management functions required by the run-button picker feature.
+func TestStaticJS_AnimationSystem(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Core animation management functions.
+	for _, fn := range []string{"initRunAnimation", "setRunAnimation", "getRunningHTML"} {
+		if !strings.Contains(body, fn) {
+			t.Errorf("app.js: %s function must be defined", fn)
+		}
+	}
+	// RUN_ANIMATIONS constant must list all four variants.
+	if !strings.Contains(body, "RUN_ANIMATIONS") {
+		t.Error("app.js: RUN_ANIMATIONS constant must be declared")
+	}
+	for _, anim := range []string{"'spinner'", "'pulse'", "'dots'", "'wave'"} {
+		if !strings.Contains(body, anim) {
+			t.Errorf("app.js: RUN_ANIMATIONS must include %s", anim)
+		}
+	}
+	// localStorage key must use the pp- prefix for namespacing.
+	if !strings.Contains(body, "pp-run-anim") {
+		t.Error("app.js: animation preference must be stored under 'pp-run-anim' key in localStorage")
+	}
+}
+
+// TestStaticJS_TracerouteTimeoutAutoCompute verifies that app.js contains the
+// logic to auto-compute a traceroute-appropriate timeout before sending the
+// diagnostic request, preventing spurious deadline-exceeded errors.
+func TestStaticJS_TracerouteTimeoutAutoCompute(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The traceroute-specific timeout guard must be present.
+	if !strings.Contains(body, "traceroute") {
+		t.Error("app.js: must contain 'traceroute' reference for mode-specific timeout logic")
+	}
+	if !strings.Contains(body, "parseTimeoutSec") {
+		t.Error("app.js: parseTimeoutSec helper must be defined for timeout comparison")
+	}
+}
+
+// TestStaticJS_LocalizeError verifies that app.js defines the localizeError
+// function to map raw server error strings to user-friendly i18n messages,
+// replacing opaque Go internal strings like "context deadline exceeded".
+func TestStaticJS_LocalizeError(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "localizeError") {
+		t.Error("app.js: localizeError function must be defined")
+	}
+	// Must check for the deadline exceeded pattern.
+	if !strings.Contains(body, "deadline exceeded") {
+		t.Error("app.js: localizeError must handle 'deadline exceeded' error pattern")
+	}
+	// Must use the err-timeout i18n key for timeout errors.
+	if !strings.Contains(body, "err-timeout") {
+		t.Error("app.js: localizeError must reference 'err-timeout' i18n key for timeout errors")
+	}
+}
+
+// TestStaticI18n_ErrorMessageKeys verifies that the embedded i18n.js contains
+// user-friendly error message keys in both English and zh-TW locales.
+func TestStaticI18n_ErrorMessageKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// All error keys must be present in the file.
+	for _, key := range []string{"'err-timeout'", "'err-no-runner'", "'err-unknown'"} {
+		if !strings.Contains(body, key) {
+			t.Errorf("i18n.js: missing error key %s", key)
+		}
+	}
+	// English locale must carry user-friendly timeout text (not raw Go error).
+	if !strings.Contains(body, "timed out") {
+		t.Error("i18n.js en: err-timeout must contain 'timed out' for user-friendly display")
+	}
+	// zh-TW locale must carry a Chinese timeout message.
+	if !strings.Contains(body, "診斷逾時") {
+		t.Error("i18n.js zh-TW: err-timeout must contain '診斷逾時'")
+	}
+}
+
+// TestStaticI18n_AnimPickerKeys verifies that the embedded i18n.js contains
+// animation picker label keys in both locales for accessible button titles.
+func TestStaticI18n_AnimPickerKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{"'anim-picker-label'", "'anim-spinner'", "'anim-pulse'", "'anim-dots'", "'anim-wave'"} {
+		if !strings.Contains(body, key) {
+			t.Errorf("i18n.js: missing animation picker key %s", key)
+		}
+	}
+	// zh-TW locale must provide Chinese labels.
+	if !strings.Contains(body, "旋轉圓圈") {
+		t.Error("i18n.js zh-TW: anim-spinner must contain '旋轉圓圈'")
+	}
+}
+
+// TestStaticCSS_ErrorBannerFlex verifies that the updated error-banner uses
+// flexbox layout (with .error-icon and .error-text children) for better visual
+// separation between the icon and the message text.
+func TestStaticCSS_ErrorBannerFlex(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// error-banner must use flex layout for icon + text alignment.
+	if !strings.Contains(body, ".error-banner") {
+		t.Error("style.css: .error-banner rule must be defined")
+	}
+	if !strings.Contains(body, ".error-icon") {
+		t.Error("style.css: .error-icon rule must be defined inside .error-banner")
+	}
+	if !strings.Contains(body, ".error-text") {
+		t.Error("style.css: .error-text rule must be defined inside .error-banner")
+	}
+}
+
+// TestStaticHTML_ErrorBannerStructure verifies that index.html contains the
+// structured error banner with role="alert" and separate icon/text spans.
+func TestStaticHTML_ErrorBannerStructure(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="error-banner"`) {
+		t.Error("index.html: #error-banner must be present")
+	}
+	if !strings.Contains(body, `role="alert"`) {
+		t.Error("index.html: #error-banner must declare role=\"alert\" for screen-reader accessibility")
+	}
+	if !strings.Contains(body, `class="error-icon"`) {
+		t.Error("index.html: .error-icon span must be present inside #error-banner")
+	}
+	if !strings.Contains(body, `id="error-text"`) {
+		t.Error("index.html: #error-text span must be present inside #error-banner")
+	}
+}

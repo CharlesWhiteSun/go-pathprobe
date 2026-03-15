@@ -3,6 +3,10 @@ package server
 
 import (
 	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,8 +14,6 @@ import (
 	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/netprobe"
 	"go-pathprobe/pkg/store"
-	"io"
-	"log/slog"
 )
 
 // ---- isValidTarget -------------------------------------------------------
@@ -331,5 +333,149 @@ func TestBuildOptions_WebTracerouteModeValid(t *testing.T) {
 	}
 	if string(opts.Web.Mode) != "traceroute" {
 		t.Errorf("Web.Mode = %q, want %q", opts.Web.Mode, "traceroute")
+	}
+}
+
+// ── tracerouteMinTimeout ─────────────────────────────────────────────────
+
+// TestTracerouteMinTimeout_NonTracerouteMode verifies that a non-traceroute
+// request returns 0, meaning "no override needed".
+func TestTracerouteMinTimeout_NonTracerouteMode(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeHTTP
+	if got := tracerouteMinTimeout(opts); got != 0 {
+		t.Errorf("tracerouteMinTimeout(http) = %v, want 0", got)
+	}
+}
+
+// TestTracerouteMinTimeout_EmptyModeIsNotTraceroute verifies that the legacy
+// "all-in-one" mode (empty string) does NOT trigger the traceroute floor,
+// because legacy mode does not run a full traceroute.
+func TestTracerouteMinTimeout_EmptyModeIsNotTraceroute(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeAll
+	if got := tracerouteMinTimeout(opts); got != 0 {
+		t.Errorf("tracerouteMinTimeout('') = %v, want 0", got)
+	}
+}
+
+// TestTracerouteMinTimeout_DefaultSettings verifies the computed minimum when
+// maxHops and mtrCount are both zero (runner defaults apply).
+// Expected: DefaultMaxHops(30) × DefaultMTRCount(5) × 2 s + 15 s = 315 s.
+func TestTracerouteMinTimeout_DefaultSettings(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeTraceroute
+	// opts.Web.MaxHops = 0 → defaults to diag.DefaultMaxHops (30)
+	// opts.Global.MTRCount = 0 → defaults to diag.DefaultMTRCount (5)
+	want := time.Duration(diag.DefaultMaxHops*diag.DefaultMTRCount*2)*time.Second + 15*time.Second
+	if got := tracerouteMinTimeout(opts); got != want {
+		t.Errorf("tracerouteMinTimeout(default) = %v, want %v", got, want)
+	}
+}
+
+// TestTracerouteMinTimeout_CustomMaxHops verifies that a custom maxHops value
+// produces a proportionally larger minimum.
+func TestTracerouteMinTimeout_CustomMaxHops(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeTraceroute
+	opts.Web.MaxHops = 10
+	opts.Global.MTRCount = 3
+	// 10 × 3 × 2 + 15 = 75 s
+	want := 75 * time.Second
+	if got := tracerouteMinTimeout(opts); got != want {
+		t.Errorf("tracerouteMinTimeout(10hops,3mtr) = %v, want %v", got, want)
+	}
+}
+
+// ── ensureTracerouteTimeout ──────────────────────────────────────────────
+
+// TestEnsureTracerouteTimeout_ExtendsTooShortTimeout verifies that a timeout
+// shorter than the computed minimum is replaced by the minimum.
+func TestEnsureTracerouteTimeout_ExtendsTooShortTimeout(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeTraceroute
+	opts.Web.MaxHops = 10
+	opts.Global.MTRCount = 3
+	// min = 75 s; providing 30 s should be bumped to 75 s.
+	got := ensureTracerouteTimeout(30*time.Second, opts)
+	if got != 75*time.Second {
+		t.Errorf("ensureTracerouteTimeout(30s) = %v, want 75s", got)
+	}
+}
+
+// TestEnsureTracerouteTimeout_KeepsSufficientTimeout verifies that a timeout
+// already above the minimum is returned unchanged.
+func TestEnsureTracerouteTimeout_KeepsSufficientTimeout(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeTraceroute
+	opts.Web.MaxHops = 10
+	opts.Global.MTRCount = 3
+	// min = 75 s; a 120 s timeout should be kept as-is.
+	got := ensureTracerouteTimeout(120*time.Second, opts)
+	if got != 120*time.Second {
+		t.Errorf("ensureTracerouteTimeout(120s) = %v, want 120s unchanged", got)
+	}
+}
+
+// TestEnsureTracerouteTimeout_NoopForNonTraceroute verifies that non-traceroute
+// modes are never modified, even when a very short timeout is given.
+func TestEnsureTracerouteTimeout_NoopForNonTraceroute(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeHTTP
+	got := ensureTracerouteTimeout(1*time.Second, opts)
+	if got != 1*time.Second {
+		t.Errorf("ensureTracerouteTimeout(http 1s) = %v, want 1s unchanged", got)
+	}
+}
+
+// ── fmtDiagError ────────────────────────────────────────────────────────
+
+// TestFmtDiagError_Nil verifies that a nil error returns an empty string.
+func TestFmtDiagError_Nil(t *testing.T) {
+	if got := fmtDiagError(nil, diag.Options{}); got != "" {
+		t.Errorf("fmtDiagError(nil) = %q, want empty string", got)
+	}
+}
+
+// TestFmtDiagError_DeadlineExceeded_TracerouteMode verifies that the
+// context.DeadlineExceeded error is rewritten into a traceroute-specific
+// human-readable message that mentions "timed out".
+func TestFmtDiagError_DeadlineExceeded_TracerouteMode(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeTraceroute
+	opts.Web.MaxHops = 20
+	got := fmtDiagError(context.DeadlineExceeded, opts)
+	if !strings.Contains(got, "timed out") {
+		t.Errorf("fmtDiagError(DeadlineExceeded,traceroute) = %q; must contain 'timed out'", got)
+	}
+	if strings.Contains(got, "context deadline exceeded") {
+		t.Errorf("fmtDiagError must NOT expose raw Go error text 'context deadline exceeded', got: %q", got)
+	}
+}
+
+// TestFmtDiagError_DeadlineExceeded_OtherMode verifies that the generic
+// timeout message is returned for non-traceroute modes.
+func TestFmtDiagError_DeadlineExceeded_OtherMode(t *testing.T) {
+	opts := diag.Options{}
+	opts.Web.Mode = diag.WebModeHTTP
+	got := fmtDiagError(context.DeadlineExceeded, opts)
+	if !strings.Contains(got, "timed out") {
+		t.Errorf("fmtDiagError(DeadlineExceeded,http) = %q; must contain 'timed out'", got)
+	}
+	if strings.Contains(got, "context deadline exceeded") {
+		t.Errorf("fmtDiagError must NOT expose raw Go error text, got: %q", got)
+	}
+}
+
+// TestFmtDiagError_OtherError verifies that an unrecognised error is
+// wrapped with the "diagnostic error: " prefix for frontend parsing.
+func TestFmtDiagError_OtherError(t *testing.T) {
+	err := errors.New("connection refused")
+	got := fmtDiagError(err, diag.Options{})
+	if !strings.Contains(got, "connection refused") {
+		t.Errorf("fmtDiagError(connection refused) = %q; must contain original message", got)
+	}
+	if !strings.HasPrefix(got, "diagnostic error:") {
+		t.Errorf("fmtDiagError(other) = %q; must start with 'diagnostic error:'", got)
 	}
 }

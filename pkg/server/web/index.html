@@ -267,12 +267,22 @@
     </details>
 
     <div class="form-actions">
-      <button id="run-btn" onclick="runDiag()">&#9654; Run Diagnostic</button>
+      <!-- ── Temporary animation picker (dev helper to choose preferred running style) -->
+      <div class="anim-picker" id="anim-picker" title="切換按鈕動畫樣式 / Switch button animation">
+        <button class="anim-opt active" data-anim="spinner" onclick="setRunAnimation('spinner')" title="Spinner"><span class="spinner"></span></button>
+        <button class="anim-opt" data-anim="pulse"   onclick="setRunAnimation('pulse')"   title="Pulse"><span class="anim-pulse"></span></button>
+        <button class="anim-opt" data-anim="dots"    onclick="setRunAnimation('dots')"    title="Dots"><span class="anim-dots"><span></span><span></span><span></span></span></button>
+        <button class="anim-opt" data-anim="wave"    onclick="setRunAnimation('wave')"    title="Wave"><span class="anim-wave"><span></span><span></span><span></span><span></span></span></button>
+      </div>
+      <button id="run-btn" onclick="runDiag()">&#9654;</button>
     </div>
   </section>
 
   <!-- ── Error Banner ─────────────────────────────────────────────────── -->
-  <div class="error-banner" id="error-banner" hidden></div>
+  <div class="error-banner" id="error-banner" hidden role="alert">
+    <span class="error-icon" aria-hidden="true">⚠</span>
+    <span class="error-text" id="error-text"></span>
+  </div>
 
   <!-- ── Progress Log (visible during streaming run) ──────────────────── -->
   <div class="progress-log" id="progress-log" hidden></div>

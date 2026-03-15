@@ -95,6 +95,57 @@ function initLocale() {
   applyLocale();
 }
 
+// ── Run-button animation management ──────────────────────────────────────
+/**
+ * Available animation IDs for the run-button's loading state.
+ * Each maps to CSS class(es) rendered by getRunningHTML().
+ */
+const RUN_ANIMATIONS = ['spinner', 'pulse', 'dots', 'wave'];
+
+let _runAnimation = 'spinner';
+
+/**
+ * Restore the saved animation choice from localStorage and sync the picker UI.
+ * Called once during DOMContentLoaded (after initLocale).
+ */
+function initRunAnimation() {
+  let saved = 'spinner';
+  try { saved = localStorage.getItem('pp-run-anim') || 'spinner'; } catch (_) {}
+  _runAnimation = RUN_ANIMATIONS.includes(saved) ? saved : 'spinner';
+  _syncAnimPicker();
+}
+
+/**
+ * Change the active run-button animation and persist the preference.
+ * Called by the inline onclick on each .anim-opt button.
+ */
+function setRunAnimation(anim) {
+  if (!RUN_ANIMATIONS.includes(anim)) return;
+  _runAnimation = anim;
+  try { localStorage.setItem('pp-run-anim', anim); } catch (_) {}
+  _syncAnimPicker();
+}
+
+/** Sync the active highlight on all .anim-opt buttons. */
+function _syncAnimPicker() {
+  document.querySelectorAll('.anim-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.anim === _runAnimation);
+  });
+}
+
+/**
+ * Return the innerHTML to inject into #run-btn while a diagnostic is running.
+ * The markup varies by the currently selected animation.
+ */
+function getRunningHTML() {
+  switch (_runAnimation) {
+    case 'pulse': return '<span class="anim-pulse"></span>';
+    case 'dots':  return '<span class="anim-dots"><span></span><span></span><span></span></span>';
+    case 'wave':  return '<span class="anim-wave"><span></span><span></span><span></span><span></span></span>';
+    default:      return '<span class="spinner"></span>'; // 'spinner'
+  }
+}
+
 // ── Theme management ──────────────────────────────────────────────────────
 /**
  * All valid theme IDs. The CSS file drives the actual appearance; adding a
@@ -158,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
+  initRunAnimation(); // restore saved run-button animation choice
 });
 
 // ── Advanced-options animated expand/collapse ────────────────────────────────
@@ -502,10 +554,23 @@ function onTargetChange() {
 }
 
 // ── Request building ──────────────────────────────────────────────────────
+
+/**
+ * Parse a Go duration string (e.g. "30s", "2m") into whole seconds.
+ * Returns the defaultSec fallback when the string is empty or unparseable.
+ */
+function parseTimeoutSec(s, defaultSec) {
+  if (!s) return defaultSec;
+  const m = s.match(/^(\d+(?:\.\d+)?)(s|m)$/);
+  if (!m) return defaultSec;
+  const v = parseFloat(m[1]);
+  return m[2] === 'm' ? v * 60 : v;
+}
+
 function buildRequest() {
   const target   = val('target');
   const mtrCount = Math.max(1, parseInt(val('mtr-count'), 10) || 5);
-  const timeout  = val('diag-timeout') || '30s';
+  let   timeout  = val('diag-timeout') || '30s';
   const insecure = checked('insecure');
   const ports    = val('ports')
     .split(',')
@@ -526,6 +591,17 @@ function buildRequest() {
     case 'ftp':  Object.assign(opts, { ftp:  buildFTPOpts()  }); break;
     case 'sftp': Object.assign(opts, { sftp: buildSFTPOpts() }); break;
     // imap / pop: no protocol-specific options beyond net
+  }
+
+  // For Route Trace, ensure the request timeout covers the worst-case probe
+  // time: maxHops × mtrCount × 2 s (backend hopTimeout) + 15 s buffer.
+  // This prevents spurious "context deadline exceeded" errors on slow paths.
+  if (target === 'web' && getModeFor('web') === 'traceroute') {
+    const maxHops = parseInt(val('traceroute-max-hops'), 10) || 30;
+    const minSec = maxHops * mtrCount * 2 + 15;
+    if (parseTimeoutSec(opts.timeout, 30) < minSec) {
+      opts.timeout = minSec + 's';
+    }
   }
 
   return { target, options: opts };
@@ -589,7 +665,7 @@ async function runDiag() {
   const progressEl = document.getElementById('progress-log');
 
   btn.disabled   = true;
-  btn.innerHTML  = '<span class="spinner"></span>' + esc(t('btn-running'));
+  btn.innerHTML  = getRunningHTML();
   errorEl.hidden = true;
   resultEl.hidden = true;
   if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
@@ -691,9 +767,35 @@ async function fetchVersion() {
 }
 
 function showError(msg) {
-  const el   = document.getElementById('error-banner');
-  el.textContent = '\u26a0  ' + msg;
-  el.hidden  = false;
+  const banner = document.getElementById('error-banner');
+  const textEl = document.getElementById('error-text');
+  const friendly = localizeError(msg);
+  if (textEl) {
+    textEl.textContent = friendly;
+  } else {
+    // Fallback for layouts where error-text span is absent.
+    banner.textContent = '\u26a0  ' + friendly;
+  }
+  banner.hidden = false;
+}
+
+/**
+ * Map a raw server error string (possibly English Go internals) to a
+ * localised, user-friendly description using i18n keys.
+ * Preserves the diagnostic-error prefix for unrecognised messages.
+ */
+function localizeError(msg) {
+  if (!msg) return t('err-unknown');
+  const lower = msg.toLowerCase();
+  if (lower.includes('timed out') || lower.includes('deadline exceeded')) {
+    return t('err-timeout');
+  }
+  if (lower.includes('no runner registered') || lower.includes('no handler registered')) {
+    return t('err-no-runner');
+  }
+  // Strip the "diagnostic error: " prefix for cleaner display when no
+  // specific i18n key matches.
+  return msg.replace(/^diagnostic error:\s*/i, '');
 }
 
 // ── Report rendering ──────────────────────────────────────────────────────

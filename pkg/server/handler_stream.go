@@ -77,7 +77,7 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	diagReport := &diag.DiagReport{Target: target, Host: opts.Net.Host}
 
-	timeout := parseDiagTimeout(req.Options.Timeout)
+	timeout := ensureTracerouteTimeout(parseDiagTimeout(req.Options.Timeout), opts)
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
@@ -97,8 +97,12 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeSSEError(w, flusher, "no runner registered for target: "+req.Target)
 			return
 		}
-		h.logger.Warn("streaming diagnostic failed", "target", target, "error", err)
-		writeSSEError(w, flusher, "diagnostic error: "+err.Error())
+		h.logger.Warn("streaming diagnostic failed",
+			"target", target,
+			"host", opts.Net.Host,
+			"mode", string(opts.Web.Mode),
+			"error", err)
+		writeSSEError(w, flusher, fmtDiagError(err, opts))
 		return
 	}
 

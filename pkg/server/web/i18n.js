@@ -83,6 +83,18 @@ window.LOCALES = {
     'btn-run':               '▶',
     'btn-running':           '',
 
+    /* ── Run animation picker ─────────────────────────────────────────── */
+    'anim-picker-label':     'Button animation style',
+    'anim-spinner':          'Spinner',
+    'anim-pulse':            'Pulse',
+    'anim-dots':             'Dots',
+    'anim-wave':             'Wave',
+
+    /* ── Error messages (UI-friendly versions of backend errors) ─────── */
+    'err-timeout':           'Diagnostic timed out — the operation exceeded the configured timeout. For Route Trace, try increasing Timeout in Advanced Options or reducing Max Hops.',
+    'err-no-runner':         'No handler registered for this diagnostic target.',
+    'err-unknown':           'An unknown error occurred. Please try again.',
+
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         'Results',
     'history-title':         'History',
@@ -239,6 +251,18 @@ window.LOCALES = {
     /* ── Run button ───────────────────────────────────────────────────── */
     'btn-run':               '▶',
     'btn-running':           '',
+
+    /* ── Run animation picker ─────────────────────────────────────────── */
+    'anim-picker-label':     '按鈕動畫樣式',
+    'anim-spinner':          '旋轉圓圈',
+    'anim-pulse':            '脈衝',
+    'anim-dots':             '跳動點',
+    'anim-wave':             '波浪條',
+
+    /* ── Error messages (UI-friendly versions of backend errors) ─────── */
+    'err-timeout':           '診斷逾時 — 操作超過設定的等待時間。若使用路由追蹤，請嘗試在進階選項中增加逾時時間，或縮短最大躍點數。',
+    'err-no-runner':         '找不到此診斷目標所對應的處理器。',
+    'err-unknown':           '發生未知錯誤，請重試。',
 
     /* ── Results & history ────────────────────────────────────────────── */
     'results-title':         '結果',
