@@ -245,3 +245,123 @@ func TestHTMLWriterWriteFile(t *testing.T) {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 }
+
+// --- Route in Build ----------------------------------------------------------
+
+// buildRouteResult constructs a simple 4-hop RouteResult for testing.
+// Hop 3 intentionally has an empty IP to simulate a non-responding router.
+func buildRouteResult() *netprobe.RouteResult {
+	return &netprobe.RouteResult{
+		Hops: []netprobe.HopResult{
+			{TTL: 1, IP: "192.168.1.1", Hostname: "gateway.local",
+				Stats: netprobe.ProbeStats{Sent: 3, Received: 3, AvgRTT: 2 * time.Millisecond}},
+			{TTL: 2, IP: "10.0.0.1", Hostname: "",
+				Stats: netprobe.ProbeStats{Sent: 3, Received: 3, AvgRTT: 8 * time.Millisecond}},
+			{TTL: 3, IP: "", Hostname: "",
+				Stats: netprobe.ProbeStats{Sent: 3, Received: 0, LossPct: 100}},
+			{TTL: 4, IP: "93.184.216.34", Hostname: "example.com",
+				Stats: netprobe.ProbeStats{Sent: 3, Received: 2, LossPct: 33.3, AvgRTT: 50 * time.Millisecond}},
+		},
+	}
+}
+
+func TestBuildRouteHopsCount(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar, err := report.Build(context.Background(), dr, geo.NoopLocator{})
+	if err != nil {
+		t.Fatalf("Build error: %v", err)
+	}
+	if len(ar.Route) != 4 {
+		t.Fatalf("expected 4 route hops, got %d", len(ar.Route))
+	}
+}
+
+func TestBuildRouteTTLOrdering(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar := buildAnnotated(t, dr)
+
+	for i, hop := range ar.Route {
+		if hop.TTL != i+1 {
+			t.Errorf("hop %d: expected TTL=%d, got %d", i, i+1, hop.TTL)
+		}
+	}
+}
+
+func TestBuildRouteTimedOutHop(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar := buildAnnotated(t, dr)
+
+	timedOut := ar.Route[2] // TTL=3, IP=""
+	if timedOut.IP != "" {
+		t.Fatalf("expected empty IP for timed-out hop, got %q", timedOut.IP)
+	}
+	if timedOut.HasGeo {
+		t.Fatal("timed-out hop should have HasGeo=false")
+	}
+	if timedOut.ASN != 0 {
+		t.Fatalf("timed-out hop should have ASN=0, got %d", timedOut.ASN)
+	}
+	if timedOut.LossPct != 100 {
+		t.Fatalf("expected 100%% loss for timed-out hop, got %.1f%%", timedOut.LossPct)
+	}
+}
+
+func TestBuildRouteHopFields(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar := buildAnnotated(t, dr)
+
+	h1 := ar.Route[0] // TTL=1, gateway.local
+	if h1.IP != "192.168.1.1" {
+		t.Fatalf("expected IP '192.168.1.1', got %q", h1.IP)
+	}
+	if h1.Hostname != "gateway.local" {
+		t.Fatalf("expected Hostname 'gateway.local', got %q", h1.Hostname)
+	}
+	if h1.AvgRTT == "" || h1.AvgRTT == "—" {
+		t.Fatalf("expected non-empty AvgRTT for hop with RTT, got %q", h1.AvgRTT)
+	}
+
+	h4 := ar.Route[3] // TTL=4, 33.3% loss
+	if h4.LossPct != 33.3 {
+		t.Fatalf("expected LossPct=33.3, got %.1f", h4.LossPct)
+	}
+}
+
+func TestBuildRouteNilRouteMeansEmptySlice(t *testing.T) {
+	dr := buildSampleDiagReport()
+	// dr.Route is nil by default — no SetRoute called.
+
+	ar := buildAnnotated(t, dr)
+
+	if ar.Route != nil {
+		t.Fatalf("expected nil Route slice when DiagReport.Route is nil, got %v", ar.Route)
+	}
+}
+
+func TestBuildRouteWithNilLocator(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar, err := report.Build(context.Background(), dr, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Hops must still be populated even without a locator.
+	if len(ar.Route) != 4 {
+		t.Fatalf("expected 4 hops with nil locator, got %d", len(ar.Route))
+	}
+	// Geo fields must be empty.
+	for _, hop := range ar.Route {
+		if hop.HasGeo {
+			t.Fatalf("expected HasGeo=false with nil locator, hop TTL=%d", hop.TTL)
+		}
+	}
+}

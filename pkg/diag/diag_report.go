@@ -15,6 +15,10 @@ type DiagReport struct {
 
 	// Protos holds protocol-level probe results from each protocol runner.
 	Protos []ProtoResult
+
+	// Route holds the network path discovered by a traceroute probe.
+	// Nil means no traceroute was performed during this diagnostic run.
+	Route *netprobe.RouteResult
 }
 
 // ProtoResult captures the outcome of a single protocol probe attempt.
@@ -45,5 +49,12 @@ func (r *DiagReport) SetPublicIP(ip string) {
 func (r *DiagReport) AddPorts(results []netprobe.PortProbeResult) {
 	if r != nil {
 		r.Ports = append(r.Ports, results...)
+	}
+}
+
+// SetRoute stores the traceroute result.  It is nil-safe.
+func (r *DiagReport) SetRoute(result *netprobe.RouteResult) {
+	if r != nil {
+		r.Route = result
 	}
 }

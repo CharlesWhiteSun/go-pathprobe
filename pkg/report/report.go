@@ -53,6 +53,22 @@ type ProtoEntry struct {
 	Summary  string
 }
 
+// HopEntry is a flat, geo-annotated view of a single traceroute hop.
+// IP is empty when the hop timed out ("???"); in that case all geo fields
+// are also empty.
+type HopEntry struct {
+	TTL      int
+	IP       string
+	Hostname string
+	ASN      uint
+	Country  string
+	AvgRTT   string
+	LossPct  float64
+	HasGeo   bool
+	Lat      float64
+	Lon      float64
+}
+
 // AnnotatedReport is a DiagReport enriched with geo information.
 type AnnotatedReport struct {
 	Target      string
@@ -64,6 +80,7 @@ type AnnotatedReport struct {
 
 	Ports  []PortEntry
 	Protos []ProtoEntry
+	Route  []HopEntry
 }
 
 // fmtDur formats a duration for display, showing "—" for zero values.
@@ -103,6 +120,30 @@ func toGeoAnnotation(info geo.GeoInfo) GeoAnnotation {
 	}
 }
 
+// toHopEntry converts a single netprobe.HopResult into a geo-annotated HopEntry.
+// If loc is nil or hop.IP is empty (timed-out hop), geo fields are left at zero values.
+func toHopEntry(hop netprobe.HopResult, loc geo.Locator) HopEntry {
+	entry := HopEntry{
+		TTL:      hop.TTL,
+		IP:       hop.IP,
+		Hostname: hop.Hostname,
+		AvgRTT:   fmtDur(hop.Stats.AvgRTT),
+		LossPct:  hop.Stats.LossPct,
+	}
+	if hop.IP == "" || loc == nil {
+		return entry
+	}
+	info, err := loc.LocateIP(hop.IP)
+	if err == nil {
+		entry.ASN = info.ASN
+		entry.Country = info.CountryCode
+		entry.HasGeo = info.HasLocation
+		entry.Lat = info.Lat
+		entry.Lon = info.Lon
+	}
+	return entry
+}
+
 // resolveTargetIP resolves the first IP for host (which may itself be an IP).
 func resolveTargetIP(host string) string {
 	if ip := net.ParseIP(host); ip != nil {
@@ -136,6 +177,13 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.Locator) (*Annotate
 			OK:       p.OK,
 			Summary:  p.Summary,
 		})
+	}
+
+	// Process route hops (geo annotation applied below if loc != nil).
+	if dr.Route != nil {
+		for _, hop := range dr.Route.Hops {
+			ar.Route = append(ar.Route, toHopEntry(hop, loc))
+		}
 	}
 
 	if loc == nil {
