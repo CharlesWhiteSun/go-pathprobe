@@ -2294,12 +2294,11 @@ func TestStaticI18n_RouteSectionKeys(t *testing.T) {
 	}
 }
 
-// ── New animation & error-message tests (Phase feature updates) ───────────
+// ── animation & error-message tests ──────────────────────────────────────
 
-// TestStaticCSS_RunAnimations verifies that style.css defines all four
-// run-button animation classes and their associated @keyframes so the picker
-// UI can switch between them without layout shift.
-func TestStaticCSS_RunAnimations(t *testing.T) {
+// TestStaticCSS_RunAnimation verifies that style.css defines the dots
+// run-button animation class and its associated @keyframes.
+func TestStaticCSS_RunAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
@@ -2308,23 +2307,33 @@ func TestStaticCSS_RunAnimations(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// All four animation CSS classes must be present.
-	for _, cls := range []string{".spinner", ".anim-pulse", ".anim-dots", ".anim-wave"} {
-		if !strings.Contains(body, cls) {
-			t.Errorf("style.css: animation class %q must be defined", cls)
-		}
+	// Dots animation must be defined (used as the run-button loading state).
+	if !strings.Contains(body, ".anim-dots") {
+		t.Error("style.css: .anim-dots animation class must be defined")
 	}
-	// All four @keyframes must be declared.
-	for _, kf := range []string{"@keyframes spin", "@keyframes anim-pulse-ring", "@keyframes anim-dots-bounce", "@keyframes anim-wave-bar"} {
-		if !strings.Contains(body, kf) {
-			t.Errorf("style.css: %q must be declared for the animation to run", kf)
+	if !strings.Contains(body, "@keyframes anim-dots-bounce") {
+		t.Error("style.css: @keyframes anim-dots-bounce must be declared")
+	}
+	// Spinner must also be present (used elsewhere in the UI).
+	if !strings.Contains(body, ".spinner") {
+		t.Error("style.css: .spinner class must be defined")
+	}
+	if !strings.Contains(body, "@keyframes spin") {
+		t.Error("style.css: @keyframes spin must be declared")
+	}
+	// The temporary animation picker and its removed sibling animations must
+	// no longer exist in the stylesheet.
+	for _, removed := range []string{".anim-picker", ".anim-opt", ".anim-pulse", ".anim-wave"} {
+		if strings.Contains(body, removed) {
+			t.Errorf("style.css: removed animation/picker rule %q must not be present", removed)
 		}
 	}
 }
 
-// TestStaticCSS_AnimPicker verifies that style.css defines the animation
-// picker strip component rules (.anim-picker, .anim-opt, .anim-opt.active).
-func TestStaticCSS_AnimPicker(t *testing.T) {
+// TestStaticCSS_AutofillTheme verifies that style.css overrides the browser
+// autofill background colour so the site theme is preserved when the browser
+// fills in a previously entered value for the target-host input.
+func TestStaticCSS_AutofillTheme(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
@@ -2333,52 +2342,24 @@ func TestStaticCSS_AnimPicker(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	for _, rule := range []string{".anim-picker", ".anim-opt", ".anim-opt.active"} {
-		if !strings.Contains(body, rule) {
-			t.Errorf("style.css: %s rule must be defined for the animation picker", rule)
-		}
+	if !strings.Contains(body, ":-webkit-autofill") {
+		t.Error("style.css: :-webkit-autofill rules must be present to prevent browser autofill overriding the theme background")
+	}
+	// The override must use a box-shadow inset trick (the only cross-browser
+	// approach that defeats the UA fill colour without disabling autofill).
+	if !strings.Contains(body, "inset !important") {
+		t.Error("style.css: autofill override must use 'inset !important' box-shadow technique")
+	}
+	// Text colour must also be explicitly restored.
+	if !strings.Contains(body, "-webkit-text-fill-color") {
+		t.Error("style.css: autofill override must set -webkit-text-fill-color to restore text colour")
 	}
 }
 
-// TestStaticHTML_AnimPickerPresent verifies that index.html contains the
-// animation picker strip next to the run button inside .form-actions, and that
-// all four .anim-opt buttons with their data-anim attributes are present.
-func TestStaticHTML_AnimPickerPresent(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /: want 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-
-	// Picker container must be present.
-	if !strings.Contains(body, `id="anim-picker"`) {
-		t.Error("index.html: #anim-picker must be present in .form-actions")
-	}
-
-	// All four animation choices must be offered.
-	for _, anim := range []string{"spinner", "pulse", "dots", "wave"} {
-		want := `data-anim="` + anim + `"`
-		if !strings.Contains(body, want) {
-			t.Errorf("index.html: anim-picker must contain %s button", want)
-		}
-	}
-
-	// Picker must appear inside .form-actions (before #run-btn).
-	pickerIdx := strings.Index(body, `id="anim-picker"`)
-	runBtnIdx := strings.Index(body, `id="run-btn"`)
-	if pickerIdx == -1 || runBtnIdx == -1 {
-		t.Fatal("index.html: #anim-picker or #run-btn is missing")
-	}
-	if pickerIdx > runBtnIdx {
-		t.Error("index.html: #anim-picker must appear before #run-btn in source order")
-	}
-}
-
-// TestStaticJS_AnimationSystem verifies that app.js declares the animation
-// management functions required by the run-button picker feature.
-func TestStaticJS_AnimationSystem(t *testing.T) {
+// TestStaticJS_DotsRunAnimation verifies that app.js always injects the
+// dots animation markup into #run-btn and that the picker system has been
+// removed in favour of the fixed dots choice.
+func TestStaticJS_DotsRunAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
@@ -2387,24 +2368,43 @@ func TestStaticJS_AnimationSystem(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// Core animation management functions.
-	for _, fn := range []string{"initRunAnimation", "setRunAnimation", "getRunningHTML"} {
-		if !strings.Contains(body, fn) {
-			t.Errorf("app.js: %s function must be defined", fn)
+	// getRunningHTML must exist and emit the dots markup.
+	if !strings.Contains(body, "getRunningHTML") {
+		t.Error("app.js: getRunningHTML must be defined")
+	}
+	if !strings.Contains(body, "anim-dots") {
+		t.Error("app.js: getRunningHTML must return anim-dots markup")
+	}
+	// Picker management functions must have been removed.
+	for _, removed := range []string{"RUN_ANIMATIONS", "initRunAnimation", "setRunAnimation", "_syncAnimPicker"} {
+		if strings.Contains(body, removed) {
+			t.Errorf("app.js: removed animation picker symbol %q must not be present", removed)
 		}
 	}
-	// RUN_ANIMATIONS constant must list all four variants.
-	if !strings.Contains(body, "RUN_ANIMATIONS") {
-		t.Error("app.js: RUN_ANIMATIONS constant must be declared")
+	// picker HTML must not be present.
+	if strings.Contains(body, "id=\"anim-picker\"") {
+		t.Error("index.html: #anim-picker must have been removed")
 	}
-	for _, anim := range []string{"'spinner'", "'pulse'", "'dots'", "'wave'"} {
-		if !strings.Contains(body, anim) {
-			t.Errorf("app.js: RUN_ANIMATIONS must include %s", anim)
-		}
+}
+
+// TestStaticJS_ErrorClearsProgressLog verifies that app.js clears and hides
+// the progress log both on SSE error events and on network-level failures, so
+// partial traceroute output does not remain visible below the error banner.
+func TestStaticJS_ErrorClearsProgressLog(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
 	}
-	// localStorage key must use the pp- prefix for namespacing.
-	if !strings.Contains(body, "pp-run-anim") {
-		t.Error("app.js: animation preference must be stored under 'pp-run-anim' key in localStorage")
+	body := rec.Body.String()
+
+	// Both the catch block and the SSE error handler must clear innerHTML.
+	// We verify by counting occurrences of the clear pattern.
+	clearPattern := "progressEl.innerHTML = ''"
+	count := strings.Count(body, clearPattern)
+	if count < 2 {
+		t.Errorf("app.js: progressEl.innerHTML='' must appear in both the catch block and the SSE error handler; found %d occurrence(s)", count)
 	}
 }
 
@@ -2478,28 +2478,6 @@ func TestStaticI18n_ErrorMessageKeys(t *testing.T) {
 	// zh-TW locale must carry a Chinese timeout message.
 	if !strings.Contains(body, "診斷逾時") {
 		t.Error("i18n.js zh-TW: err-timeout must contain '診斷逾時'")
-	}
-}
-
-// TestStaticI18n_AnimPickerKeys verifies that the embedded i18n.js contains
-// animation picker label keys in both locales for accessible button titles.
-func TestStaticI18n_AnimPickerKeys(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-
-	for _, key := range []string{"'anim-picker-label'", "'anim-spinner'", "'anim-pulse'", "'anim-dots'", "'anim-wave'"} {
-		if !strings.Contains(body, key) {
-			t.Errorf("i18n.js: missing animation picker key %s", key)
-		}
-	}
-	// zh-TW locale must provide Chinese labels.
-	if !strings.Contains(body, "旋轉圓圈") {
-		t.Error("i18n.js zh-TW: anim-spinner must contain '旋轉圓圈'")
 	}
 }
 

@@ -95,55 +95,13 @@ function initLocale() {
   applyLocale();
 }
 
-// ── Run-button animation management ──────────────────────────────────────
-/**
- * Available animation IDs for the run-button's loading state.
- * Each maps to CSS class(es) rendered by getRunningHTML().
- */
-const RUN_ANIMATIONS = ['spinner', 'pulse', 'dots', 'wave'];
-
-let _runAnimation = 'spinner';
-
-/**
- * Restore the saved animation choice from localStorage and sync the picker UI.
- * Called once during DOMContentLoaded (after initLocale).
- */
-function initRunAnimation() {
-  let saved = 'spinner';
-  try { saved = localStorage.getItem('pp-run-anim') || 'spinner'; } catch (_) {}
-  _runAnimation = RUN_ANIMATIONS.includes(saved) ? saved : 'spinner';
-  _syncAnimPicker();
-}
-
-/**
- * Change the active run-button animation and persist the preference.
- * Called by the inline onclick on each .anim-opt button.
- */
-function setRunAnimation(anim) {
-  if (!RUN_ANIMATIONS.includes(anim)) return;
-  _runAnimation = anim;
-  try { localStorage.setItem('pp-run-anim', anim); } catch (_) {}
-  _syncAnimPicker();
-}
-
-/** Sync the active highlight on all .anim-opt buttons. */
-function _syncAnimPicker() {
-  document.querySelectorAll('.anim-opt').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.anim === _runAnimation);
-  });
-}
-
+// ── Run-button animation ───────────────────────────────────────────────────
 /**
  * Return the innerHTML to inject into #run-btn while a diagnostic is running.
- * The markup varies by the currently selected animation.
+ * Uses the dots animation (three bouncing dots).
  */
 function getRunningHTML() {
-  switch (_runAnimation) {
-    case 'pulse': return '<span class="anim-pulse"></span>';
-    case 'dots':  return '<span class="anim-dots"><span></span><span></span><span></span></span>';
-    case 'wave':  return '<span class="anim-wave"><span></span><span></span><span></span><span></span></span>';
-    default:      return '<span class="spinner"></span>'; // 'spinner'
-  }
+  return '<span class="anim-dots"><span></span><span></span><span></span></span>';
 }
 
 // ── Theme management ──────────────────────────────────────────────────────
@@ -209,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
-  initRunAnimation(); // restore saved run-button animation choice
 });
 
 // ── Advanced-options animated expand/collapse ────────────────────────────────
@@ -710,6 +667,9 @@ async function runDiag() {
     if (buffer.trim()) handleSSEMessage(buffer, progressEl, resultEl);
 
   } catch (err) {
+    // Hide and clear the progress log so stale partial output does not linger
+    // below the error banner after a network-level failure.
+    if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
     showError('Request failed: ' + err.message);
   } finally {
     btn.disabled  = false;
@@ -739,7 +699,8 @@ function handleSSEMessage(raw, progressEl, resultEl) {
     resultEl.hidden = false;
     resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else if (evtName === 'error') {
-    if (progressEl) progressEl.hidden = true;
+    // Clear and hide the progress log so no partial output remains visible.
+    if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
     showError(payload.error || 'diagnostic error');
   }
 }
