@@ -3128,10 +3128,10 @@ func TestStaticJS_TileLayerConfigs(t *testing.T) {
 	if !strings.Contains(body, "carto.com/attributions") {
 		t.Error("app.js: CARTO attribution URL must be present in TILE_LAYER_CONFIGS")
 	}
-	// Raw OSM tile URL must not be used directly by renderMap (it is replaced by CARTO).
-	tileIdx := strings.Index(body, "tile.openstreetmap.org")
-	if tileIdx != -1 {
-		t.Error("app.js: raw OSM tile URL must not be used — use TILE_LAYER_CONFIGS instead")
+	// OSM is now a supported variant inside TILE_LAYER_CONFIGS; its URL is data-driven
+	// and must appear inside that config block, not hardcoded in renderMap.
+	if !strings.Contains(body, "tile.openstreetmap.org") {
+		t.Error("app.js: tile.openstreetmap.org URL must appear in TILE_LAYER_CONFIGS as the osm variant")
 	}
 }
 
@@ -3180,8 +3180,10 @@ func TestStaticJS_GetMapTileVariant(t *testing.T) {
 }
 
 // TestStaticJS_RefreshMapTiles verifies that app.js exposes a named
-// refreshMapTiles() function that swaps the tile layer on the live map.
-// This is what applyTheme() calls to update tiles without rebuilding the map.
+// refreshMapTiles() function that swaps the tile layer on the live map
+// with a fade-out/fade-in animation.  It is called only from
+// setMapTileVariant() (user-driven tile changes).  Theme-triggered tile swaps
+// are handled silently by syncMapTileVariantToTheme().
 func TestStaticJS_RefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
@@ -3196,9 +3198,10 @@ func TestStaticJS_RefreshMapTiles(t *testing.T) {
 	}
 }
 
-// TestStaticJS_ApplyThemeCallsRefreshMapTiles verifies that applyTheme() calls
-// refreshMapTiles() so the tile layer updates in real-time when the user
-// switches the colour theme while a map is visible.
+// TestStaticJS_ApplyThemeCallsRefreshMapTiles verifies that applyTheme() ensures
+// map tiles are refreshed when the colour theme changes.  The function may do
+// this directly (refreshMapTiles()) or via syncMapTileVariantToTheme(), which
+// itself calls refreshMapTiles() internally.
 func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
@@ -3225,7 +3228,1015 @@ func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 		fnBody = body[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "refreshMapTiles()") {
-		t.Error("app.js: applyTheme must call refreshMapTiles() so tile layer updates on theme change")
+	// applyTheme must trigger a tile refresh either directly or via syncMapTileVariantToTheme.
+	if !strings.Contains(fnBody, "refreshMapTiles()") && !strings.Contains(fnBody, "syncMapTileVariantToTheme(") {
+		t.Error("app.js: applyTheme must call refreshMapTiles() or syncMapTileVariantToTheme() so tile layer updates on theme change")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 fix tests — theme fade / input colour / map-bar visibility / tile swap
+// ---------------------------------------------------------------------------
+
+// TestStaticCSS_BodyIncludesOpacityTransition verifies that the theme-fade
+// opacity transition is applied to .main (not body) so that applyTheme()'s
+// transitionend listener fires correctly when only the main content area fades.
+// The body rule itself must NOT carry opacity, since header and footer must
+// remain visible during theme switches and use their own colour transitions.
+func TestStaticCSS_BodyIncludesOpacityTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	// .main must include an opacity transition so body.theme-transitioning .main
+	// triggers a CSS transition (and thus fires transitionend on the element).
+	mainIdx := strings.Index(css, ".main {")
+	if mainIdx == -1 {
+		t.Fatal("style.css: .main rule not found")
+	}
+	endIdx := strings.Index(css[mainIdx:], "}")
+	if endIdx == -1 {
+		t.Fatal("style.css: .main rule closing brace not found")
+	}
+	mainBlock := css[mainIdx : mainIdx+endIdx+1]
+	if !strings.Contains(mainBlock, "opacity") {
+		t.Error("style.css: .main transition must include 'opacity' so theme-transitioning fade works (transitionend fires on .main)")
+	}
+}
+
+// TestStaticCSS_InputBaseCaretColor verifies that the base input rule (outside
+// of the :-webkit-autofill override) explicitly sets caret-color so the text
+// insertion cursor stays theme-coloured even in dark themes.
+func TestStaticCSS_InputBaseCaretColor(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	autofillIdx := strings.Index(css, ":-webkit-autofill")
+	if autofillIdx == -1 {
+		t.Fatal("style.css: :-webkit-autofill rule not found")
+	}
+	// caret-color must appear BEFORE the autofill override so we know it is in
+	// the base input rule, not only as part of the autofill emergency patch.
+	beforeAutofill := css[:autofillIdx]
+	if !strings.Contains(beforeAutofill, "caret-color: var(--text)") {
+		t.Error("style.css: base input rule must set caret-color: var(--text) — not only in the autofill override — to keep the cursor visible in dark themes")
+	}
+}
+
+// TestStaticCSS_InputBaseTextFillColor verifies that the base input rule sets
+// -webkit-text-fill-color so dark-theme text remains readable when the browser
+// applies autocomplete suggestion overlay styles.
+func TestStaticCSS_InputBaseTextFillColor(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	autofillIdx := strings.Index(css, ":-webkit-autofill")
+	if autofillIdx == -1 {
+		t.Fatal("style.css: :-webkit-autofill rule not found")
+	}
+	beforeAutofill := css[:autofillIdx]
+	if !strings.Contains(beforeAutofill, "-webkit-text-fill-color: var(--text)") {
+		t.Error("style.css: base input rule must set -webkit-text-fill-color: var(--text) to prevent dark-theme text appearing black")
+	}
+}
+
+// TestStaticCSS_RadiusTokenDefined verifies that --radius is defined in :root
+// so all component rules that use var(--radius) resolve to a valid value.
+// A missing token causes silent fallback to 'initial' (no border-radius).
+func TestStaticCSS_RadiusTokenDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	// --radius must be assigned inside :root.
+	rootStart := strings.Index(css, ":root {")
+	if rootStart == -1 {
+		t.Fatal("style.css: :root block not found")
+	}
+	rootEnd := strings.Index(css[rootStart:], "\n}")
+	if rootEnd == -1 {
+		t.Fatal("style.css: :root closing brace not found")
+	}
+	rootBlock := css[rootStart : rootStart+rootEnd]
+	if !strings.Contains(rootBlock, "--radius") {
+		t.Error("style.css: --radius must be defined inside :root so var(--radius) components resolve correctly")
+	}
+}
+
+// TestStaticJS_ApplyThemeFiltersOpacityEvent verifies that applyTheme() uses
+// e.propertyName to guard the transitionend handler so only the body's own
+// opacity transition — not background/color transitions or bubbling child
+// events — triggers the theme swap.
+func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function applyTheme(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyTheme function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1200
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "propertyName") {
+		t.Error("app.js: applyTheme transitionend handler must check e.propertyName to filter the correct transition event")
+	}
+	if !strings.Contains(fnBody, "'opacity'") {
+		t.Error("app.js: applyTheme must guard transitionend with e.propertyName === 'opacity'")
+	}
+}
+
+// TestStaticJS_MapBarHiddenToggled verifies that renderMap() removes the hidden
+// attribute from #geo-map-outer when the map is shown and sets it when hidden,
+// so the tile-variant selector bar (inside the outer wrapper) is visible exactly
+// when the map is visible.
+func TestStaticJS_MapBarHiddenToggled(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMap function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 3000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Both show and hide paths must reference the outer wrapper element and toggle hidden.
+	if !strings.Contains(fnBody, "geo-map-outer") {
+		t.Error("app.js: renderMap must reference geo-map-outer to toggle its visibility")
+	}
+	if !strings.Contains(fnBody, "hidden = false") && !strings.Contains(fnBody, "removeAttribute('hidden')") {
+		t.Error("app.js: renderMap must reveal #geo-map-outer (hidden = false) when map is shown")
+	}
+	if !strings.Contains(fnBody, "hidden = true") && !strings.Contains(fnBody, "setAttribute('hidden'") {
+		t.Error("app.js: renderMap must hide #geo-map-outer (hidden = true) when map is hidden")
+	}
+}
+
+// TestStaticJS_RefreshMapTilesRequestAnimationFrame verifies that the updated
+// refreshMapTiles() uses requestAnimationFrame to remove the fading class after
+// the tile swap, rather than registering a second transitionend listener that
+// would never fire (since removing the class triggers the transition, not ends it).
+func TestStaticJS_RefreshMapTilesRequestAnimationFrame(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function refreshMapTiles(")
+	if fnStart == -1 {
+		t.Fatal("app.js: refreshMapTiles function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "requestAnimationFrame") {
+		t.Error("app.js: refreshMapTiles must use requestAnimationFrame to remove geo-map--fading after tile swap")
+	}
+	if !strings.Contains(fnBody, "propertyName") {
+		t.Error("app.js: refreshMapTiles transitionend handler must filter by e.propertyName to avoid acting on bubbling child events")
+	}
+}
+
+// TestStaticJS_SyncMapTileVariantNoFadeAnimation verifies that
+// syncMapTileVariantToTheme() does NOT call refreshMapTiles(), ensuring the
+// theme-driven tile swap is always silent (no map fade animation).  The fade
+// would be redundant because the body is already invisible during a theme
+// transition, and the second transitionend listener in the old refreshMapTiles
+// would leave geo-map--fading stuck permanently.
+func TestStaticJS_SyncMapTileVariantNoFadeAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function syncMapTileVariantToTheme(")
+	if fnStart == -1 {
+		t.Fatal("app.js: syncMapTileVariantToTheme function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Must NOT delegate to animated refreshMapTiles — silent swap only.
+	if strings.Contains(fnBody, "refreshMapTiles()") {
+		t.Error("app.js: syncMapTileVariantToTheme must NOT call refreshMapTiles() — tile swap must be silent during theme transitions")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — theme-fade / map-tile-bar tests
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_MapThemeToTileVariant verifies that app.js declares
+// MAP_THEME_TO_TILE_VARIANT mapping all five supported theme IDs to either
+// 'light' or 'dark', providing the default tile variant for each theme.
+func TestStaticJS_MapThemeToTileVariant(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MAP_THEME_TO_TILE_VARIANT") {
+		t.Fatal("app.js: MAP_THEME_TO_TILE_VARIANT constant not found")
+	}
+	for _, themeID := range []string{"'default'", "'light-green'", "'deep-blue'", "'forest-green'", "'dark'"} {
+		if !strings.Contains(body, themeID) {
+			t.Errorf("app.js: MAP_THEME_TO_TILE_VARIANT must include theme %s", themeID)
+		}
+	}
+}
+
+// TestStaticJS_MapTileVariants verifies that MAP_TILE_VARIANTS is declared in
+// app.js as an ordered array containing all three supported tile variants.
+func TestStaticJS_MapTileVariants(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MAP_TILE_VARIANTS") {
+		t.Fatal("app.js: MAP_TILE_VARIANTS constant not found")
+	}
+	// All three variants must be listed.
+	for _, v := range []string{"'light'", "'osm'", "'dark'"} {
+		if !strings.Contains(body, v) {
+			t.Errorf("app.js: MAP_TILE_VARIANTS must contain variant %s", v)
+		}
+	}
+}
+
+// TestStaticJS_OsmTileInConfigs verifies that the osm tile variant entry in
+// TILE_LAYER_CONFIGS points to tile.openstreetmap.org.
+func TestStaticJS_OsmTileInConfigs(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// 'osm' key must exist as a variant key.
+	if !strings.Contains(body, "osm:") && !strings.Contains(body, "'osm'") {
+		t.Error("app.js: TILE_LAYER_CONFIGS must declare an osm variant")
+	}
+	if !strings.Contains(body, "tile.openstreetmap.org") {
+		t.Error("app.js: osm variant must use tile.openstreetmap.org URL")
+	}
+}
+
+// TestStaticJS_SetMapTileVariant verifies that app.js exposes a named
+// setMapTileVariant() function which is called from the map bar buttons.
+func TestStaticJS_SetMapTileVariant(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function setMapTileVariant(") {
+		t.Error("app.js: setMapTileVariant function not found")
+	}
+}
+
+// TestStaticJS_RenderMapBar verifies that app.js exposes a named renderMapBar()
+// function that builds the three tile-variant buttons above the map.
+func TestStaticJS_RenderMapBar(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function renderMapBar(") {
+		t.Error("app.js: renderMapBar function not found")
+	}
+}
+
+// TestStaticJS_SyncMapTileVariantToTheme verifies that app.js exposes a named
+// syncMapTileVariantToTheme() function which is called by applyTheme() and
+// initTheme() to align the tile variant with the active colour theme.
+func TestStaticJS_SyncMapTileVariantToTheme(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function syncMapTileVariantToTheme(") {
+		t.Error("app.js: syncMapTileVariantToTheme function not found")
+	}
+}
+
+// TestStaticJS_ThemeTransitioning verifies that applyTheme() adds the
+// 'theme-transitioning' class to body to drive the fade-out/in animation.
+func TestStaticJS_ThemeTransitioning(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "theme-transitioning") {
+		t.Error("app.js: 'theme-transitioning' class not found — theme fade animation requires it")
+	}
+	// The class must be both added and removed within applyTheme.
+	fnStart := strings.Index(body, "function applyTheme(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyTheme function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+	if !strings.Contains(fnBody, "theme-transitioning") {
+		t.Error("app.js: applyTheme must reference 'theme-transitioning' class")
+	}
+}
+
+// TestStaticCSS_ThemeTransitioning verifies that style.css defines the
+// body.theme-transitioning rule which snaps opacity to 0 for the theme fade.
+func TestStaticCSS_ThemeTransitioning(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "body.theme-transitioning") {
+		t.Error("style.css: body.theme-transitioning rule not found")
+	}
+	if !strings.Contains(body, "--theme-fade-dur") {
+		t.Error("style.css: --theme-fade-dur CSS custom property not found")
+	}
+}
+
+// TestStaticCSS_GeoMapFading verifies that style.css defines the
+// #geo-map.geo-map--fading rule used during tile-swap fade animation.
+func TestStaticCSS_GeoMapFading(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "geo-map--fading") {
+		t.Error("style.css: geo-map--fading modifier class not found")
+	}
+	if !strings.Contains(body, "--map-fade-dur") {
+		t.Error("style.css: --map-fade-dur CSS custom property not found")
+	}
+}
+
+// TestStaticCSS_MapTileBar verifies that style.css declares the .geo-map-bar
+// and .map-tile-btn rules required for the tile-variant dot selector bar.
+func TestStaticCSS_MapTileBar(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, selector := range []string{".geo-map-bar", ".map-tile-btn", ".map-tile-btn.active"} {
+		if !strings.Contains(body, selector) {
+			t.Errorf("style.css: selector %q not found — map tile bar requires it", selector)
+		}
+	}
+}
+
+// TestStaticHTML_GeoMapBar verifies that index.html contains #geo-map-bar
+// inside a .geo-map-outer wrapper element.
+func TestStaticHTML_GeoMapBar(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="geo-map-bar"`) {
+		t.Error(`index.html: element with id="geo-map-bar" not found`)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 fix-2 tests — color-scheme / dot buttons / overlay wrapper
+// ---------------------------------------------------------------------------
+
+// TestStaticCSS_DarkThemeColorScheme verifies that all three dark themes
+// declare color-scheme: dark so Chrome/Safari use dark-mode form-control
+// rendering and do not revert focused-input text to the UA default (black).
+func TestStaticCSS_DarkThemeColorScheme(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	for _, theme := range []string{"dark", "deep-blue", "forest-green"} {
+		themeIdx := strings.Index(css, `[data-theme="`+theme+`"]`)
+		if themeIdx == -1 {
+			t.Errorf("style.css: [data-theme=%q] block not found", theme)
+			continue
+		}
+		// Find the closing brace of the block (next '}' at column 0).
+		blockEnd := strings.Index(css[themeIdx:], "\n}")
+		if blockEnd == -1 {
+			t.Errorf("style.css: [data-theme=%q] block closing brace not found", theme)
+			continue
+		}
+		block := css[themeIdx : themeIdx+blockEnd]
+		if !strings.Contains(block, "color-scheme: dark") {
+			t.Errorf("style.css: [data-theme=%q] must declare `color-scheme: dark` to fix dark-theme input text color", theme)
+		}
+	}
+}
+
+// TestStaticCSS_RootColorSchemeLight verifies that :root declares
+// color-scheme: light as the baseline so light themes' form controls default
+// to light-mode UA rendering.
+func TestStaticCSS_RootColorSchemeLight(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	rootStart := strings.Index(css, ":root {")
+	if rootStart == -1 {
+		t.Fatal("style.css: :root block not found")
+	}
+	rootEnd := strings.Index(css[rootStart:], "\n}")
+	if rootEnd == -1 {
+		t.Fatal("style.css: :root closing brace not found")
+	}
+	rootBlock := css[rootStart : rootStart+rootEnd]
+	if !strings.Contains(rootBlock, "color-scheme: light") {
+		t.Error("style.css: :root must declare `color-scheme: light` as the default for light themes")
+	}
+}
+
+// TestStaticCSS_MapTileBarOverlay verifies that .geo-map-bar uses
+// position: absolute so it overlays the map instead of sitting above it.
+func TestStaticCSS_MapTileBarOverlay(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	barIdx := strings.Index(css, ".geo-map-bar {")
+	if barIdx == -1 {
+		t.Fatal("style.css: .geo-map-bar rule not found")
+	}
+	blockEnd := strings.Index(css[barIdx:], "\n}")
+	if blockEnd == -1 {
+		t.Fatal("style.css: .geo-map-bar closing brace not found")
+	}
+	block := css[barIdx : barIdx+blockEnd]
+	if !strings.Contains(block, "position: absolute") {
+		t.Error("style.css: .geo-map-bar must use position:absolute to overlay the map")
+	}
+}
+
+// TestStaticCSS_GeoMapOuterRelative verifies that .geo-map-outer has
+// position: relative, providing the positioning context for .geo-map-bar.
+func TestStaticCSS_GeoMapOuterRelative(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	outerIdx := strings.Index(css, ".geo-map-outer {")
+	if outerIdx == -1 {
+		t.Fatal("style.css: .geo-map-outer rule not found")
+	}
+	blockEnd := strings.Index(css[outerIdx:], "\n}")
+	if blockEnd == -1 {
+		t.Fatal("style.css: .geo-map-outer closing brace not found")
+	}
+	block := css[outerIdx : outerIdx+blockEnd]
+	if !strings.Contains(block, "position: relative") {
+		t.Error("style.css: .geo-map-outer must have position:relative to contain absolute .geo-map-bar")
+	}
+}
+
+// TestStaticCSS_MapTileBtnCircle verifies that .map-tile-btn is styled as a
+// circle (border-radius: 50%) matching the .theme-btn visual language.
+func TestStaticCSS_MapTileBtnCircle(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	btnIdx := strings.Index(css, ".map-tile-btn {")
+	if btnIdx == -1 {
+		t.Fatal("style.css: .map-tile-btn rule not found")
+	}
+	blockEnd := strings.Index(css[btnIdx:], "\n}")
+	if blockEnd == -1 {
+		t.Fatal("style.css: .map-tile-btn closing brace not found")
+	}
+	block := css[btnIdx : btnIdx+blockEnd]
+	if !strings.Contains(block, "border-radius: 50%") {
+		t.Error("style.css: .map-tile-btn must use border-radius:50% (circle) to match .theme-btn style")
+	}
+}
+
+// TestStaticCSS_MapTileBtnVariantColors verifies that per-variant colour swatches
+// are declared for all three tile variants (light, osm, dark).
+func TestStaticCSS_MapTileBtnVariantColors(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	for _, variant := range []string{"light", "osm", "dark"} {
+		selector := `.map-tile-btn[data-tile-variant="` + variant + `"]`
+		if !strings.Contains(css, selector) {
+			t.Errorf("style.css: per-variant swatch rule %q not found", selector)
+		}
+	}
+}
+
+// TestStaticHTML_GeoMapOuter verifies that index.html wraps #geo-map-bar and
+// #geo-map in a .geo-map-outer element which provides the overlay context.
+func TestStaticHTML_GeoMapOuter(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `id="geo-map-outer"`) {
+		t.Error(`index.html: element with id="geo-map-outer" not found`)
+	}
+	if !strings.Contains(body, `class="geo-map-outer"`) {
+		t.Error(`index.html: element with class="geo-map-outer" not found`)
+	}
+}
+
+// TestStaticJS_RenderMapUsesOuterWrapper verifies that renderMap() references
+// geo-map-outer to toggle the entire map area (wrapper + bar + map) as one unit.
+func TestStaticJS_RenderMapUsesOuterWrapper(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMap function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 3000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "geo-map-outer") {
+		t.Error("app.js: renderMap must reference geo-map-outer to toggle map area visibility")
+	}
+}
+
+// TestStaticJS_RenderMapBarNoTextContent verifies that renderMapBar() produces
+// buttons without text content — dot-only style, accessible via aria-label.
+func TestStaticJS_RenderMapBarNoTextContent(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderMapBar(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMapBar function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Must have aria-label for accessibility.
+	if !strings.Contains(fnBody, "aria-label") {
+		t.Error("app.js: renderMapBar buttons must include aria-label for accessibility")
+	}
+	// Must have title for native tooltip.
+	if !strings.Contains(fnBody, "title=") {
+		t.Error("app.js: renderMapBar buttons should include title attribute for tooltip")
+	}
+	// The button closing tag must immediately follow the opening tag (no text node).
+	// Check that the inner text is NOT rendered (no i18nKey value as text content).
+	if strings.Contains(fnBody, ">'"+"\n") || strings.Contains(fnBody, "> +\n      esc(t(") {
+		t.Error("app.js: renderMapBar must not render i18n text inside the button element")
+	}
+}
+
+// declare translation keys for all three tile variants: light, osm, and dark.
+func TestStaticI18n_MapTileVariantKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{"'map-tile-light'", "'map-tile-osm'", "'map-tile-dark'"} {
+		first := strings.Index(body, key)
+		if first == -1 {
+			t.Errorf("i18n.js: key %s not found in any locale", key)
+			continue
+		}
+		// Key must appear at least twice (en + zh).
+		second := strings.Index(body[first+1:], key)
+		if second == -1 {
+			t.Errorf("i18n.js: key %s found in only one locale — must be present in both en and zh", key)
+		}
+	}
+}
+
+// Phase 7 fix tests — map z-index isolation / header+footer fade / copyright year
+// ---------------------------------------------------------------------------
+
+// TestStaticCSS_GeoMapIsolation verifies that #geo-map has isolation: isolate so
+// that Leaflet's internal pane z-indices (200, 400…) are contained within the
+// map's own stacking context and cannot bleed into .geo-map-outer, where the
+// .geo-map-bar overlay sits at z-index: 10.  Without this, Leaflet's tile pane
+// (z-index 200) would render above the dot-button overlay.
+func TestStaticCSS_GeoMapIsolation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	geoMapIdx := strings.Index(css, "#geo-map {")
+	if geoMapIdx == -1 {
+		t.Fatal("style.css: #geo-map rule not found")
+	}
+	endIdx := strings.Index(css[geoMapIdx:], "}")
+	if endIdx == -1 {
+		t.Fatal("style.css: #geo-map rule closing brace not found")
+	}
+	geoMapBlock := css[geoMapIdx : geoMapIdx+endIdx+1]
+	if !strings.Contains(geoMapBlock, "isolation") {
+		t.Error("style.css: #geo-map must have isolation: isolate to contain Leaflet's internal z-indices")
+	}
+	if !strings.Contains(geoMapBlock, "isolate") {
+		t.Error("style.css: #geo-map isolation must be set to 'isolate'")
+	}
+}
+
+// TestStaticCSS_HeaderHasColorTransition verifies that .site-header explicitly
+// defines CSS transitions for background and color so the chrome strip smoothly
+// cross-fades between theme palettes without ever disappearing (no opacity fade).
+func TestStaticCSS_HeaderHasColorTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	headerIdx := strings.Index(css, ".site-header  {")
+	if headerIdx == -1 {
+		t.Fatal("style.css: .site-header rule not found")
+	}
+	endIdx := strings.Index(css[headerIdx:], "}")
+	if endIdx == -1 {
+		t.Fatal("style.css: .site-header rule closing brace not found")
+	}
+	headerBlock := css[headerIdx : headerIdx+endIdx+1]
+	if !strings.Contains(headerBlock, "transition") {
+		t.Error("style.css: .site-header must have a transition property for smooth theme colour changes")
+	}
+	if !strings.Contains(headerBlock, "background") {
+		t.Error("style.css: .site-header transition must include background")
+	}
+}
+
+// TestStaticCSS_FooterHasColorTransition verifies that .site-footer explicitly
+// defines CSS transitions for background and color, mirroring .site-header,
+// so both chrome strips transition in visual unison on every theme change.
+func TestStaticCSS_FooterHasColorTransition(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	footerIdx := strings.Index(css, ".site-footer  {")
+	if footerIdx == -1 {
+		t.Fatal("style.css: .site-footer rule not found")
+	}
+	endIdx := strings.Index(css[footerIdx:], "}")
+	if endIdx == -1 {
+		t.Fatal("style.css: .site-footer rule closing brace not found")
+	}
+	footerBlock := css[footerIdx : footerIdx+endIdx+1]
+	if !strings.Contains(footerBlock, "transition") {
+		t.Error("style.css: .site-footer must have a transition property for smooth theme colour changes")
+	}
+	if !strings.Contains(footerBlock, "background") {
+		t.Error("style.css: .site-footer transition must include background")
+	}
+}
+
+// TestStaticCSS_ThemeTransitioningMainOpacity verifies that
+// body.theme-transitioning targets .main with opacity: 0 so only the main
+// content area fades out during a theme switch (header and footer stay visible).
+func TestStaticCSS_ThemeTransitioningMainOpacity(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	// The rule that should appear is:  body.theme-transitioning .main { opacity: 0; }
+	if !strings.Contains(css, "body.theme-transitioning .main") {
+		t.Error("style.css: expected 'body.theme-transitioning .main' selector — only .main must fade, not the whole body")
+	}
+	ttIdx := strings.Index(css, "body.theme-transitioning .main")
+	if ttIdx == -1 {
+		return
+	}
+	endIdx := strings.Index(css[ttIdx:], "}")
+	if endIdx != -1 {
+		block := css[ttIdx : ttIdx+endIdx+1]
+		if !strings.Contains(block, "opacity") {
+			t.Error("style.css: body.theme-transitioning .main must set opacity (to 0) for the fade-out effect")
+		}
+	}
+}
+
+// TestStaticJS_ApplyThemeUsesMainElement verifies that applyTheme() attaches
+// the transitionend listener to the .main element (not document.body), so the
+// theme variables are swapped after only the main content has faded out and
+// header/footer remain fully visible throughout.
+func TestStaticJS_ApplyThemeUsesMainElement(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function applyTheme(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyTheme function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, ".main") && !strings.Contains(fnBody, "querySelector('.main')") {
+		t.Error("app.js: applyTheme must use .main (querySelector('.main')) as the fade target, not body")
+	}
+	if !strings.Contains(fnBody, "addEventListener('transitionend'") && !strings.Contains(fnBody, `addEventListener("transitionend"`) {
+		t.Error("app.js: applyTheme must attach a transitionend listener to the fade target")
+	}
+}
+
+// TestStaticJS_CopyrightStartYearConst verifies that app.js declares a
+// COPYRIGHT_START_YEAR constant so the copyright year range is driven from a
+// single, readable source-of-truth rather than scattered literal values.
+func TestStaticJS_CopyrightStartYearConst(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "COPYRIGHT_START_YEAR") {
+		t.Error("app.js: COPYRIGHT_START_YEAR constant not found — copyright year logic requires a single source-of-truth")
+	}
+	// The constant must be assigned a four-digit year value.
+	if !strings.Contains(body, "COPYRIGHT_START_YEAR = 2026") {
+		t.Error("app.js: COPYRIGHT_START_YEAR must be initialised to 2026")
+	}
+}
+
+// TestStaticJS_UpdateCopyrightYearFunction verifies that app.js defines an
+// updateCopyrightYear() function that references the footer-copyright i18n key
+// and builds an en-dash year range from COPYRIGHT_START_YEAR to the current year.
+func TestStaticJS_UpdateCopyrightYearFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function updateCopyrightYear(")
+	if fnStart == -1 {
+		t.Fatal("app.js: updateCopyrightYear function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "footer-copyright") {
+		t.Error("app.js: updateCopyrightYear must target [data-i18n='footer-copyright'] elements")
+	}
+	if !strings.Contains(fnBody, "COPYRIGHT_START_YEAR") {
+		t.Error("app.js: updateCopyrightYear must use COPYRIGHT_START_YEAR constant")
+	}
+	// En-dash (U+2013) separates the start and end years in the range string.
+	if !strings.Contains(fnBody, `\u2013`) && !strings.Contains(fnBody, "–") {
+		t.Error("app.js: updateCopyrightYear must use an en-dash (U+2013) to separate the year range")
+	}
+}
+
+// TestStaticJS_ApplyLocaleCallsCopyrightYear verifies that applyLocale() calls
+// updateCopyrightYear() so the copyright year is refreshed every time the
+// locale is applied (including on page load and when the user switches language).
+func TestStaticJS_ApplyLocaleCallsCopyrightYear(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function applyLocale(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyLocale function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "updateCopyrightYear") {
+		t.Error("app.js: applyLocale must call updateCopyrightYear() to keep the copyright year range current")
 	}
 }

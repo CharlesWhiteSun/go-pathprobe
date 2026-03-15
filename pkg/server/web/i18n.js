@@ -138,8 +138,9 @@ window.LOCALES = {
     'map-public-ip':         'Public IP',
     'map-origin':            'Origin',
     'map-target':            'Target',
-    'map-distance':          'Distance',
-
+    'map-distance':          'Distance',    'map-tile-light':        'Light',
+    'map-tile-osm':          'OSM',
+    'map-tile-dark':         'Dark',
     /* ── Target select options ────────────────────────────────────────── */
     'opt-web':               'WEB \u2014 Public IP & DNS',
     'opt-smtp':              'SMTP \u2014 Mail server',
@@ -303,8 +304,9 @@ window.LOCALES = {
     'map-public-ip':         '公開 IP',
     'map-origin':            '偵測起點',
     'map-target':            '偵測目標',
-    'map-distance':          '連線距離',
-
+    'map-distance':          '連線距離',    'map-tile-light':        '淡色',
+    'map-tile-osm':          '原始風格',
+    'map-tile-dark':         '深色',
     /* ── Target select options ────────────────────────────────────────── */
     'opt-web':               'WEB \u2014 公開 IP 與 DNS',
     'opt-smtp':              'SMTP \u2014 郵件伺服器',

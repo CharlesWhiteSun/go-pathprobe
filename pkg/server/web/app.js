@@ -19,6 +19,9 @@ let _map = null;
 // Active tile layer attached to _map; kept separate so it can be swapped on
 // theme change without tearing down the whole map instance.
 let _tileLayer = null;
+// Currently selected map tile variant; null means “not yet set by user”.
+// Initialised by syncMapTileVariantToTheme() when the app theme is applied.
+let _mapTileVariant = null;
 
 // ── Map point role configurations ─────────────────────────────────────────
 // Each entry defines the CSS class and i18n label key used for a geocoded
@@ -30,22 +33,43 @@ const MAP_POINT_CONFIGS = {
   target: { cssClass: 'geo-marker--target', i18nKey: 'map-target' },
 };
 
+// Ordered list of map tile variant identifiers shown as the three buttons above
+// the map.  Order determines the left→right button layout.
+const MAP_TILE_VARIANTS = ['light', 'osm', 'dark'];
+
+// Maps each application theme to its default map tile variant.
+// Only this table needs updating when a new app theme is added.
+const MAP_THEME_TO_TILE_VARIANT = {
+  'default':       'light',
+  'light-green':   'light',
+  'deep-blue':     'dark',
+  'forest-green':  'dark',
+  'dark':          'dark',
+};
+
 // Theme IDs that should use the dark tile variant.  All other themes fall back
 // to the light/neutral style.  Must stay in sync with THEMES (above).
 const MAP_DARK_THEMES = new Set(['dark', 'deep-blue', 'forest-green']);
 
-// Tile layer configurations keyed by variant ('light' | 'dark').
-// Using CARTO basemaps: free, privacy-respecting, and visually harmonious with
-// both light and dark application themes.  Only change the URLs here if a
-// different provider is desired — no other code needs to be touched.
+// Tile layer configurations keyed by variant ('light' | 'osm' | 'dark').
+// Using CARTO basemaps for light/dark; osm is the canonical OpenStreetMap style.
+// Only change the URLs here if a different provider is desired — no other code
+// needs to be touched.
 const TILE_LAYER_CONFIGS = {
   light: {
     url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    i18nKey:     'map-tile-light',
+  },
+  osm: {
+    url:         'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    i18nKey:     'map-tile-osm',
   },
   dark: {
     url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    i18nKey:     'map-tile-dark',
   },
 };
 
@@ -91,10 +115,32 @@ const TARGET_PLACEHOLDER_KEYS = {
 // ── Locale management ─────────────────────────────────────────────────────
 let _locale = 'en';
 
+// The year this project was first published.  Used to build a copyright range
+// that automatically extends as calendar years advance — e.g. "2026" in 2026,
+// "2026–2027" in 2027, etc.  Only this constant ever needs to change.
+const COPYRIGHT_START_YEAR = 2026;
+
 /** Return the translation for key in the current locale, falling back to en. */
 function t(key) {
   const locs = window.LOCALES || {};
   return (locs[_locale] || {})[key] || (locs.en || {})[key] || key;
+}
+
+/**
+ * Re-write the copyright year after applyLocale() has set the raw i18n text.
+ * Builds a range string: just the start year when it equals the current year,
+ * otherwise "startYear–currentYear" (en-dash U+2013).  The regex targets the
+ * first four-digit year sequence in the copyright text so the logic is locale-
+ * independent and requires no changes to the i18n dictionary.
+ */
+function updateCopyrightYear() {
+  const now = new Date().getFullYear();
+  const yearStr = now > COPYRIGHT_START_YEAR
+    ? COPYRIGHT_START_YEAR + '\u2013' + now
+    : String(COPYRIGHT_START_YEAR);
+  document.querySelectorAll('[data-i18n="footer-copyright"]').forEach(el => {
+    el.textContent = el.textContent.replace(/\d{4}/, yearStr);
+  });
 }
 
 /** Apply the current locale to all [data-i18n] elements and refresh dynamic UI. */
@@ -117,6 +163,8 @@ function applyLocale() {
     btn.classList.toggle('active', btn.dataset.lang === _locale);
   });
   document.documentElement.lang = _locale;
+  // Update footer copyright year range after i18n strings have been applied.
+  updateCopyrightYear();
 }
 
 /** Persist and apply a new locale choice. */
@@ -155,17 +203,36 @@ const THEMES = ['default', 'deep-blue', 'light-green', 'forest-green', 'dark'];
  */
 const DEFAULT_THEME = 'default';
 
-/** Apply themeId to <html data-theme> and persist to localStorage. */
+/** Apply themeId to <html data-theme> with a targeted fade transition.
+ *  Only the .main content area fades out while the theme variables switch.
+ *  Header and footer remain fully visible and cross-fade their own
+ *  background / text colours via dedicated CSS transitions, so the chrome
+ *  always stays on screen during a theme change.
+ */
 function applyTheme(themeId) {
   const id = THEMES.includes(themeId) ? themeId : DEFAULT_THEME;
-  document.documentElement.dataset.theme = id;
-  try { localStorage.setItem('pp-theme', id); } catch (_) {}
-  // Highlight the matching dot-button; clear all others.
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === id);
-  });
-  // Swap the map tile layer so it matches the new theme variant (light / dark).
-  refreshMapTiles();
+  const body = document.body;
+  const mainEl = document.querySelector('.main');
+  body.classList.add('theme-transitioning');
+  // Wait for .main's opacity fade-out to complete before swapping the theme.
+  // Using .main as the listener target means only the main-content opacity
+  // transition (not header/footer colour transitions) triggers the swap.
+  const listenTarget = mainEl || body;
+  const onFaded = (e) => {
+    if (e.target !== listenTarget || e.propertyName !== 'opacity') return;
+    listenTarget.removeEventListener('transitionend', onFaded);
+    document.documentElement.dataset.theme = id;
+    try { localStorage.setItem('pp-theme', id); } catch (_) {}
+    // Highlight the matching dot-button; clear all others.
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === id);
+    });
+    // Silently swap map tiles while main content is invisible — no map fade needed.
+    syncMapTileVariantToTheme(id);
+    // Remove the class on the next frame so the fade-in transition fires.
+    requestAnimationFrame(() => body.classList.remove('theme-transitioning'));
+  };
+  listenTarget.addEventListener('transitionend', onFaded);
 }
 
 /** Public entry point called by the <select onchange> handler. */
@@ -173,14 +240,22 @@ function setTheme(themeId) { applyTheme(themeId); }
 
 /** Restore saved theme from localStorage; fall back to the server-declared
  *  default (data-default-theme on <html>) so a service restart always starts
- *  on the intended theme when no user preference exists. */
+ *  on the intended theme when no user preference exists.
+ *  Applies the theme without the fade animation (page is not yet visible). */
 function initTheme() {
   // Server-declared default: read from HTML attribute set by the server.
   const htmlDefault = (document.documentElement.dataset.defaultTheme || '').trim();
   const serverDefault = THEMES.includes(htmlDefault) ? htmlDefault : DEFAULT_THEME;
   let saved = serverDefault;
   try { saved = localStorage.getItem('pp-theme') || serverDefault; } catch (_) {}
-  applyTheme(saved);
+  // Apply without animation: set theme vars immediately so there is no flash.
+  const id = THEMES.includes(saved) ? saved : DEFAULT_THEME;
+  document.documentElement.dataset.theme = id;
+  try { localStorage.setItem('pp-theme', id); } catch (_) {}
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === id);
+  });
+  syncMapTileVariantToTheme(id);
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────
@@ -1039,24 +1114,104 @@ function esc(s) {
 
 // -- Geo Map (Leaflet) --------------------------------------------------------
 
-/** Return 'dark' when the active theme belongs to MAP_DARK_THEMES, else 'light'.
- *  This is the single decision point that maps application theme → tile variant.
+/** Return the current map tile variant identifier.
+ *  Falls back to the theme-derived default if _mapTileVariant is not set.
  */
 function getMapTileVariant() {
+  if (_mapTileVariant && TILE_LAYER_CONFIGS[_mapTileVariant]) return _mapTileVariant;
   const theme = document.documentElement.dataset.theme || DEFAULT_THEME;
-  return MAP_DARK_THEMES.has(theme) ? 'dark' : 'light';
+  return MAP_THEME_TO_TILE_VARIANT[theme] || 'light';
 }
 
-/** Replace the tile layer on the live _map with one matching the current theme.
- *  No-op when no map instance exists yet.  Called by applyTheme() so the map
- *  updates in real-time whenever the user switches colour theme.
+/** Sync _mapTileVariant to the theme-derived default and update the map bar UI.
+ *  Always performs a SILENT tile swap (no CSS fade animation) because this
+ *  function is called either at page-load (map not yet created) or inside
+ *  applyTheme() while the body is already opacity:0.  Animated tile changes
+ *  are driven exclusively by setMapTileVariant() (user clicks a map-bar button).
  */
-function refreshMapTiles() {
+function syncMapTileVariantToTheme(themeId) {
+  const variant = MAP_THEME_TO_TILE_VARIANT[themeId] || 'light';
+  _mapTileVariant = variant;
+  updateMapBarButtons();
   if (!_map) return;
-  const cfg = TILE_LAYER_CONFIGS[getMapTileVariant()];
+  const cfg = TILE_LAYER_CONFIGS[variant];
+  if (!cfg) return;
   if (_tileLayer) { _tileLayer.remove(); _tileLayer = null; }
   _tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 18 });
   _tileLayer.addTo(_map);
+}
+
+/** Update the active state of the three map-bar variant buttons. */
+function updateMapBarButtons() {
+  document.querySelectorAll('.map-tile-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tileVariant === _mapTileVariant);
+  });
+}
+
+/** Replace the tile layer on the live _map with a fade-out/fade-in transition.
+ *  Called only from setMapTileVariant() (user-driven tile-variant change).
+ *  No-op when no map instance exists yet.
+ */
+function refreshMapTiles() {
+  if (!_map) return;
+  const container = document.getElementById('geo-map');
+  const variant = getMapTileVariant();
+  const cfg = TILE_LAYER_CONFIGS[variant];
+  if (!cfg) return;
+
+  if (container) container.classList.add('geo-map--fading');
+  const doSwap = (e) => {
+    // Guard: only act on this container's own opacity transition end.
+    // Ignores events from child elements that bubble up, and ignores any
+    // other CSS properties (e.g. border-color) that may also transition.
+    if (e && (e.target !== container || e.propertyName !== 'opacity')) return;
+    if (container) container.removeEventListener('transitionend', doSwap);
+    if (_tileLayer) { _tileLayer.remove(); _tileLayer = null; }
+    _tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 18 });
+    _tileLayer.addTo(_map);
+    // Remove fading class on the next frame — CSS transition handles the
+    // fade-back-in automatically; no second event listener is required.
+    requestAnimationFrame(() => {
+      if (container) container.classList.remove('geo-map--fading');
+    });
+  };
+  if (container) {
+    container.addEventListener('transitionend', doSwap);
+  } else {
+    doSwap(null);
+  }
+}
+
+/** Set the active map tile variant explicitly (called by map-bar buttons).
+ *  Updates button state and refreshes tiles with the fade animation.
+ */
+function setMapTileVariant(variant) {
+  if (!TILE_LAYER_CONFIGS[variant]) return;
+  _mapTileVariant = variant;
+  updateMapBarButtons();
+  refreshMapTiles();
+}
+
+/** Render the three map tile variant dot-buttons inside #geo-map-bar.
+ *  Buttons are styled as coloured circles matching the header .theme-btn style
+ *  — no visible text, accessible via aria-label and native title tooltip.
+ *  Called once when renderMap() creates the map for the first time.
+ */
+function renderMapBar() {
+  const bar = document.getElementById('geo-map-bar');
+  if (!bar) return;
+  bar.innerHTML = MAP_TILE_VARIANTS.map(v => {
+    const cfg = TILE_LAYER_CONFIGS[v];
+    if (!cfg) return '';
+    const isActive = (v === (_mapTileVariant || getMapTileVariant()));
+    const label = esc(t(cfg.i18nKey));
+    return '<button class="map-tile-btn' + (isActive ? ' active' : '') + '"' +
+      ' data-tile-variant="' + esc(v) + '"' +
+      ' onclick="setMapTileVariant(\'' + esc(v) + '\')"' +
+      ' aria-label="' + label + '"' +
+      ' title="' + label + '">' +
+      '</button>';
+  }).join('');
 }
 
 /** Calculate the great-circle distance in km between two lat/lon pairs
@@ -1145,11 +1300,19 @@ function renderMap(pub, tgt) {
   // Hide the map when there are no geo-located points.
   if (points.length === 0) {
     container.classList.remove('visible');
+    const outerEl = document.getElementById('geo-map-outer');
+    if (outerEl) outerEl.hidden = true;
     if (_map) { _map.remove(); _map = null; _tileLayer = null; }
     return;
   }
 
+  // Reveal the outer wrapper (bar + map) before showing the map itself.
+  const outerEl = document.getElementById('geo-map-outer');
+  if (outerEl) outerEl.hidden = false;
   container.classList.add('visible');
+
+  // Render the map tile bar (light/osm/dark) above the map on first creation.
+  renderMapBar();
 
   // Destroy any existing map instance before creating a new one.
   if (_map) { _map.remove(); _map = null; _tileLayer = null; }

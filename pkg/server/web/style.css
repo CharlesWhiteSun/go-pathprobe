@@ -58,6 +58,14 @@
   --panel-anim-dist:      6px;
   --cs-popup-anim-dur:    .17s;
   --cs-popup-anim-scale:  .92;
+  /* --radius is an alias for --r so Phase 5+ component rules that use the
+     more descriptive name resolve to the same base value.  Change --r only. */
+  --radius:               var(--r);
+  /* Inform the browser of the default light colour-scheme so form controls
+     (autofill, date-pickers, etc.) render with light-mode UA styles by
+     default.  Dark themes override this to `dark` below, preventing Chrome
+     from reverting focused-input text to its default black after a delay. */
+  color-scheme: light;
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -74,16 +82,28 @@ html  { font-size: 15px; }
    remains the viewport, not the body flex container. */
 body  { background: var(--bg); color: var(--text);
         font-family: system-ui, -apple-system, sans-serif; line-height: 1.5;
-        display: flex; flex-direction: column; min-height: 100vh; }
+        display: flex; flex-direction: column; min-height: 100vh;
+        transition: background var(--theme-fade-dur, .22s) ease,
+                    color      var(--theme-fade-dur, .22s) ease; }
+/* body.theme-transitioning: only the main content area fades out (opacity → 0)
+   while the theme variables are being swapped.  Header and footer remain fully
+   visible and instead cross-fade their background/text colours via their own
+   CSS transitions, providing a smooth, non-jarring theme change. */
+body.theme-transitioning .main { opacity: 0; }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
 /* position: sticky keeps the header attached to the top of the viewport as the
    page scrolls.  z-index: 100 ensures it layers above all card/form content.
    Unlike position: fixed, sticky participates in normal flow, so .main needs
-   no extra margin-top to compensate for the header height. */
+   no extra margin-top to compensate for the header height.
+   transition: smooth cross-fade of background/colour during theme switches so
+   the header chrome never disappears — it visually morphs to the new palette. */
 .site-header  { position: sticky; top: 0; z-index: 100;
                 background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
-                box-shadow: var(--header-shadow); }
+                box-shadow: var(--header-shadow);
+                transition: background var(--theme-fade-dur, .22s) ease,
+                            color      var(--theme-fade-dur, .22s) ease,
+                            box-shadow var(--theme-fade-dur, .22s) ease; }
 /* 3-column flex: brand (left, flex:1) | theme-bar (centre) | lang (right, flex:1)
    All three share the same cross-axis, so align-items: center keeps every item
    vertically centred in one pass without needing an extra wrapper row. */
@@ -127,9 +147,14 @@ body  { background: var(--bg); color: var(--text);
    same horizontal rhythm — so the page feels bookended by matching chrome.
    No sticky/fixed positioning: it flows naturally at the document end.
    body flex-column + .main flex:1 (see above) guarantee it always sits at
-   the viewport bottom without needing an explicit margin or padding trick. */
+   the viewport bottom without needing an explicit margin or padding trick.
+   transition: smooth cross-fade matching .site-header so both chrome strips
+   change in unison when the theme is switched. */
 .site-footer  { background: var(--primary); color: #fff; padding: var(--header-py) 1.5rem;
-                box-shadow: var(--footer-shadow); }
+                box-shadow: var(--footer-shadow);
+                transition: background var(--theme-fade-dur, .22s) ease,
+                            color      var(--theme-fade-dur, .22s) ease,
+                            box-shadow var(--theme-fade-dur, .22s) ease; }
 .footer-inner { max-width: 960px; margin: 0 auto;
                 display: flex; align-items: center; justify-content: center;
                 min-height: var(--chrome-inner-h); }
@@ -143,7 +168,8 @@ body  { background: var(--bg); color: var(--text);
    before max-width clamps it.  Without it, margin: auto on a flex item cross-
    axis triggers shrink-to-fit, squeezing the cards narrower than 960px. */
 .main { flex: 1; width: 100%; max-width: 960px; margin: 1.5rem auto; padding: 0 1rem;
-        display: flex; flex-direction: column; gap: 1.2rem; }
+        display: flex; flex-direction: column; gap: 1.2rem;
+        transition: opacity var(--theme-fade-dur, .22s) ease; }
 
 /* ── Card ───────────────────────────────────────────────────────────────── */
 .card       { background: var(--surface); border: 1px solid var(--border);
@@ -168,6 +194,12 @@ select {
   border: 1px solid var(--border); border-radius: 5px;
   padding: .42rem .65rem; font-size: .9rem;
   color: var(--text); background: var(--input-bg); width: 100%;
+  /* Explicitly set text-fill and caret colours so dark-theme text remains
+     readable even when the browser tries to apply autocomplete overlay styles.
+     -webkit-text-fill-color overrides the UA autofill text colour in Chrome/
+     Safari; caret-color keeps the insertion cursor the correct theme colour. */
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
   transition: border-color .15s;
 }
 input:focus, select:focus {
@@ -642,16 +674,6 @@ fieldset.target-fields legend {
 }
 .progress-entry .msg { color: var(--muted); }
 
-/*  Geo Map  */
-#geo-map {
-  height: 280px;
-  margin-top: 1.25rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  display: none;
-}
-#geo-map.visible { display: block; }
-
 /*  History Panel  */
 .history-empty {
   color: var(--muted);
@@ -694,14 +716,72 @@ fieldset.target-fields legend {
 
 
 /* -- Geo Map ----------------------------------------------------------------- */
+/* .geo-map-outer wraps the map + its overlaid tile-bar.  position: relative
+   creates the stacking context for the absolutely positioned .geo-map-bar. */
+.geo-map-outer {
+  position: relative;
+  margin-top: 1.25rem;
+}
 #geo-map {
   height: 280px;
-  margin-top: 1.25rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   display: none;
+  transition: opacity var(--map-fade-dur, .22s) ease;
+  /* isolation: isolate forces a stacking context here so that Leaflet's
+     internal pane z-indices (200, 400 …) are confined within #geo-map and
+     cannot bleed into .geo-map-outer, where .geo-map-bar sits at z-index: 10.
+     Without this, Leaflet's tile pane (z-index 200) would cover the buttons. */
+  isolation: isolate;
 }
 #geo-map.visible { display: block; }
+/* geo-map--fading: opacity goes to 0 for the fade-out half of the tile-swap
+   animation.  JS adds this class, waits for transitionend, swaps tiles,
+   then removes the class to trigger fade-back-in. */
+#geo-map.geo-map--fading { opacity: 0 !important; }
+
+/* -- Geo Map Bar (tile-variant dot buttons, overlaid on the map) ------------- */
+/* Positioned at the top-right of the map at the same spacing used by the
+   header chrome (--header-py vertical, 1.5rem horizontal) so the visual
+   rhythm is consistent across the page.  The semi-transparent pill backdrop
+   keeps buttons legible against any tile background. */
+.geo-map-bar {
+  position: absolute;
+  top: var(--header-py, .92rem);
+  right: 1.5rem;
+  z-index: 10;            /* above tile pane (Leaflet z: 200 is inside its own stacking ctx) */
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  background: rgba(0, 0, 0, .45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: .35rem .55rem;
+}
+/* Each tile-variant button mirrors .theme-btn — a fixed-size coloured circle
+   with a translucent white border.  No text, just aria-label + title tooltip. */
+.map-tile-btn {
+  width: .85rem;
+  height: .85rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, .35);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  appearance: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.map-tile-btn:hover  { border-color: rgba(255, 255, 255, .75); }
+.map-tile-btn.active {
+  border-color: rgba(255, 255, 255, .95);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .4);
+}
+/* Per-variant representative colours — intentionally hardcoded, not themed,
+   so the three swatches are always visually distinct from each other. */
+.map-tile-btn[data-tile-variant="light"] { background: #d8d8d0; }
+.map-tile-btn[data-tile-variant="osm"]   { background: #8dc03c; }
+.map-tile-btn[data-tile-variant="dark"]  { background: #2a3441; }
 
 /* Custom Leaflet divIcon marker: replace default pin with a coloured dot.
    Colours are intentionally fixed (not theme-variable) so the two roles are
@@ -847,6 +927,8 @@ fieldset.target-fields legend {
   --cs-popup-anim-dur:   .40s;
   --cs-popup-anim-scale: .72;
   --cb-anim-dur:         .32s;
+  --theme-fade-dur:      .35s;
+  --map-fade-dur:        .32s;
 }
 /* data-anim="off": near-zero timing collapses all transitions to instant,
    matching the spirit of prefers-reduced-motion without a media query. */
@@ -856,6 +938,8 @@ fieldset.target-fields legend {
   --cs-popup-anim-dur:   0.001s;
   --cs-popup-anim-scale: 1;
   --cb-anim-dur:         0.001s;
+  --theme-fade-dur:      0.001s;
+  --map-fade-dur:        0.001s;
 }
 
 /* ── Theme bar (內嵌「標頭內」橫向居中排列) ─────────────────────────────────── */
@@ -899,6 +983,7 @@ fieldset.target-fields legend {
 
 /* ── Theme: deep-blue (深藍，白色文字) ───────────────────────────────────── */
 [data-theme="deep-blue"] {
+  color-scheme: dark;
   --bg:            #0d1b2a;
   --surface:       #1b2b40;
   --surface-alt:   #1f3249;
@@ -937,6 +1022,7 @@ fieldset.target-fields legend {
 
 /* ── Theme: forest-green (墨綠，白色文字) ────────────────────────────────── */
 [data-theme="forest-green"] {
+  color-scheme: dark;
   --bg:            #1a2e1a;
   --surface:       #243524;
   --surface-alt:   #2b3e2b;
@@ -956,6 +1042,7 @@ fieldset.target-fields legend {
 
 /* ── Theme: dark (暗黑，白色文字) ────────────────────────────────────────── */
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg:            #121212;
   --surface:       #1e1e1e;
   --surface-alt:   #252525;
