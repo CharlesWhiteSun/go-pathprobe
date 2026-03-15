@@ -45,6 +45,9 @@ type WebOptions struct {
 	Domains []string
 	Types   []netprobe.RecordType
 	URL     string
+	// MaxHops sets the maximum TTL for traceroute sub-mode.
+	// Zero means use diag.DefaultMaxHops.
+	MaxHops int
 }
 
 // NewWebRunner wires public IP fetcher and DNS comparator.
