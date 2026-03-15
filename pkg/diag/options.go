@@ -9,6 +9,9 @@ import (
 const (
 	// DefaultMTRCount specifies default probe count per hop for traceroute-style diagnostics.
 	DefaultMTRCount = 5
+
+	// DefaultMaxHops is the maximum TTL (hop count) used when none is specified.
+	DefaultMaxHops = 30
 )
 
 // GlobalOptions captures flags shared across diagnostic targets.
@@ -46,8 +49,9 @@ type Options struct {
 
 // NetworkOptions configures connectivity and traceroute-style probes.
 type NetworkOptions struct {
-	Host  string
-	Ports []int
+	Host    string
+	Ports   []int
+	MaxHops int // maximum TTL for traceroute; 0 means use DefaultMaxHops
 }
 
 // SMTPOptions carries mail probe configuration.

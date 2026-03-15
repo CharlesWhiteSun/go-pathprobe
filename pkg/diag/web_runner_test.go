@@ -233,7 +233,7 @@ func TestWebRunnerPortMode(t *testing.T) {
 
 // TestIsValidWebMode verifies the validation helper.
 func TestIsValidWebMode(t *testing.T) {
-	valid := []WebMode{WebModeAll, WebModePublicIP, WebModeDNS, WebModeHTTP, WebModePort}
+	valid := []WebMode{WebModeAll, WebModePublicIP, WebModeDNS, WebModeHTTP, WebModePort, WebModeTraceroute}
 	for _, m := range valid {
 		if !IsValidWebMode(m) {
 			t.Errorf("expected %q to be valid", m)
@@ -241,5 +241,29 @@ func TestIsValidWebMode(t *testing.T) {
 	}
 	if IsValidWebMode("bogus") {
 		t.Error("expected \"bogus\" to be invalid")
+	}
+}
+
+// TestWebRunnerTracerouteMode: WebRunner must be a no-op in traceroute mode.
+// The TracerouteRunner (a separate runner) is responsible for this mode.
+func TestWebRunnerTracerouteMode(t *testing.T) {
+	fetcher := &stubFetcher{}
+	resolver := &countingResolver{}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{resolver}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(fetcher, comparator, logger)
+
+	if err := runner.Run(context.Background(), makeWebRequest(WebModeTraceroute)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetcher.called || resolver.calls != 0 {
+		t.Fatal("WebRunner must be a no-op in traceroute mode")
+	}
+}
+
+// TestWebModeTracerouteConstant verifies the constant value is stable.
+func TestWebModeTracerouteConstant(t *testing.T) {
+	if WebModeTraceroute != "traceroute" {
+		t.Fatalf("expected WebModeTraceroute = \"traceroute\", got %q", WebModeTraceroute)
 	}
 }
