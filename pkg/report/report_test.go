@@ -365,3 +365,173 @@ func TestBuildRouteWithNilLocator(t *testing.T) {
 		}
 	}
 }
+
+// ── Phase 6: HTML report route rendering ─────────────────────────────────
+
+// TestHTMLWriterRouteTablePresent verifies that when an AnnotatedReport has
+// Route entries, the HTML output includes a "Route Path" section with a table
+// containing hop data (TTL numbers, IPs, and the timed-out hop placeholder).
+func TestHTMLWriterRouteTablePresent(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+	ar := buildAnnotated(t, dr)
+
+	var buf bytes.Buffer
+	hw := report.HTMLWriter{}
+	if err := hw.Write(&buf, ar); err != nil {
+		t.Fatalf("HTMLWriter.Write error: %v", err)
+	}
+	html := buf.String()
+
+	// Section heading must appear.
+	if !strings.Contains(html, "Route Path") {
+		t.Error("HTML: missing 'Route Path' section heading")
+	}
+	// Known IPs must appear in the table.
+	for _, ip := range []string{"192.168.1.1", "10.0.0.1", "93.184.216.34"} {
+		if !strings.Contains(html, ip) {
+			t.Errorf("HTML: missing expected IP %q in route table", ip)
+		}
+	}
+	// Timed-out hop must display the ??? placeholder.
+	if !strings.Contains(html, "???") {
+		t.Error("HTML: timed-out hop must render '???' placeholder")
+	}
+	// Hostname from hop 1 and 4 must appear.
+	if !strings.Contains(html, "gateway.local") {
+		t.Error("HTML: missing hostname 'gateway.local' from hop 1")
+	}
+	if !strings.Contains(html, "example.com") {
+		t.Error("HTML: missing hostname 'example.com' from hop 4")
+	}
+}
+
+// TestHTMLWriterRouteTableAbsentWhenNoRoute confirms that the Route Path
+// section is omitted entirely when the report has no traceroute data, to keep
+// the HTML output clean for non-traceroute diagnostics.
+func TestHTMLWriterRouteTableAbsentWhenNoRoute(t *testing.T) {
+	ar := buildAnnotated(t, buildSampleDiagReport())
+
+	var buf bytes.Buffer
+	hw := report.HTMLWriter{}
+	_ = hw.Write(&buf, ar)
+	html := buf.String()
+
+	if strings.Contains(html, "Route Path") {
+		t.Error("HTML: 'Route Path' section must not appear when Route is nil")
+	}
+}
+
+// TestHTMLWriterRouteLeafletPolyline checks that when all hops have geo
+// coordinates (simulated via a geolocator stub), the HTML script block
+// contains L.circleMarker and L.polyline calls for the route overlay.
+// Uses a stub locator that returns a fixed coordinate for any IP.
+func TestHTMLWriterRouteLeafletPolyline(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+
+	ar, err := report.Build(context.Background(), dr, geoStubLocator{})
+	if err != nil {
+		t.Fatalf("Build error: %v", err)
+	}
+	// Mark hops as having geo data (stub locator sets HasLocation=true).
+	// Verify the template emits the route overlay markers and polyline.
+	var buf bytes.Buffer
+	hw := report.HTMLWriter{}
+	if err := hw.Write(&buf, ar); err != nil {
+		t.Fatalf("HTMLWriter.Write error: %v", err)
+	}
+	html := buf.String()
+
+	// circleMarker is emitted for each hop that HasGeo=true.
+	if !strings.Contains(html, "circleMarker") {
+		t.Error("HTML: expected L.circleMarker calls for geo-annotated route hops")
+	}
+	// The route polyline must be drawn when ≥2 hops have coordinates.
+	if !strings.Contains(html, "routePts") {
+		t.Error("HTML: expected routePts array for the route-path polyline")
+	}
+}
+
+// ── Phase 6: TableWriter route rendering ─────────────────────────────────
+
+// TestTableWriterRouteSection verifies that WriteRoute (called from Write)
+// appends a ROUTE PATH section when Route entries are present, including the
+// section header, column headers, all TTL values, known IPs, and the timed-out
+// "???" placeholder for hops with an empty IP.
+func TestTableWriterRouteSection(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.SetRoute(buildRouteResult())
+	ar := buildAnnotated(t, dr)
+
+	var buf bytes.Buffer
+	tw := report.TableWriter{}
+	if err := tw.Write(&buf, ar); err != nil {
+		t.Fatalf("TableWriter.Write error: %v", err)
+	}
+	out := buf.String()
+
+	// Section header.
+	if !strings.Contains(out, "ROUTE PATH") {
+		t.Error("table: missing 'ROUTE PATH' section header")
+	}
+	// Column headers.
+	for _, col := range []string{"HOP", "IP", "HOSTNAME", "LOSS%", "AVG RTT"} {
+		if !strings.Contains(out, col) {
+			t.Errorf("table: missing column header %q", col)
+		}
+	}
+	// Known hop IPs.
+	for _, ip := range []string{"192.168.1.1", "10.0.0.1", "93.184.216.34"} {
+		if !strings.Contains(out, ip) {
+			t.Errorf("table: missing IP %q in route output", ip)
+		}
+	}
+	// Timed-out hop placeholder.
+	if !strings.Contains(out, "???") {
+		t.Error("table: timed-out hop must render '???'")
+	}
+	// Timed-out hop loss must show "—", not a percentage.
+	if !strings.Contains(out, "—") {
+		t.Error("table: timed-out hop loss must show '—'")
+	}
+}
+
+// TestTableWriterNoRouteSection confirms that the ROUTE PATH section is
+// absent when the report contains no Route data, keeping the text output
+// consistent for non-traceroute targets.
+func TestTableWriterNoRouteSection(t *testing.T) {
+	ar := buildAnnotated(t, buildSampleDiagReport())
+
+	var buf bytes.Buffer
+	tw := report.TableWriter{}
+	_ = tw.Write(&buf, ar)
+	out := buf.String()
+
+	if strings.Contains(out, "ROUTE PATH") {
+		t.Error("table: 'ROUTE PATH' section must not appear when Route is nil")
+	}
+}
+
+// ── test helpers ──────────────────────────────────────────────────────────
+
+// geoStubLocator returns a fixed non-zero GeoInfo for any IP so that
+// HasLocation=true, allowing tests to exercise the geo branches in templates
+// without requiring a real MaxMind database.
+type geoStubLocator struct{}
+
+func (geoStubLocator) LocateIP(ip string) (geo.GeoInfo, error) {
+	return geo.GeoInfo{
+		IP:          ip,
+		Lat:         51.5,
+		Lon:         -0.1,
+		City:        "London",
+		CountryCode: "GB",
+		CountryName: "United Kingdom",
+		ASN:         12345,
+		OrgName:     "Test ISP",
+		HasLocation: true,
+	}, nil
+}
+
+func (geoStubLocator) Close() error { return nil }

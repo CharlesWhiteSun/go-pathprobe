@@ -34,6 +34,8 @@
     .badge{display:inline-block;padding:.2rem .55rem;border-radius:999px;font-size:.72rem;font-weight:700;font-family:system-ui;letter-spacing:.04em}
     .badge-ok{background:#d1fae5;color:#065f46}
     .badge-fail{background:#fee2e2;color:#991b1b}
+    .hop-timedout td{color:#9ca3af;font-style:italic}
+    .hop-circle{fill:#3b82f6;stroke:#fff;stroke-width:1.5}
     footer{text-align:center;padding:2rem;font-size:.78rem;color:#9ca3af}
     footer a{color:#9ca3af}
   </style>
@@ -75,6 +77,19 @@
     {{if and .PublicGeo.HasLocation .TargetGeo.HasLocation}}
     L.polyline([[{{.PublicGeo.Lat}},{{.PublicGeo.Lon}}],[{{.TargetGeo.Lat}},{{.TargetGeo.Lon}}]],
       {color:'#3b82f6',weight:2,dashArray:'6 4',opacity:.85}).addTo(map);
+    {{end}}
+    {{if .Route}}
+    var routePts=[];
+    {{range .Route}}{{if .HasGeo}}
+    L.circleMarker([{{.Lat}},{{.Lon}}],{radius:5,color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:.85,weight:1.5,className:'hop-circle'})
+      .addTo(map)
+      .bindPopup('<b>Hop {{.TTL}}</b><br>IP: <code>{{.IP}}</code>{{if .Hostname}}<br>{{.Hostname}}{{end}}{{if .Country}}<br>{{.Country}}{{end}}{{if .ASN}}<br>AS{{.ASN}}{{end}}<br>Avg RTT: {{.AvgRTT}}');
+    routePts.push([{{.Lat}},{{.Lon}}]);
+    pts.push([{{.Lat}},{{.Lon}}]);
+    {{end}}{{end}}
+    if(routePts.length>1){
+      L.polyline(routePts,{color:'#3b82f6',weight:2,opacity:.7}).addTo(map);
+    }
     {{end}}
     if(pts.length>0){map.fitBounds(pts,{padding:[60,60],maxZoom:12});}
   })();
@@ -135,6 +150,28 @@
         <td>{{if .Port}}{{.Port}}{{else}}—{{end}}</td>
         <td><span class="badge {{if .OK}}badge-ok{{else}}badge-fail{{end}}">{{if .OK}}OK{{else}}FAIL{{end}}</span></td>
         <td class="txt">{{.Summary}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+  {{end}}
+
+  {{if .Route}}
+  <section>
+    <h2>Route Path</h2>
+    <table>
+      <thead><tr><th>Hop</th><th>IP</th><th>Hostname</th><th>ASN</th><th>Country</th><th>Loss %</th><th>Avg RTT</th></tr></thead>
+      <tbody>
+      {{range .Route}}
+      <tr class="{{if not .IP}}hop-timedout{{else if gt .LossPct 50.0}}fail{{else if gt .LossPct 0.0}}warn{{else}}ok{{end}}">
+        <td>{{.TTL}}</td>
+        <td>{{if .IP}}{{.IP}}{{else}}<em>???</em>{{end}}</td>
+        <td class="txt">{{if .Hostname}}{{.Hostname}}{{else}}—{{end}}</td>
+        <td>{{if .ASN}}AS{{.ASN}}{{else}}—{{end}}</td>
+        <td class="txt">{{if .Country}}{{.Country}}{{else}}—{{end}}</td>
+        <td>{{if .IP}}{{printf "%.1f" .LossPct}}%{{else}}—{{end}}</td>
+        <td>{{.AvgRTT}}</td>
       </tr>
       {{end}}
       </tbody>
