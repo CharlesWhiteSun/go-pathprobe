@@ -528,6 +528,11 @@ fieldset.target-fields legend {
 .result-table tr:last-child td     { border-bottom: none; }
 .result-table tbody tr:hover       { background: rgba(0,0,0,.02); }
 
+/* ── Route trace table ──────────────────────────────────────────────────── */
+.route-table .ttl-col { width: 3rem; text-align: center; }
+.hop-timedout td      { color: var(--muted); font-style: italic; }
+.hop-host             { font-size: .8em; color: var(--muted); }
+
 /* ── Badges ─────────────────────────────────────────────────────────────── */
 .badge      { display: inline-block; padding: .14rem .5rem; border-radius: 999px;
               font-size: .77rem; font-weight: 700; }

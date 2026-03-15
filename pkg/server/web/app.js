@@ -702,6 +702,7 @@ function renderReport(r) {
     renderSummary(r),
     renderPortsSection(r.Ports),
     renderProtosSection(r.Protos),
+    renderRouteSection(r.Route),
     renderGeoSection(r.PublicGeo, r.TargetGeo),
   ].filter(Boolean).join('');
 }
@@ -723,6 +724,44 @@ function renderSummary(r) {
       '</div>'
     ).join('') +
   '</div>';
+}
+
+function renderRouteSection(hops) {
+  if (!hops || !hops.length) return '';
+  const rows = hops.map(h => {
+    const timedout = !h.IP;
+    const rowClass = timedout ? ' class="hop-timedout"' : '';
+    const ipCell   = timedout
+      ? '<em>???</em>'
+      : (h.Hostname && h.Hostname !== h.IP
+          ? esc(h.IP) + ' <span class="hop-host">(' + esc(h.Hostname) + ')</span>'
+          : esc(h.IP));
+    const asnCell  = h.ASN ? 'AS' + esc(String(h.ASN)) : '';
+    const country  = h.Country || '\u2014';
+    const loss     = timedout ? '\u2014' : (h.LossPct || 0).toFixed(1) + '%';
+    const rtt      = esc(h.AvgRTT || '\u2014');
+    return '<tr' + rowClass + '>' +
+      '<td>'         + esc(String(h.TTL)) + '</td>' +
+      '<td>'         + ipCell             + '</td>' +
+      '<td>'         + asnCell            + '</td>' +
+      '<td>'         + esc(country)       + '</td>' +
+      '<td>'         + loss               + '</td>' +
+      '<td>'         + rtt                + '</td>' +
+    '</tr>';
+  }).join('');
+  return '<div class="result-section">' +
+    '<h3>' + esc(t('section-route')) + '</h3>' +
+    '<table class="result-table route-table">' +
+      '<thead><tr>' +
+        '<th>' + esc(t('th-ttl'))     + '</th>' +
+        '<th>' + esc(t('th-ip-host')) + '</th>' +
+        '<th>' + esc(t('th-asn'))     + '</th>' +
+        '<th>' + esc(t('th-country')) + '</th>' +
+        '<th>' + esc(t('th-loss'))    + '</th>' +
+        '<th>' + esc(t('th-avg-rtt')) + '</th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table></div>';
 }
 
 function renderPortsSection(ports) {

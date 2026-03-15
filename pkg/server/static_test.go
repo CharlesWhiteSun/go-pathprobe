@@ -2211,3 +2211,85 @@ func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
 		t.Error("app.js: TARGET_MODE_PANELS.web must include 'web-fields-traceroute' entry")
 	}
 }
+
+// ── Phase 5: traceroute result rendering assertions ───────────────────────
+
+// TestStaticJS_RenderRouteSection verifies that app.js defines a
+// renderRouteSection function and wires it into renderReport so route hops
+// are shown in the results pane when a traceroute diagnostic is returned.
+func TestStaticJS_RenderRouteSection(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The render function must be defined.
+	if !strings.Contains(body, "renderRouteSection") {
+		t.Error("app.js: renderRouteSection function must be defined")
+	}
+	// It must be invoked from renderReport with the Route field.
+	if !strings.Contains(body, "renderRouteSection(r.Route)") {
+		t.Error("app.js: renderReport must call renderRouteSection(r.Route)")
+	}
+	// The route section heading i18n key must be referenced.
+	if !strings.Contains(body, "'section-route'") {
+		t.Error("app.js: renderRouteSection must reference i18n key 'section-route'")
+	}
+	// Timed-out hop indicator must be present.
+	if !strings.Contains(body, "hop-timedout") {
+		t.Error("app.js: renderRouteSection must apply 'hop-timedout' class to timed-out hops")
+	}
+}
+
+// TestStaticCSS_RouteTable verifies that style.css contains the CSS rules
+// needed to style the route-trace hop table and distinguish timed-out hops.
+func TestStaticCSS_RouteTable(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The route-table modifier class must be present.
+	if !strings.Contains(body, ".route-table") {
+		t.Error("style.css: .route-table modifier class must exist for the route hop table")
+	}
+	// The hop-timedout rule must be present to style unresponsive hops.
+	if !strings.Contains(body, ".hop-timedout") {
+		t.Error("style.css: .hop-timedout rule must exist for timed-out traceroute hops")
+	}
+}
+
+// TestStaticI18n_RouteSectionKeys verifies that both the English and zh-TW
+// locales in i18n.js declare all keys required by renderRouteSection to
+// produce a fully-localised hop table without fallback gaps.
+func TestStaticI18n_RouteSectionKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{
+		"'section-route'", "'th-ttl'", "'th-ip-host'", "'th-asn'", "'th-country'",
+	} {
+		if !strings.Contains(body, key) {
+			t.Errorf("i18n.js: missing route section key %s", key)
+		}
+	}
+	// zh-TW locale must carry a Chinese section title.
+	if !strings.Contains(body, "路由路徑") {
+		t.Error("i18n.js zh-TW: section-route must contain '路由路徑'")
+	}
+	// zh-TW locale must carry Chinese column header for IP / Host.
+	if !strings.Contains(body, "IP / 主機") {
+		t.Error("i18n.js zh-TW: th-ip-host must contain 'IP / 主機'")
+	}
+}

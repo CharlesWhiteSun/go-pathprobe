@@ -111,6 +111,13 @@ window.LOCALES = {
     'th-status':             'Status',
     'th-summary':            'Summary',
 
+    /* ── Route trace table ────────────────────────────────────────────── */
+    'section-route':         'Route Trace',
+    'th-ttl':                'TTL',
+    'th-ip-host':            'IP / Host',
+    'th-asn':                'ASN',
+    'th-country':            'Country',
+
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
     'geo-public-ip':         'Public IP',
@@ -260,6 +267,13 @@ window.LOCALES = {
     'th-host':               '主機',
     'th-status':             '狀態',
     'th-summary':            '摘要',
+
+    /* ── Route trace table ────────────────────────────────────────────── */
+    'section-route':         '路由路徑',
+    'th-ttl':                'TTL',
+    'th-ip-host':            'IP / 主機',
+    'th-asn':                'ASN',
+    'th-country':            '國家',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',
