@@ -2529,3 +2529,71 @@ func TestStaticHTML_ErrorBannerStructure(t *testing.T) {
 		t.Error("index.html: #error-text span must be present inside #error-banner")
 	}
 }
+
+// TestStaticHTML_ErrorBannerHiddenByDefault verifies that the error banner in
+// index.html carries the `hidden` attribute so it is invisible on page load and
+// only becomes visible when JS calls showError().
+func TestStaticHTML_ErrorBannerHiddenByDefault(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The banner element with its hidden attribute must appear together.
+	if !strings.Contains(body, `id="error-banner" hidden`) {
+		t.Error("index.html: #error-banner must carry the `hidden` attribute so it is invisible on load")
+	}
+}
+
+// TestStaticCSS_HiddenAttributeEnforced verifies that style.css declares a
+// [hidden] reset rule with !important so that component-level display
+// properties (e.g. display:flex on .error-banner) cannot override the HTML
+// hidden attribute and show elements that should be invisible.
+func TestStaticCSS_HiddenAttributeEnforced(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The reset rule must use !important so it wins over component display rules.
+	if !strings.Contains(body, "[hidden]") {
+		t.Error("style.css: [hidden] reset rule must be declared")
+	}
+	if !strings.Contains(body, "display: none !important") {
+		t.Error("style.css: [hidden] rule must use 'display: none !important' to override component display values")
+	}
+}
+
+// TestStaticCSS_RunBtnCentering verifies that style.css correctly centres both
+// the run-button resting state (▶ glyph) and its loading state (dots animation)
+// by enforcing line-height:1 on #run-btn and removing the margin offset from
+// .anim-dots when it is a child of #run-btn.
+func TestStaticCSS_RunBtnCentering(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// line-height:1 must be set so the inherited body line-height (1.5) does
+	// not add extra leading that shifts the glyph off the vertical centre.
+	if !strings.Contains(body, "line-height: 1") {
+		t.Error("style.css: #run-btn must set line-height: 1 for pixel-perfect vertical centering")
+	}
+	// The context-specific margin reset ensures the dots animation is not
+	// shifted horizontally by its default margin-right value.
+	if !strings.Contains(body, "#run-btn .anim-dots") {
+		t.Error("style.css: #run-btn .anim-dots override must be defined to remove the inline-context margin")
+	}
+	if !strings.Contains(body, "margin: 0") {
+		t.Error("style.css: #run-btn .anim-dots must set margin: 0 to restore flex centering symmetry")
+	}
+}

@@ -63,6 +63,11 @@
 /* ── Reset ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html  { font-size: 15px; }
+/* Enforce the HTML `hidden` attribute even when a component rule declares
+   an explicit display value (e.g. display:flex on .error-banner).
+   !important is intentional here: the browser's UA stylesheet uses the same
+   weight, so without it a component-level display rule wins. */
+[hidden] { display: none !important; }
 /* flex-column + min-height: 100vh: ensures .site-footer is always pushed to the
    viewport bottom even when page content is shorter than the window height.
    position: sticky on .site-header is unaffected — the scroll container
@@ -496,12 +501,19 @@ fieldset.target-fields legend {
 #run-btn {
   background: var(--primary); color: #fff; border: none; border-radius: 5px;
   /* Square icon-only button: fixed width = height to lock layout regardless
-     of spinner vs triangle state. Font-size scaled up for icon legibility. */
+     of spinner vs triangle state. Font-size scaled up for icon legibility.
+     line-height:1 prevents the inherited body line-height (1.5) from adding
+     extra leading above/below the glyph, keeping the ▶ character pixel-perfect
+     centred on both axes within the flex container. */
   width: 2.75rem; height: 2.75rem;
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 0; font-size: 1.1rem; cursor: pointer;
+  padding: 0; font-size: 1.1rem; line-height: 1; cursor: pointer;
   transition: background .15s, opacity .15s;
 }
+/* Remove the context-aware margins that .anim-dots carries for inline/text
+   usage — inside the flex button those margins shift the animation off-centre.
+   margin: 0 restores the flex justify-content: center symmetry exactly. */
+#run-btn .anim-dots { margin: 0; }
 #run-btn:hover:not(:disabled) { background: var(--primary-h); }
 #run-btn:disabled              { opacity: .5; cursor: not-allowed; }
 
