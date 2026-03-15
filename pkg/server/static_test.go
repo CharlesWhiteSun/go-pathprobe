@@ -2107,3 +2107,107 @@ func TestStaticCSS_CustomCheckbox(t *testing.T) {
 		t.Error("style.css: focus-visible rule must use var(--focus-ring) for the box-shadow so focus colour matches the global token")
 	}
 }
+
+// ── Phase 4: traceroute API field assertions ──────────────────────────────
+
+// TestStaticHTML_WebModeTracerouteRadio verifies that the embedded index.html
+// includes a radio button for the "traceroute" web sub-mode so users can
+// initiate a route-trace diagnostic from the UI.
+func TestStaticHTML_WebModeTracerouteRadio(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The traceroute radio value must be present.
+	if !strings.Contains(body, `value="traceroute"`) {
+		t.Error("index.html: missing radio button with value=\"traceroute\" for route-trace mode")
+	}
+	// Its i18n key must be declared.
+	if !strings.Contains(body, `data-i18n="web-mode-traceroute"`) {
+		t.Error("index.html: traceroute radio must carry data-i18n=\"web-mode-traceroute\"")
+	}
+}
+
+// TestStaticHTML_WebModeTracerouteMaxHopsPanel verifies that the traceroute
+// sub-panel exists in index.html and exposes a max-hops number input so the
+// user can control the maximum TTL depth.
+func TestStaticHTML_WebModeTracerouteMaxHopsPanel(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The traceroute sub-panel must exist and be initially hidden.
+	if !strings.Contains(body, `id="web-fields-traceroute"`) {
+		t.Error("index.html: traceroute sub-panel #web-fields-traceroute must exist")
+	}
+	// The max-hops number input must be present inside the panel.
+	if !strings.Contains(body, `id="traceroute-max-hops"`) {
+		t.Error("index.html: traceroute sub-panel must contain input#traceroute-max-hops")
+	}
+	// Its label must use the i18n key.
+	if !strings.Contains(body, `data-i18n="label-max-hops"`) {
+		t.Error("index.html: max-hops label must use data-i18n=\"label-max-hops\"")
+	}
+}
+
+// TestStaticI18n_WebModeTracerouteKeys verifies that both the English and
+// zh-TW locales in i18n.js declare the required traceroute mode keys so the
+// UI can be localised without fallback gaps.
+func TestStaticI18n_WebModeTracerouteKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Both locale sections must contain the traceroute mode key.
+	for _, key := range []string{"'web-mode-traceroute'", "'label-max-hops'"} {
+		if !strings.Contains(body, key) {
+			t.Errorf("i18n.js: missing key %s", key)
+		}
+	}
+	// zh-TW locale must carry Chinese label for route trace.
+	if !strings.Contains(body, "路由追蹤") {
+		t.Error("i18n.js zh-TW: web-mode-traceroute must contain '路由追蹤'")
+	}
+	// zh-TW locale must carry Chinese label for max-hops.
+	if !strings.Contains(body, "最大躍點數") {
+		t.Error("i18n.js zh-TW: label-max-hops must contain '最大躍點數'")
+	}
+}
+
+// TestStaticJS_WebModeTracerouteBuildOpts verifies that the embedded app.js
+// handles the "traceroute" mode in buildWebOpts() and forwards max_hops into
+// the API request payload so the server's WebOptions.MaxHops is populated.
+func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The traceroute mode string constant must appear in buildWebOpts / TARGET_MODE_PANELS.
+	if !strings.Contains(body, `'traceroute'`) {
+		t.Error("app.js: 'traceroute' mode string must appear in buildWebOpts or TARGET_MODE_PANELS")
+	}
+	// The max_hops JSON field must be written into the request opts.
+	if !strings.Contains(body, "max_hops") {
+		t.Error("app.js: buildWebOpts must include max_hops in the traceroute mode branch")
+	}
+	// The traceroute sub-panel must be wired to TARGET_MODE_PANELS.
+	if !strings.Contains(body, "web-fields-traceroute") {
+		t.Error("app.js: TARGET_MODE_PANELS.web must include 'web-fields-traceroute' entry")
+	}
+}

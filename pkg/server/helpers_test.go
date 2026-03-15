@@ -286,3 +286,50 @@ func TestStreamDiagHandler_ResolveLocator_TrueReturnsNoop(t *testing.T) {
 		t.Errorf("resolveLocator(true) returned %T, want NoopLocator", got)
 	}
 }
+
+// ── Phase 4: MaxHops mapping ──────────────────────────────────────────────
+
+// TestBuildOptions_WebMaxHopsMapped verifies that ReqWeb.MaxHops is forwarded
+// to diag.WebOptions.MaxHops via buildOptions, ensuring the API field reaches
+// the WebTracerouteRunner without the caller having to populate NetworkOptions.
+func TestBuildOptions_WebMaxHopsMapped(t *testing.T) {
+	opts, err := buildOptions(ReqOptions{
+		Web: &ReqWeb{Mode: "traceroute", MaxHops: 20},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.Web.MaxHops != 20 {
+		t.Errorf("Web.MaxHops = %d, want 20", opts.Web.MaxHops)
+	}
+}
+
+// TestBuildOptions_WebMaxHopsZeroIsPassedThrough verifies that a zero value
+// (meaning "use server default") is preserved rather than silently replacing
+// with some arbitrary default at the HTTP layer.
+func TestBuildOptions_WebMaxHopsZeroIsPassedThrough(t *testing.T) {
+	opts, err := buildOptions(ReqOptions{
+		Web: &ReqWeb{Mode: "traceroute", MaxHops: 0},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if opts.Web.MaxHops != 0 {
+		t.Errorf("Web.MaxHops = %d, want 0 (zero triggers DefaultMaxHops in runner)", opts.Web.MaxHops)
+	}
+}
+
+// TestBuildOptions_WebTracerouteModeValid verifies that "traceroute" is
+// accepted as a valid WebMode by IsValidWebMode so buildOptions does not
+// reject it as an unknown string.
+func TestBuildOptions_WebTracerouteModeValid(t *testing.T) {
+	opts, err := buildOptions(ReqOptions{
+		Web: &ReqWeb{Mode: "traceroute"},
+	})
+	if err != nil {
+		t.Fatalf("buildOptions with mode=traceroute must not return an error, got: %v", err)
+	}
+	if string(opts.Web.Mode) != "traceroute" {
+		t.Errorf("Web.Mode = %q, want %q", opts.Web.Mode, "traceroute")
+	}
+}

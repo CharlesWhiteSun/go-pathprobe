@@ -22,6 +22,7 @@ window.LOCALES = {
     'web-mode-dns':          'DNS Comparison',
     'web-mode-http':         'HTTP / HTTPS Probe',
     'web-mode-port':         'Port Connectivity',
+    'web-mode-traceroute':   'Route Trace',
     'label-dns-domains':     'DNS Domains',
     'label-dns-domains-hint':'(comma-separated)',
     'label-record-types':    'Record Types',
@@ -31,6 +32,7 @@ window.LOCALES = {
     'ph-dns-domains':        'e.g. google.com',
     'label-http-url':        'HTTP URL',
     'label-http-url-hint':   '(optional probe)',
+    'label-max-hops':        'Max Hops',
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
     'legend-smtp':           'SMTP Options',
@@ -170,6 +172,7 @@ window.LOCALES = {
     'web-mode-dns':          'DNS 跨解析器比對',
     'web-mode-http':         'HTTP / HTTPS 探測',
     'web-mode-port':         '連接埠連通性',
+    'web-mode-traceroute':   '路由追蹤',
     'label-dns-domains':     'DNS 網域',
     'label-dns-domains-hint':'（逗號分隔）',
     'label-record-types':    '記錄類型',
@@ -179,6 +182,7 @@ window.LOCALES = {
     'ph-dns-domains':        '例如 google.com',
     'label-http-url':        'HTTP URL',
     'label-http-url-hint':   '（選填探測）',
+    'label-max-hops':        '最大躍點數',
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
     'legend-smtp':           'SMTP 選項',

@@ -139,6 +139,7 @@ func buildOptions(r ReqOptions) (diag.Options, error) {
 		opts.Web.Mode = webMode
 		opts.Web.Domains = w.Domains
 		opts.Web.URL = w.URL
+		opts.Web.MaxHops = w.MaxHops
 		if len(w.Types) > 0 {
 			types, err := netprobe.ParseRecordTypes(w.Types)
 			if err != nil {

@@ -93,6 +93,7 @@
             <label class="mode-option"><input type="radio" name="web-mode" value="dns"> <span data-i18n="web-mode-dns">DNS Comparison</span></label>
             <label class="mode-option"><input type="radio" name="web-mode" value="http"> <span data-i18n="web-mode-http">HTTP / HTTPS Probe</span></label>
             <label class="mode-option"><input type="radio" name="web-mode" value="port"> <span data-i18n="web-mode-port">Port Connectivity</span></label>
+            <label class="mode-option"><input type="radio" name="web-mode" value="traceroute"> <span data-i18n="web-mode-traceroute">Route Trace</span></label>
           </div>
         </div>
         <div id="web-fields-dns" hidden>
@@ -113,6 +114,12 @@
           <div class="field-group">
             <label for="http-url"><span data-i18n="label-http-url">HTTP URL</span> <small data-i18n="label-http-url-hint">(optional probe)</small></label>
             <input type="text" id="http-url" placeholder="https://example.com">
+          </div>
+        </div>
+        <div id="web-fields-traceroute" hidden>
+          <div class="field-group">
+            <label for="traceroute-max-hops"><span data-i18n="label-max-hops">Max Hops</span></label>
+            <input type="number" id="traceroute-max-hops" min="1" max="64" placeholder="30">
           </div>
         </div>
       </div>

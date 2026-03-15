@@ -31,8 +31,9 @@ const TARGET_PORTS = {
 // Only panels that are conditionally visible need an entry here.
 const TARGET_MODE_PANELS = {
   web: {
-    'web-fields-dns':   ['dns'],
-    'web-fields-http':  ['http'],
+    'web-fields-dns':        ['dns'],
+    'web-fields-http':       ['http'],
+    'web-fields-traceroute': ['traceroute'],
   },
   smtp: {
     'smtp-fields-auth': ['auth', 'send'],
@@ -538,6 +539,9 @@ function buildWebOpts() {
     opts.types   = ['A', 'AAAA', 'MX'].filter(t => checked('dns-' + t));
   } else if (mode === 'http') {
     opts.url = val('http-url');
+  } else if (mode === 'traceroute') {
+    const maxHops = parseInt(val('traceroute-max-hops'), 10);
+    if (maxHops > 0) opts.max_hops = maxHops;
   }
   return opts;
 }

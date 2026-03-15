@@ -30,10 +30,11 @@ type ReqOptions struct {
 
 // ReqWeb configures Web / DNS diagnostic parameters.
 type ReqWeb struct {
-	Mode    string   `json:"mode,omitempty"` // "" | "public-ip" | "dns" | "http" | "port"
+	Mode    string   `json:"mode,omitempty"` // "" | "public-ip" | "dns" | "http" | "port" | "traceroute"
 	Domains []string `json:"domains,omitempty"`
 	Types   []string `json:"types,omitempty"` // e.g. ["A","AAAA","MX"]
 	URL     string   `json:"url,omitempty"`
+	MaxHops int      `json:"max_hops,omitempty"` // traceroute maximum TTL; 0 uses DefaultMaxHops
 }
 
 // ReqNet configures network connectivity probe parameters.

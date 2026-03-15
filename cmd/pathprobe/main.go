@@ -29,6 +29,16 @@ func main() {
 	tcpProber := &netprobe.TCPPortProber{Timeout: 2 * time.Second}
 	connectRunner := diag.NewConnectivityRunner(tcpProber, logger)
 
+	// Select traceroute prober: prefer ICMP when raw sockets are available,
+	// fall back to TCP (privilege-free) otherwise.
+	var traceProber netprobe.TracerouteProber
+	if avail.Available {
+		traceProber = &netprobe.ICMPTracerouteProber{}
+	} else {
+		traceProber = &netprobe.TCPTracerouteProber{}
+	}
+	webTracerouteRunner := diag.NewWebTracerouteRunner(diag.NewTracerouteRunner(traceProber, logger))
+
 	// Register web runner: STUN → HTTPS echo fallback for public IP, plus DNS compare and HTTP probe.
 	webFetcher := &netprobe.MultiSourcePublicIPFetcher{
 		Sources: []netprobe.PublicIPFetcher{
@@ -42,7 +52,7 @@ func main() {
 		&netprobe.HTTPDNSResolver{Client: httpClient, Endpoint: "https://dns.google/resolve", Name: "doh-8.8.8.8"},
 	}}
 	httpProber := &netprobe.ClientHTTPProber{Client: httpClient}
-	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), diag.NewHTTPRunner(httpProber, logger), diag.NewWebPortRunner(connectRunner)))
+	dispatcher.Register(diag.TargetWeb, diag.NewMultiRunner(diag.NewWebRunner(webFetcher, webComparator, logger), diag.NewHTTPRunner(httpProber, logger), diag.NewWebPortRunner(connectRunner), webTracerouteRunner))
 
 	// SMTP runner with MX resolution and connectivity.
 	smtpProber := &netprobe.DialSMTPProber{}
