@@ -4240,3 +4240,156 @@ func TestStaticJS_ApplyLocaleCallsCopyrightYear(t *testing.T) {
 		t.Error("app.js: applyLocale must call updateCopyrightYear() to keep the copyright year range current")
 	}
 }
+
+// Phase 7 (Round 2) tests — spellcheck suppression / map tile bg-color flash fix
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_SpellcheckDisabledInDOMContentLoaded verifies that app.js
+// centrally disables browser spell-check, autocorrect and autocapitalize on
+// all input[type="text"] elements.  Doing this in the initialisation block
+// (rather than per-element HTML attributes) ensures every current and future
+// text field is covered without per-field opt-out.
+func TestStaticJS_SpellcheckDisabledInDOMContentLoaded(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "spellcheck") {
+		t.Error("app.js: must disable spellcheck on text inputs")
+	}
+	if !strings.Contains(appJS, "spellcheck = false") {
+		t.Error("app.js: spellcheck must be set to false (el.spellcheck = false)")
+	}
+	if !strings.Contains(appJS, "autocorrect") {
+		t.Error("app.js: must set autocorrect='off' on text inputs")
+	}
+	if !strings.Contains(appJS, "autocapitalize") {
+		t.Error("app.js: must set autocapitalize='none' on text inputs")
+	}
+	// Must target input[type="text"] specifically.
+	if !strings.Contains(appJS, `input[type="text"]`) {
+		t.Error(`app.js: spellcheck suppression must target input[type="text"] elements`)
+	}
+}
+
+// TestStaticJS_TileLayerConfigsBgColor verifies that every entry in
+// TILE_LAYER_CONFIGS declares a bgColor property.  bgColor is the single
+// source of truth for the map container background colour; without it the
+// white-flash artefact cannot be fixed without hardcoding values elsewhere.
+func TestStaticJS_TileLayerConfigsBgColor(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	cfgStart := strings.Index(appJS, "const TILE_LAYER_CONFIGS")
+	if cfgStart == -1 {
+		t.Fatal("app.js: TILE_LAYER_CONFIGS not found")
+	}
+	// Extract to the closing brace of the object.
+	endIdx := strings.Index(appJS[cfgStart:], "\n};")
+	var cfgBlock string
+	if endIdx != -1 {
+		cfgBlock = appJS[cfgStart : cfgStart+endIdx+3]
+	} else {
+		cfgBlock = appJS[cfgStart : cfgStart+1500]
+	}
+
+	if !strings.Contains(cfgBlock, "bgColor") {
+		t.Error("app.js: TILE_LAYER_CONFIGS must include a bgColor property on each entry")
+	}
+	// All three variants must carry the property.
+	for _, variant := range []string{"light", "osm", "dark"} {
+		vStart := strings.Index(cfgBlock, variant+":")
+		if vStart == -1 {
+			t.Errorf("app.js: TILE_LAYER_CONFIGS.%s entry not found", variant)
+			continue
+		}
+		vEnd := strings.Index(cfgBlock[vStart:], "},")
+		if vEnd == -1 {
+			vEnd = len(cfgBlock) - vStart
+		}
+		vBlock := cfgBlock[vStart : vStart+vEnd]
+		if !strings.Contains(vBlock, "bgColor") {
+			t.Errorf("app.js: TILE_LAYER_CONFIGS.%s must have a bgColor property", variant)
+		}
+	}
+}
+
+// TestStaticJS_ApplyMapBgColorFunction verifies that app.js defines an
+// applyMapBgColor() function that reads bgColor from TILE_LAYER_CONFIGS and
+// applies it to the map container, acting as the single point responsible for
+// the background-colour update.
+func TestStaticJS_ApplyMapBgColorFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function applyMapBgColor(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyMapBgColor function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 400
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "bgColor") {
+		t.Error("app.js: applyMapBgColor must read bgColor from TILE_LAYER_CONFIGS")
+	}
+	if !strings.Contains(fnBody, "background") {
+		t.Error("app.js: applyMapBgColor must set container.style.background")
+	}
+}
+
+// TestStaticJS_RefreshMapTilesCallsApplyMapBgColor verifies that the animated
+// tile swap path in refreshMapTiles() calls applyMapBgColor() after the new
+// tile layer is added, so the container background is correct before the map
+// fades back in.
+func TestStaticJS_RefreshMapTilesCallsApplyMapBgColor(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function refreshMapTiles(")
+	if fnStart == -1 {
+		t.Fatal("app.js: refreshMapTiles function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "applyMapBgColor") {
+		t.Error("app.js: refreshMapTiles must call applyMapBgColor() after swapping tiles to prevent white-flash on dark tile load")
+	}
+}

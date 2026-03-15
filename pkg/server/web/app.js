@@ -55,21 +55,28 @@ const MAP_DARK_THEMES = new Set(['dark', 'deep-blue', 'forest-green']);
 // Using CARTO basemaps for light/dark; osm is the canonical OpenStreetMap style.
 // Only change the URLs here if a different provider is desired — no other code
 // needs to be touched.
+// bgColor: the representative base background colour of each tile set.  Applied
+// to the #geo-map container immediately after a tile-layer swap so that any
+// not-yet-loaded tile gaps show the expected colour instead of white, preventing
+// the white-flash artefact visible when switching to a dark tile variant.
 const TILE_LAYER_CONFIGS = {
   light: {
     url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     i18nKey:     'map-tile-light',
+    bgColor:     '#f5f5f0',  // CARTO light_all base background
   },
   osm: {
     url:         'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     i18nKey:     'map-tile-osm',
+    bgColor:     '#f2efe9',  // OpenStreetMap standard base background
   },
   dark: {
     url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     i18nKey:     'map-tile-dark',
+    bgColor:     '#1a1a1a',  // CARTO dark_all base background
   },
 };
 
@@ -260,6 +267,18 @@ function initTheme() {
 
 // ── Initialisation ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Disable browser spell-check, auto-correct and auto-capitalise on every
+  // text input.  All fields contain technical identifiers (hostnames, URLs,
+  // ports, credentials) where the browser's natural-language heuristics
+  // produce misleading red-underline noise rather than useful feedback.
+  // Centralising this here (rather than per-element HTML attributes) means
+  // newly added inputs are covered automatically — no per-field opt-out needed.
+  document.querySelectorAll('input[type="text"]').forEach(el => {
+    el.spellcheck = false;
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'none');
+  });
+
   // Track whether the user has manually edited the auto-filled fields.
   ['host', 'ports'].forEach(id => {
     const el = document.getElementById(id);
@@ -1123,6 +1142,20 @@ function getMapTileVariant() {
   return MAP_THEME_TO_TILE_VARIANT[theme] || 'light';
 }
 
+/**
+ * Set the background colour of the #geo-map container to the representative
+ * base colour of the target tile variant.  This ensures that un-loaded tile
+ * gaps always show the expected colour — not white — immediately after a swap,
+ * eliminating the white-flash artefact when switching to a dark tile set.
+ * The colour values live exclusively in TILE_LAYER_CONFIGS (single source of
+ * truth); this helper is the only consumer, keeping the logic cohesive.
+ */
+function applyMapBgColor(container, variant) {
+  if (!container) return;
+  const cfg = TILE_LAYER_CONFIGS[variant];
+  if (cfg && cfg.bgColor) container.style.background = cfg.bgColor;
+}
+
 /** Sync _mapTileVariant to the theme-derived default and update the map bar UI.
  *  Always performs a SILENT tile swap (no CSS fade animation) because this
  *  function is called either at page-load (map not yet created) or inside
@@ -1139,6 +1172,9 @@ function syncMapTileVariantToTheme(themeId) {
   if (_tileLayer) { _tileLayer.remove(); _tileLayer = null; }
   _tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 18 });
   _tileLayer.addTo(_map);
+  // Apply the representative tile background colour so gaps during initial
+  // tile-load show the correct base colour immediately.
+  applyMapBgColor(document.getElementById('geo-map'), variant);
 }
 
 /** Update the active state of the three map-bar variant buttons. */
@@ -1169,6 +1205,11 @@ function refreshMapTiles() {
     if (_tileLayer) { _tileLayer.remove(); _tileLayer = null; }
     _tileLayer = L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 18 });
     _tileLayer.addTo(_map);
+    // Apply the target variant's base background colour BEFORE fading back in.
+    // This ensures that any un-loaded tile gaps show the correct dark/light
+    // colour rather than white during the fade-in, preventing the white-flash
+    // artefact that appears when switching to the dark tile set.
+    applyMapBgColor(container, variant);
     // Remove fading class on the next frame — CSS transition handles the
     // fade-back-in automatically; no second event listener is required.
     requestAnimationFrame(() => {
