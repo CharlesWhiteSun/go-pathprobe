@@ -2597,3 +2597,211 @@ func TestStaticCSS_RunBtnCentering(t *testing.T) {
 		t.Error("style.css: #run-btn .anim-dots must set margin: 0 to restore flex centering symmetry")
 	}
 }
+
+// TestStaticHTML_PortsFieldGroup verifies that the redesigned form layout places
+// target-type, host, and port-group in ONE unified form-grid row.  The port-group
+// hosts a shared text input used by both web/port mode and non-web targets.
+func TestStaticHTML_PortsFieldGroup(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The unified port-group column must exist, initially hidden
+	// (default target = web/public-ip which doesn't need port selection).
+	if !strings.Contains(body, `id="port-group" hidden`) {
+		t.Error("index.html: #port-group must be present and initially hidden (default web/public-ip needs no ports)")
+	}
+	// The shared text-input variant must exist inside port-group.
+	if !strings.Contains(body, `id="ports-text-group" hidden`) {
+		t.Error("index.html: #ports-text-group must be present inside #port-group")
+	}
+	// The removed checkbox picker must NOT appear in the HTML.
+	if strings.Contains(body, `id="web-port-picker"`) {
+		t.Error("index.html: #web-port-picker checkbox picker has been removed; it must not appear in the HTML")
+	}
+	// host and ports inputs must still be reachable by their existing IDs.
+	if !strings.Contains(body, `id="host"`) {
+		t.Error("index.html: #host input must be present")
+	}
+	if !strings.Contains(body, `id="ports"`) {
+		t.Error("index.html: #ports input must be present")
+	}
+}
+
+// TestStaticHTML_PortGroupLabelHint verifies that the #port-group label displays
+// the "Ports" text and "(comma-separated)" hint inline as a <small> element
+// inside the <label> — matching the same visual pattern used by other fields
+// (e.g. DNS Domains, SMTP RCPT TO).  The hint must NOT appear as a standalone
+// sibling of the <input> inside #ports-text-group.
+func TestStaticHTML_PortGroupLabelHint(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The label inside #port-group must embed the hint as a <small> element.
+	const wantInlineHint = `<span data-i18n="label-ports">Ports</span> <small data-i18n="label-ports-hint">(comma-separated)</small></label>`
+	if !strings.Contains(body, wantInlineHint) {
+		t.Error(`index.html: #port-group label must contain inline <small data-i18n="label-ports-hint"> hint`)
+	}
+	// The hint must NOT appear as a standalone sibling of the <input> inside
+	// #ports-text-group (it would duplicate the inline label hint).
+	portTextGroupStart := strings.Index(body, `id="ports-text-group"`)
+	if portTextGroupStart == -1 {
+		t.Fatal("index.html: #ports-text-group element not found")
+	}
+	// Find the closing </div> of #ports-text-group (next </div> after its open tag).
+	portTextGroupEnd := strings.Index(body[portTextGroupStart:], "</div>")
+	if portTextGroupEnd == -1 {
+		t.Fatal("index.html: closing </div> for #ports-text-group not found")
+	}
+	textGroupBody := body[portTextGroupStart : portTextGroupStart+portTextGroupEnd]
+	if strings.Contains(textGroupBody, `data-i18n="label-ports-hint"`) {
+		t.Error(`index.html: <small data-i18n="label-ports-hint"> must not appear inside #ports-text-group (it belongs in the parent <label> instead)`)
+	}
+}
+
+// TestStaticJS_WebPortModeReadsTextInput verifies that app.js handles the
+// web/port mode using the shared text input (val('ports')) instead of the
+// removed checkbox picker.  getWebPorts() must no longer exist in the codebase.
+func TestStaticJS_WebPortModeReadsTextInput(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// getWebPorts() has been removed; buildRequest reads val('ports') for web/port.
+	if strings.Contains(body, "function getWebPorts(") {
+		t.Error("app.js: getWebPorts() must be removed; web/port mode now uses the shared text input")
+	}
+	// buildRequest must use WEB_MODES_WITH_PORTS to decide whether to read ports.
+	if !strings.Contains(body, "WEB_MODES_WITH_PORTS.includes(mode)") {
+		t.Error("app.js: buildRequest must guard web port reading with WEB_MODES_WITH_PORTS.includes(mode)")
+	}
+	// The removed picker elements must not be referenced in JS logic.
+	if strings.Contains(body, "getElementById('port-other-cb')") {
+		t.Error("app.js: port-other-cb has been removed and must not be referenced")
+	}
+	if strings.Contains(body, "getElementById('port-other-num')") {
+		t.Error("app.js: port-other-num has been removed and must not be referenced")
+	}
+}
+
+// TestStaticJS_WebTargetPortDefaults verifies that TARGET_PORTS.web includes
+// both port 80 (HTTP) and port 443 (HTTPS) as the auto-fill defaults shown
+// when the user selects web target + port connectivity mode.
+func TestStaticJS_WebTargetPortDefaults(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// TARGET_PORTS.web must include both HTTP (80) and HTTPS (443) defaults.
+	if !strings.Contains(body, "web:  [80, 443]") {
+		t.Error("app.js: TARGET_PORTS.web must be [80, 443] (HTTP + HTTPS defaults for port-connectivity mode)")
+	}
+}
+
+// TestStaticJS_PortGroupModeAutoFill verifies that app.js auto-fills the ports
+// text input when the user switches a web radio to the port-connectivity mode
+// (mirrors the auto-fill onTargetChange() already does for target switches).
+func TestStaticJS_PortGroupModeAutoFill(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The radio change handler must auto-fill ports for web/port mode.
+	if !strings.Contains(body, "WEB_MODES_WITH_PORTS.includes(mode)") {
+		t.Error("app.js: radio change handler must check WEB_MODES_WITH_PORTS to auto-fill ports")
+	}
+	// Must respect the userEdited guard so manual entries are preserved.
+	if !strings.Contains(body, `dataset.userEdited !== 'true'`) {
+		t.Error("app.js: radio change handler must respect dataset.userEdited guard before auto-filling")
+	}
+}
+
+// TestStaticJS_PortGroupToggle verifies that app.js manages #port-group
+// visibility via updatePortGroup(), which is driven by the WEB_MODES_WITH_PORTS
+// constant so logic is data-driven rather than hardcoded per-mode.
+func TestStaticJS_PortGroupToggle(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The unified port-group ID must be referenced.
+	if !strings.Contains(body, "port-group") {
+		t.Error("app.js: must reference 'port-group' to toggle Ports column visibility")
+	}
+	// updatePortGroup must be callable from both onTargetChange and the radio handler.
+	if !strings.Contains(body, "updatePortGroup(") {
+		t.Error("app.js: updatePortGroup() must be called from onTargetChange and radio change handler")
+	}
+}
+
+// TestStaticJS_WEB_MODES_WITH_PORTS verifies that app.js declares the
+// WEB_MODES_WITH_PORTS constant used to drive port-group visibility in a
+// data-driven, non-hardcoded manner.
+func TestStaticJS_WEB_MODES_WITH_PORTS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "WEB_MODES_WITH_PORTS") {
+		t.Error("app.js: WEB_MODES_WITH_PORTS constant must be declared")
+	}
+	// Port connectivity mode must be listed as requiring port selection.
+	if !strings.Contains(body, "'port'") {
+		t.Error("app.js: WEB_MODES_WITH_PORTS must include 'port' mode")
+	}
+}
+
+// TestStaticJS_UpdatePortGroup verifies that app.js declares the updatePortGroup()
+// function which manages visibility of #port-group and its inner variants.
+func TestStaticJS_UpdatePortGroup(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function updatePortGroup(") {
+		t.Error("app.js: updatePortGroup() function must be defined")
+	}
+	// Must reference all three DOM elements it manages.
+	for _, id := range []string{"port-group", "ports-text-group"} {
+		if !strings.Contains(body, id) {
+			t.Errorf("app.js: updatePortGroup() must reference element #%s", id)
+		}
+	}
+	// The removed checkbox picker must no longer be referenced in updatePortGroup.
+	if strings.Contains(body, "getElementById('web-port-picker')") {
+		t.Error("app.js: web-port-picker has been removed; updatePortGroup must not reference it")
+	}
+}

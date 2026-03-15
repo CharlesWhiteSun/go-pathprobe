@@ -38,6 +38,7 @@
   <section class="card">
     <h2 class="card-title" data-i18n="run-diagnostic">Diagnostic</h2>
 
+    <!-- ── 診斷主列：目標類型、目標主機、連接埠在同一區塊 ────────────── -->
     <div class="form-grid">
       <div class="field-group">
         <label for="target" data-i18n="label-target">Target</label>
@@ -72,9 +73,16 @@
         <input type="text" id="host" placeholder="e.g. google.com">
       </div>
 
-      <div class="field-group">
-        <label for="ports"><span data-i18n="label-ports">Ports</span> <small data-i18n="label-ports-hint">(comma-separated)</small></label>
-        <input type="text" id="ports" placeholder="443">
+      <!-- port-group: 依目標類型與偵測模式動態顯示。
+           web/port 模式與非 web 目標均顯示文字輸入框。
+           其餘 web 模式（public-ip/dns/http/traceroute）不需要連接埠，保持隱藏。
+           預設隱藏：初始目標為 web/public-ip 不需要連接埠。 -->
+      <div class="field-group" id="port-group" hidden>
+        <label><span data-i18n="label-ports">Ports</span> <small data-i18n="label-ports-hint">(comma-separated)</small></label>
+        <!-- 文字輸入：web/port 模式與非 web 目標共用，auto-fill 填入 TARGET_PORTS 預設值 -->
+        <div id="ports-text-group" hidden>
+          <input type="text" id="ports" placeholder="80, 443">
+        </div>
       </div>
     </div>
 

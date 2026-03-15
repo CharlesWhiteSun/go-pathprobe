@@ -19,7 +19,7 @@ let _map = null;
 
 // ── Per-target default ports ──────────────────────────────────────────────
 const TARGET_PORTS = {
-  web:  [443],
+  web:  [80, 443],
   smtp: [25, 465, 587],
   imap: [143, 993],
   pop:  [110, 995],
@@ -40,6 +40,11 @@ const TARGET_MODE_PANELS = {
     'smtp-fields-send': ['send'],
   },
 };
+
+// Web modes that require the port-group text input to be shown.
+// public-ip/dns/http/traceroute derive ports from protocol defaults or
+// do not perform port-level connectivity checks, so they suppress port-group.
+const WEB_MODES_WITH_PORTS = ['port'];
 
 // ── Per-target host placeholder i18n keys ─────────────────────────────────
 const TARGET_PLACEHOLDER_KEYS = {
@@ -158,6 +163,18 @@ document.addEventListener('DOMContentLoaded', () => {
     radio.addEventListener('change', () => {
       const target = radio.name.replace(/-mode$/, '');
       applyModePanels(target);
+      updatePortGroup(target, getModeFor(target));
+      // Auto-fill ports when switching to a port-needing web mode
+      // (mirrors the auto-fill that onTargetChange() does on target switch).
+      if (target === 'web') {
+        const portEl = document.getElementById('ports');
+        if (portEl && portEl.dataset.userEdited !== 'true') {
+          const mode = getModeFor(target);
+          if (WEB_MODES_WITH_PORTS.includes(mode)) {
+            portEl.value = (TARGET_PORTS[target] || []).join(', ');
+          }
+        }
+      }
     });
   });
   // Initialise all custom-select widgets on the page.
@@ -319,6 +336,26 @@ function applyModePanels(target) {
     const panel = document.getElementById(id);
     if (panel) panel.hidden = !visibleModes.includes(mode);
   });
+}
+
+/**
+ * Show or hide the #port-group column and its text-input variant based on the
+ * current target and mode.  Driven by WEB_MODES_WITH_PORTS so adding a new
+ * web mode that needs ports only requires updating that constant.
+ *
+ * Rules:
+ *   - web + mode in WEB_MODES_WITH_PORTS → show port-group + text input
+ *   - web + other modes                  → hide port-group entirely
+ *   - non-web targets                    → show port-group + text input
+ */
+function updatePortGroup(target, mode) {
+  const group   = document.getElementById('port-group');
+  const textGrp = document.getElementById('ports-text-group');
+
+  const needsPorts = ((target === 'web') && WEB_MODES_WITH_PORTS.includes(mode)) || (target !== 'web');
+
+  if (group)   group.hidden   = !needsPorts;
+  if (textGrp) textGrp.hidden = !needsPorts;
 }
 
 // Track the first onTargetChange() call so no enter-animation plays on cold
@@ -508,6 +545,7 @@ function onTargetChange() {
     hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
   }
   applyModePanels(target);
+  updatePortGroup(target, getModeFor(target));
 }
 
 // ── Request building ──────────────────────────────────────────────────────
@@ -529,10 +567,23 @@ function buildRequest() {
   const mtrCount = Math.max(1, parseInt(val('mtr-count'), 10) || 5);
   let   timeout  = val('diag-timeout') || '30s';
   const insecure = checked('insecure');
-  const ports    = val('ports')
-    .split(',')
-    .map(s => parseInt(s.trim(), 10))
-    .filter(n => n > 0 && n <= 65535);
+  let   ports;
+  if (target === 'web') {
+    const mode = getModeFor('web');
+    if (WEB_MODES_WITH_PORTS.includes(mode)) {
+      ports = val('ports')
+        .split(',')
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => n > 0 && n <= 65535);
+    } else {
+      ports = []; // other web modes (public-ip/dns/http/traceroute) don't use ports
+    }
+  } else {
+    ports = val('ports')
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => n > 0 && n <= 65535);
+  }
 
   const opts = {
     mtr_count:   mtrCount,
@@ -629,6 +680,11 @@ async function runDiag() {
 
   try {
     const req  = buildRequest();
+    if (req === null) {
+      // Validation failed inside buildRequest; error already surfaced via showError.
+      if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
+      return;
+    }
     const resp = await fetch('/api/diag/stream', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },

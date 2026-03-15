@@ -894,3 +894,21 @@ fieldset.target-fields legend {
      a 7.5:1 contrast ratio on that background, far above the WCAG AA bar. */
   --option-checked-fg: var(--surface);
 }
+
+/* ── Web port picker ────────────────────────────────────────────────────── */
+/* A lightweight flex row of labelled checkboxes replacing the text #ports
+   input specifically for the web target.  Uses native checkboxes (accent-
+   color: var(--primary)) to keep the component simple; the "Other" option
+   includes an inline number field that is disabled until the checkbox is
+   ticked (enforced by JS). */
+.port-selector { display: flex; flex-wrap: wrap; gap: .45rem 1.2rem;
+                 margin-bottom: .5rem; }
+.port-opt { display: flex; align-items: center; gap: .4rem;
+            font-size: .88rem; font-weight: 400; cursor: pointer; }
+.port-opt input[type=checkbox] { accent-color: var(--primary);
+                                  width: .9rem; height: .9rem;
+                                  flex-shrink: 0; cursor: pointer; }
+/* Inline number input inside the "Other" port option */
+.port-opt input[type=number]   { width: 5.5rem; margin-left: .2rem;
+                                  padding: .28rem .5rem; font-size: .85rem; }
+.port-opt input[type=number]:disabled { opacity: .45; cursor: not-allowed; }
