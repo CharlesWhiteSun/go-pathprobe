@@ -31,13 +31,7 @@ func main() {
 
 	// Select traceroute prober: prefer ICMP when raw sockets are available,
 	// fall back to TCP (privilege-free) otherwise.
-	var traceProber netprobe.TracerouteProber
-	if avail.Available {
-		traceProber = &netprobe.ICMPTracerouteProber{}
-	} else {
-		traceProber = &netprobe.TCPTracerouteProber{}
-	}
-	webTracerouteRunner := diag.NewWebTracerouteRunner(diag.NewTracerouteRunner(traceProber, logger))
+	webTracerouteRunner := diag.NewWebTracerouteRunner(diag.NewTracerouteRunner(diag.SelectTracerouteProber(avail.Available), logger))
 
 	// Register web runner: STUN → HTTPS echo fallback for public IP, plus DNS compare and HTTP probe.
 	webFetcher := &netprobe.MultiSourcePublicIPFetcher{
