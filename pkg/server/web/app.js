@@ -750,9 +750,11 @@ function handleSSEMessage(raw, progressEl, resultEl) {
   } else if (evtName === 'result') {
     if (progressEl) progressEl.hidden = true;
     renderReport(payload);
+    // Reveal #results BEFORE renderMap so the #geo-map container has a
+    // non-zero layout when Leaflet initialises (prevents blank tile areas).
+    resultEl.hidden = false;
     renderMap(payload.PublicGeo, payload.TargetGeo);
     loadHistory();
-    resultEl.hidden = false;
     resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else if (evtName === 'error') {
     // Clear and hide the progress log so no partial output remains visible.
@@ -1049,6 +1051,16 @@ function renderMap(pub, tgt) {
   } else {
     _map.fitBounds(latLngs, { padding: [40, 40] });
   }
+
+  // Leaflet cannot correctly position tiles when the container (or an ancestor)
+  // has display:none at initialisation time.  The #results section is hidden
+  // before results arrive, so the first renderMap() call sees a 0×0 layout.
+  // Scheduling invalidateSize() for the next frame (after the browser has
+  // applied the visibility change and reflowed the layout) ensures all tiles
+  // are projected to the correct positions and eliminates the blank grey areas.
+  requestAnimationFrame(() => {
+    if (_map) _map.invalidateSize();
+  });
 }
 
 // -- History ------------------------------------------------------------------
@@ -1101,9 +1113,10 @@ async function loadHistoryEntry(id) {
     }
     const report = await r.json();
     renderReport(report);
+    // Reveal #results BEFORE renderMap for the same reason as in handleSSEMessage.
+    if (resultEl) resultEl.hidden = false;
     renderMap(report.PublicGeo, report.TargetGeo);
     if (resultEl) {
-      resultEl.hidden = false;
       resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   } catch (err) {

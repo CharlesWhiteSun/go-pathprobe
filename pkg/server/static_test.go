@@ -2805,3 +2805,114 @@ func TestStaticJS_UpdatePortGroup(t *testing.T) {
 		t.Error("app.js: web-port-picker has been removed; updatePortGroup must not reference it")
 	}
 }
+
+// TestStaticJS_RenderMapInvalidateSize verifies that renderMap() defers a call
+// to _map.invalidateSize() via requestAnimationFrame so Leaflet re-projects all
+// tiles after the #results section transitions from display:none to display:block.
+// Without this, Leaflet sees a 0×0 container at init time and leaves large
+// blank grey areas on the OpenStreetMap canvas.
+func TestStaticJS_RenderMapInvalidateSize(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// renderMap must call invalidateSize to correct blank-tile regression.
+	if !strings.Contains(body, "invalidateSize") {
+		t.Error("app.js: renderMap must call _map.invalidateSize() to fix blank tile regression when container was hidden")
+	}
+	// The call must be deferred via requestAnimationFrame so it runs after the
+	// browser has re-laid-out the newly visible container.
+	if !strings.Contains(body, "requestAnimationFrame") {
+		t.Error("app.js: invalidateSize must be deferred via requestAnimationFrame so layout is complete before tiles repaint")
+	}
+}
+
+// TestStaticJS_SSEResultRevealOrder verifies that in the SSE 'result' event
+// handler, resultEl.hidden = false is set BEFORE renderMap() is called.
+// Leaflet initialises by reading the container's layout dimensions; if the
+// parent #results section is still hidden (display:none) at that point, the
+// map gets a 0×0 size and tiles are blank.
+func TestStaticJS_SSEResultRevealOrder(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Locate handleSSEMessage and the evtName==='result' branch within it.
+	fnStart := strings.Index(body, "function handleSSEMessage(")
+	if fnStart == -1 {
+		t.Fatal("app.js: handleSSEMessage function not found")
+	}
+	resultBranchIdx := strings.Index(body[fnStart:], "evtName === 'result'")
+	if resultBranchIdx == -1 {
+		t.Fatal("app.js: evtName === 'result' branch not found in handleSSEMessage")
+	}
+	// Inspect a window large enough to cover the result branch body.
+	windowStart := fnStart + resultBranchIdx
+	window := body[windowStart : windowStart+600]
+
+	hiddenIdx := strings.Index(window, "resultEl.hidden = false")
+	renderMapIdx := strings.Index(window, "renderMap(")
+	if hiddenIdx == -1 {
+		t.Fatal("app.js: resultEl.hidden = false not found in SSE result branch")
+	}
+	if renderMapIdx == -1 {
+		t.Fatal("app.js: renderMap( not found in SSE result branch")
+	}
+	if hiddenIdx > renderMapIdx {
+		t.Error("app.js: resultEl.hidden = false must appear BEFORE renderMap() in the SSE result handler — " +
+			"#results must be visible so the Leaflet container has layout dimensions")
+	}
+}
+
+// TestStaticJS_HistoryEntryRevealOrder verifies that in loadHistoryEntry(),
+// resultEl.hidden = false is set BEFORE renderMap() for the same reason as
+// in the SSE handler.
+func TestStaticJS_HistoryEntryRevealOrder(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function loadHistoryEntry(")
+	if fnStart == -1 {
+		t.Fatal("app.js: loadHistoryEntry function not found")
+	}
+	// Bound the search to the function body (next top-level function boundary).
+	// nextFn is relative to body[fnStart:], so add fnStart to get absolute end.
+	nextFn := strings.Index(body[fnStart+1:], "\nasync function ")
+	var fnBody string
+	if nextFn != -1 && (fnStart+1+nextFn) <= len(body) {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		// Fallback: take up to 1200 chars, capped at body length.
+		end := fnStart + 1200
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	hiddenIdx := strings.Index(fnBody, "resultEl.hidden = false")
+	renderMapIdx := strings.Index(fnBody, "renderMap(")
+	if hiddenIdx == -1 {
+		t.Fatal("app.js: resultEl.hidden = false not found in loadHistoryEntry")
+	}
+	if renderMapIdx == -1 {
+		t.Fatal("app.js: renderMap( not found in loadHistoryEntry")
+	}
+	if hiddenIdx > renderMapIdx {
+		t.Error("app.js: resultEl.hidden = false must appear BEFORE renderMap() in loadHistoryEntry — " +
+			"#results must be visible so the Leaflet container has layout dimensions")
+	}
+}
