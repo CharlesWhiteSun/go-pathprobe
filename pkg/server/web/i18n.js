@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 /**
  * i18n.js — PathProbe UI translation dictionary.
  *
@@ -141,7 +141,13 @@ window.LOCALES = {
     'map-distance':          'Distance',    'map-tile-light':        'Light',
     'map-tile-osm':          'OSM',
     'map-tile-dark':         'Dark',
-    /* ── Target select options ────────────────────────────────────────── */
+    /* ── Marker style label ─────────────────────────────────────────────── */
+    'marker-style-diamond-pulse':    'Pulse',
+    /* ── Marker colour scheme ────────────────────────────────────────────── */
+    'marker-color-ocean':      'Ocean',
+    /* ── Connector line styles ─────────────────────────────────────── */
+    'connector-tick-xs':       '> xs',
+    /* ── Target select options ────────────────────────────────────── */
     'opt-web':               'WEB \u2014 Public IP & DNS',
     'opt-smtp':              'SMTP \u2014 Mail server',
     'opt-imap':              'IMAP \u2014 IMAP server',
@@ -307,6 +313,12 @@ window.LOCALES = {
     'map-distance':          '連線距離',    'map-tile-light':        '淡色',
     'map-tile-osm':          '原始風格',
     'map-tile-dark':         '深色',
+    /* ── 標記外觀標籤 ─────────────────────────────────────────── */
+    'marker-style-diamond-pulse':    '脈衝',
+    /* ── 標記配色方案 ────────────────────────────────────────── */
+    'marker-color-ocean':      '海洋',
+    /* ── 連接弧線風格 ─────────────────────────────────── */
+    'connector-tick-xs':       '> xs',
     /* ── Target select options ────────────────────────────────────────── */
     'opt-web':               'WEB \u2014 公開 IP 與 DNS',
     'opt-smtp':              'SMTP \u2014 郵件伺服器',

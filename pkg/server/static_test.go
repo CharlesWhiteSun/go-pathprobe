@@ -311,10 +311,10 @@ func TestStaticCSS_ThemeBarButtons(t *testing.T) {
 		}
 	}
 
-	// Flat-design: buttons must use solid colour only (no hard-split gradient).
-	if strings.Contains(body, "linear-gradient") {
-		t.Error("style.css: .theme-btn must not use linear-gradient — flat solid colour only")
-	}
+	// Flat-design: buttons must use solid colour only (no gradient).
+	// Scoped to the theme-bar section below (after themeBarSec is computed)
+	// to avoid false positives from other components — e.g. the diamond-split
+	// marker style intentionally uses linear-gradient for its two-tone effect.
 
 	// Flat-design: no scale transform on hover/active (avoids flashy zoom).
 	// Scope the check to only the theme-bar section to avoid false positives
@@ -348,6 +348,9 @@ func TestStaticCSS_ThemeBarButtons(t *testing.T) {
 	}
 	if strings.Contains(themeBarSec, "transform: scale") {
 		t.Error("style.css: .theme-btn must not use transform: scale — flat transition only")
+	}
+	if strings.Contains(themeBarSec, "linear-gradient") {
+		t.Error("style.css: .theme-btn must not use linear-gradient — flat solid colour only")
 	}
 
 	// Old <select> style must be gone.
@@ -3005,8 +3008,11 @@ func TestStaticJS_BuildPopupHtml(t *testing.T) {
 	}
 }
 
-// TestStaticJS_RenderMapPolyline verifies that renderMap() draws a L.polyline
+// TestStaticJS_RenderMapPolyline verifies that renderMap() draws a connector
 // between origin and target to give users a clear visual probe direction.
+// The connector is now rendered by ConnectorArcLayer (HTML5 canvas) rather
+// than a raw L.polyline, so the test checks for buildConnectorLayer() and
+// that dot/dash rhythms are configured via dashArray in CONNECTOR_LINE_CONFIGS.
 func TestStaticJS_RenderMapPolyline(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
@@ -3016,11 +3022,11 @@ func TestStaticJS_RenderMapPolyline(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	if !strings.Contains(body, "L.polyline(") {
-		t.Error("app.js: renderMap must draw a L.polyline to connect origin and target markers")
+	if !strings.Contains(body, "buildConnectorLayer(") {
+		t.Error("app.js: renderMap must call buildConnectorLayer() to connect origin and target markers")
 	}
 	if !strings.Contains(body, "dashArray") {
-		t.Error("app.js: the connection polyline must use dashArray for a visual route style")
+		t.Error("app.js: CONNECTOR_LINE_CONFIGS must include dashArray entries for dot/dash rhythm styles")
 	}
 }
 
@@ -3052,7 +3058,7 @@ func TestStaticCSS_GeoMarkerStyles(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	for _, cls := range []string{".geo-marker--origin", ".geo-marker--target", ".geo-marker__dot"} {
+	for _, cls := range []string{".geo-marker--origin", ".geo-marker--target", ".geo-marker__dia-pulse-core", ".geo-marker__dia-pulse-ring"} {
 		if !strings.Contains(body, cls) {
 			t.Errorf("style.css: class %q not found — required for custom Leaflet divIcon styling", cls)
 		}
@@ -3071,7 +3077,7 @@ func TestStaticCSS_GeoLegendAndDistance(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	for _, cls := range []string{".geo-legend", ".geo-legend__item", ".geo-legend__dot", ".geo-distance"} {
+	for _, cls := range []string{".geo-legend", ".geo-legend__item", ".geo-legend__marker", ".geo-distance"} {
 		if !strings.Contains(body, cls) {
 			t.Errorf("style.css: class %q not found — required for map legend / distance badge", cls)
 		}
@@ -3714,6 +3720,24 @@ func TestStaticHTML_GeoMapBar(t *testing.T) {
 
 	if !strings.Contains(body, `id="geo-map-bar"`) {
 		t.Error(`index.html: element with id="geo-map-bar" not found`)
+	}
+}
+
+// TestStaticHTML_GeoMapBarUniqueId verifies that index.html contains exactly
+// ONE element with id="geo-map-bar". Duplicate IDs break getElementById and
+// leave the second element permanently empty.
+func TestStaticHTML_GeoMapBarUniqueId(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	const marker = `id="geo-map-bar"`
+	if count := strings.Count(body, marker); count != 1 {
+		t.Errorf(`index.html: expected exactly 1 element with id="geo-map-bar", got %d — duplicate IDs break getElementById`, count)
 	}
 }
 
@@ -4391,5 +4415,1457 @@ func TestStaticJS_RefreshMapTilesCallsApplyMapBgColor(t *testing.T) {
 
 	if !strings.Contains(fnBody, "applyMapBgColor") {
 		t.Error("app.js: refreshMapTiles must call applyMapBgColor() after swapping tiles to prevent white-flash on dark tile load")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 3) — marker icon redesign & temporary style picker
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_MarkerStyleConfigsDefined verifies that app.js declares
+// MARKER_STYLE_CONFIGS with the diamond-pulse style entry.
+func TestStaticJS_MarkerStyleConfigsDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MARKER_STYLE_CONFIGS") {
+		t.Fatal("app.js: MARKER_STYLE_CONFIGS constant must be declared")
+	}
+	if !strings.Contains(body, "'marker-style-diamond-pulse'") {
+		t.Error("app.js: MARKER_STYLE_CONFIGS must include i18nKey 'marker-style-diamond-pulse'")
+	}
+	// Entry must declare a buildHtml property.
+	if !strings.Contains(body, "buildHtml") {
+		t.Error("app.js: MARKER_STYLE_CONFIGS entries must declare a buildHtml function")
+	}
+}
+
+// TestStaticJS_MapPointConfigsShortLabel verifies that MAP_POINT_CONFIGS
+// carries a shortLabel property on both 'origin' and 'target' entries.
+// shortLabel is passed to buildHtml() so the labeled style can render the
+// marker letter without hardcoding it inside the style config.
+func TestStaticJS_MapPointConfigsShortLabel(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	cfgStart := strings.Index(body, "const MAP_POINT_CONFIGS")
+	if cfgStart == -1 {
+		t.Fatal("app.js: MAP_POINT_CONFIGS not found")
+	}
+	endIdx := strings.Index(body[cfgStart:], "};")
+	if endIdx == -1 {
+		endIdx = 400
+	}
+	cfgBlock := body[cfgStart : cfgStart+endIdx+2]
+	if !strings.Contains(cfgBlock, "shortLabel") {
+		t.Error("app.js: MAP_POINT_CONFIGS must include a shortLabel property for the labeled marker style")
+	}
+}
+
+// TestStaticJS_BuildMarkerIconUsesStyleConfig verifies that buildMarkerIcon()
+// reads both MAP_POINT_CONFIGS (for role colour / class) and
+// MARKER_STYLE_CONFIGS (for shape / size), combining them into a single
+// L.divIcon — clean separation of role vs. visual style.
+func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function buildMarkerIcon(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildMarkerIcon function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "MARKER_STYLE_CONFIGS") {
+		t.Error("app.js: buildMarkerIcon must read MARKER_STYLE_CONFIGS for the shape/size data")
+	}
+	if !strings.Contains(fnBody, "buildHtml") {
+		t.Error("app.js: buildMarkerIcon must call styleCfg.buildHtml to produce the inner HTML")
+	}
+	if !strings.Contains(fnBody, "_markerStyleId") {
+		t.Error("app.js: buildMarkerIcon must use _markerStyleId to select the active style config")
+	}
+}
+
+// TestStaticJS_RefreshMapMarkersFunction verifies that app.js defines
+// refreshMapMarkers() which replaces only the Marker layers on the live map
+// without destroying the tile layer, polyline, or legend.
+func TestStaticJS_RefreshMapMarkersFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function refreshMapMarkers(") {
+		t.Fatal("app.js: refreshMapMarkers function not found")
+	}
+	fnStart := strings.Index(body, "function refreshMapMarkers(")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+	// Must iterate layers and remove Marker instances only.
+	if !strings.Contains(fnBody, "eachLayer") {
+		t.Error("app.js: refreshMapMarkers must use _map.eachLayer to locate existing markers")
+	}
+	if !strings.Contains(fnBody, "L.Marker") {
+		t.Error("app.js: refreshMapMarkers must guard removal with 'instanceof L.Marker'")
+	}
+	if !strings.Contains(fnBody, "_lastPub") && !strings.Contains(fnBody, "_lastTgt") {
+		t.Error("app.js: refreshMapMarkers must use _lastPub/_lastTgt to recreate markers")
+	}
+}
+
+// TestStaticCSS_MarkerStyleSnippets verifies that style.css contains CSS rules
+// for the diamond-pulse marker shape.
+func TestStaticCSS_MarkerStyleSnippets(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	// Diamond-pulse marker element classes must be present.
+	for _, cls := range []string{
+		".geo-marker__dia-pulse-core",
+		".geo-marker__dia-pulse-ring",
+	} {
+		if !strings.Contains(css, cls) {
+			t.Errorf("style.css: class %q not found — required for diamond-pulse marker style", cls)
+		}
+	}
+}
+
+// TestStaticCSS_PulseAnimation verifies that style.css declares the
+// @keyframes geo-dia-pulse animation used by the diamond-pulse marker style.
+func TestStaticCSS_PulseAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	if !strings.Contains(css, "@keyframes geo-dia-pulse") {
+		t.Error("style.css: @keyframes geo-dia-pulse must be declared for the diamond-pulse marker animation")
+	}
+}
+
+// TestStaticI18n_MarkerStyleKeys verifies that both the en and zh-TW locales
+// in i18n.js carry all ten diamond marker-style translation keys so the picker
+// bar labels are fully localised in both languages.
+func TestStaticI18n_MarkerStyleKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// diamond-pulse key must be present in both en and zh-TW.
+	key := "'marker-style-diamond-pulse'"
+	first := strings.Index(body, key)
+	if first == -1 {
+		t.Errorf("i18n.js: key %s not found in any locale", key)
+	} else {
+		second := strings.Index(body[first+1:], key)
+		if second == -1 {
+			t.Errorf("i18n.js: key %s found in only one locale — must be present in both en and zh-TW", key)
+		}
+	}
+	// zh-TW: 脈衝
+	if !strings.Contains(body, "\u8108\u885d") {
+		t.Error("i18n.js zh-TW: missing Chinese marker style label \"\u8108\u885d\" (Pulse)")
+	}
+}
+
+// TestStaticJS_RenderMapStoresLastGeo verifies that renderMap() stores the
+// pub and tgt arguments into _lastPub and _lastTgt so that refreshMapMarkers()
+// can recreate markers without requiring a full map rebuild.
+func TestStaticJS_RenderMapStoresLastGeo(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMap function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 3000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastPub") {
+		t.Error("app.js: renderMap must store the pub argument into _lastPub")
+	}
+	if !strings.Contains(fnBody, "_lastTgt") {
+		t.Error("app.js: renderMap must store the tgt argument into _lastTgt")
+	}
+	if !strings.Contains(fnBody, "applyMarkerColorScheme()") {
+		t.Error("app.js: renderMap must call applyMarkerColorScheme() to apply the initial colour scheme")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 3) — diamond marker redesign & theme-adaptive tokens
+// ---------------------------------------------------------------------------
+
+// TestStaticCSS_MarkerStyleTokensRoot verifies that style.css declares the
+// marker design tokens inside :root.  The chrome tokens (--marker-border,
+// --marker-inner, --marker-shadow) drive secondary styling for all diamond
+// variants.  The role-colour tokens (--mc-origin, --mc-target) are the
+// default values for the colour scheme and are overwritten at runtime by
+// applyMarkerColorScheme().
+func TestStaticCSS_MarkerStyleTokensRoot(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	for _, token := range []string{
+		"--marker-border", "--marker-inner", "--marker-shadow",
+		"--mc-origin", "--mc-target",
+	} {
+		if !strings.Contains(css, token) {
+			t.Errorf("style.css: CSS custom property %q not declared — required for theme-adaptive marker chrome", token)
+		}
+	}
+
+	// Tokens must be declared inside :root (must appear before the first
+	// standalone [data-theme="..."] { block so they apply without any active theme).
+	// We search for "\n[data-theme=" to skip comment text and .theme-btn selectors.
+	rootEnd := strings.Index(css, "\n[data-theme=")
+	if rootEnd == -1 {
+		rootEnd = len(css)
+	}
+	rootBlock := css[:rootEnd]
+	for _, token := range []string{"--marker-border", "--marker-inner", "--mc-origin", "--mc-target"} {
+		if !strings.Contains(rootBlock, token) {
+			t.Errorf("style.css: %s must be declared inside :root (before any [data-theme] block)", token)
+		}
+	}
+}
+
+// TestStaticCSS_MarkerStyleTokensDarkThemes verifies that the three dark
+// themes (deep-blue, forest-green, dark) each override the marker design tokens
+// so diamond marker chrome shifts from light to dark chrome automatically.
+func TestStaticCSS_MarkerStyleTokensDarkThemes(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	// --marker-border must appear ≥4 times: once in :root + once per dark theme.
+	borderCount := strings.Count(css, "--marker-border:")
+	if borderCount < 4 {
+		t.Errorf("style.css: --marker-border declared %d time(s), want ≥4 (root + deep-blue + forest-green + dark)", borderCount)
+	}
+
+	for _, themeAttr := range []string{`deep-blue`, `forest-green`, `dark`} {
+		// Search for the standalone block selector "\n[data-theme=\"...\"] {"
+		// to avoid matching .theme-btn[data-theme="..."] button selectors.
+		themeBlock := "\n[data-theme=\"" + themeAttr + "\"] {"
+		themeIdx := strings.Index(css, themeBlock)
+		if themeIdx == -1 {
+			t.Errorf("style.css: theme block %s not found", themeBlock)
+			continue
+		}
+		// Bound the search to the block by looking for the next standalone theme or end.
+		rest := css[themeIdx+1:]
+		nextTheme := strings.Index(rest, "\n[data-theme=")
+		var themeSection string
+		if nextTheme != -1 {
+			themeSection = css[themeIdx : themeIdx+1+nextTheme]
+		} else {
+			themeSection = css[themeIdx:]
+		}
+		if !strings.Contains(themeSection, "--marker-border") {
+			t.Errorf("style.css: [data-theme=%q] must override --marker-border for dark-mode marker chrome", themeAttr)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 4) — marker colour scheme picker + legend sync
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_MarkerColorSchemeConfigsDefined verifies that app.js declares
+// MARKER_COLOR_SCHEME_CONFIGS with the ocean colour scheme entry.
+func TestStaticJS_MarkerColorSchemeConfigsDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "MARKER_COLOR_SCHEME_CONFIGS") {
+		t.Fatal("app.js: MARKER_COLOR_SCHEME_CONFIGS constant must be declared")
+	}
+	if !strings.Contains(body, "'marker-color-ocean'") {
+		t.Error("app.js: MARKER_COLOR_SCHEME_CONFIGS must include i18nKey 'marker-color-ocean'")
+	}
+	if !strings.Contains(body, "originColor") || !strings.Contains(body, "targetColor") {
+		t.Error("app.js: MARKER_COLOR_SCHEME_CONFIGS entries must declare originColor and targetColor fields")
+	}
+}
+
+// TestStaticJS_MarkerColorSchemeStateVars verifies that app.js declares the
+// _markerColorSchemeId and _legendControl module-level state variables.
+func TestStaticJS_MarkerColorSchemeStateVars(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "_markerColorSchemeId") {
+		t.Error("app.js: _markerColorSchemeId state variable not declared")
+	}
+	if !strings.Contains(body, "_legendControl") {
+		t.Error("app.js: _legendControl state variable not declared")
+	}
+}
+
+// TestStaticJS_ColorSchemeFunctions verifies that app.js defines
+// applyMarkerColorScheme() which applies the active colour scheme.
+func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "function applyMarkerColorScheme") {
+		t.Error("app.js: function applyMarkerColorScheme not found")
+	}
+
+	// applyMarkerColorScheme must set --mc-origin and --mc-target on the root element.
+	fnStart := strings.Index(body, "function applyMarkerColorScheme")
+	if fnStart != -1 {
+		nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+		var fnBody string
+		if nextFn != -1 {
+			fnBody = body[fnStart : fnStart+1+nextFn]
+		} else {
+			end := fnStart + 800
+			if end > len(body) {
+				end = len(body)
+			}
+			fnBody = body[fnStart:end]
+		}
+		if !strings.Contains(fnBody, "--mc-origin") {
+			t.Error("app.js: applyMarkerColorScheme must set the --mc-origin CSS custom property")
+		}
+		if !strings.Contains(fnBody, "--mc-target") {
+			t.Error("app.js: applyMarkerColorScheme must set the --mc-target CSS custom property")
+		}
+	}
+}
+
+// TestStaticJS_BuildMapLegendUsesBuildHtml verifies that buildMapLegend()
+// uses MARKER_STYLE_CONFIGS[_markerStyleId].buildHtml(roleCfg) to produce
+// the legend icon so it mirrors the active marker style (legend sync fix).
+func TestStaticJS_BuildMapLegendUsesBuildHtml(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function buildMapLegend(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildMapLegend function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "MARKER_STYLE_CONFIGS") {
+		t.Error("app.js: buildMapLegend must use MARKER_STYLE_CONFIGS to look up the active style")
+	}
+	if !strings.Contains(fnBody, "buildHtml") {
+		t.Error("app.js: buildMapLegend must call buildHtml() to produce the legend icon (legend sync)")
+	}
+	if !strings.Contains(fnBody, "geo-legend__marker") {
+		t.Error("app.js: buildMapLegend must apply the .geo-legend__marker CSS class to the icon wrapper")
+	}
+}
+
+// TestStaticI18n_MarkerColorSchemeKeys verifies that both en and zh-TW locales
+// in i18n.js carry the ocean colour-scheme translation key and that the zh-TW
+// locale uses a Chinese label.
+func TestStaticI18n_MarkerColorSchemeKeys(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	key := "'marker-color-ocean'"
+	first := strings.Index(body, key)
+	if first == -1 {
+		t.Errorf("i18n.js: key %s not found in any locale", key)
+	} else {
+		second := strings.Index(body[first+1:], key)
+		if second == -1 {
+			t.Errorf("i18n.js: key %s found in only one locale — must be present in both en and zh-TW", key)
+		}
+	}
+	// zh-TW: 海洋
+	if !strings.Contains(body, "\u6d77\u6d0b") {
+		t.Error("i18n.js zh-TW: missing Chinese colour scheme label \"海洋\" (Ocean)")
+	}
+}
+
+// TestStaticCSS_McColorTokensInMarkerRules verifies that no hardcoded #22a55b /
+// #e03c3c hex colours remain outside :root — all role-colour references in
+// component rules must use var(--mc-origin) / var(--mc-target).
+func TestStaticCSS_McColorTokensInMarkerRules(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	if !strings.Contains(css, "var(--mc-origin)") {
+		t.Error("style.css: var(--mc-origin) not found — diamond marker rules must use CSS token for role colour")
+	}
+	if !strings.Contains(css, "var(--mc-target)") {
+		t.Error("style.css: var(--mc-target) not found — diamond marker rules must use CSS token for role colour")
+	}
+
+	// Hardcoded origin/target hex values must not appear outside the :root block.
+	rootEnd := strings.Index(css, "\n[data-theme=")
+	if rootEnd == -1 {
+		rootEnd = len(css)
+	}
+	postRoot := css[rootEnd:]
+	if strings.Contains(postRoot, "#22a55b") {
+		t.Error("style.css: hardcoded #22a55b found outside :root — use var(--mc-origin) instead")
+	}
+	if strings.Contains(postRoot, "#e03c3c") {
+		t.Error("style.css: hardcoded #e03c3c found outside :root — use var(--mc-target) instead")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 5) — fixed marker appearance + colour scheme + legend i18n
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_BuildMapLegendDataI18nAttribute verifies that buildMapLegend()
+// adds a data-i18n attribute to the label span in each legend item so that
+// applyLocale() can update the text reactively when the user switches language.
+// Without this attribute the legend text would be frozen at creation time and
+// never reflect a locale change.
+func TestStaticJS_BuildMapLegendDataI18nAttribute(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	fnStart := strings.Index(body, "function buildMapLegend(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildMapLegend function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "data-i18n") {
+		t.Error("app.js: buildMapLegend must add a data-i18n attribute to the legend label span so applyLocale() can update it on language change")
+	}
+}
+
+// TestStaticI18n_MapLegendKeysInBothLocales verifies that the map legend
+// i18n keys ('map-origin' and 'map-target') exist in both en and zh-TW locales.
+func TestStaticI18n_MapLegendKeysInBothLocales(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	for _, key := range []string{"'map-origin'", "'map-target'"} {
+		first := strings.Index(body, key)
+		if first == -1 {
+			t.Errorf("i18n.js: key %s not found in any locale", key)
+			continue
+		}
+		second := strings.Index(body[first+1:], key)
+		if second == -1 {
+			t.Errorf("i18n.js: key %s found in only one locale — must be present in both en and zh-TW", key)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 6) tests — results section i18n re-render on locale switch
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_LastReportStateVar verifies that app.js declares a module-level
+// _lastReport variable used to cache the most recently rendered diagnostic
+// report for re-rendering when the user switches locale.
+func TestStaticJS_LastReportStateVar(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "let _lastReport = null") {
+		t.Error("app.js: module-level variable '_lastReport' not found — required to cache the report for locale-switch re-render")
+	}
+}
+
+// TestStaticJS_RenderReportStoresLastReport verifies that renderReport() saves
+// the report object into _lastReport so applyLocale() can re-render it later.
+func TestStaticJS_RenderReportStoresLastReport(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderReport(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderReport function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 500
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastReport = r") {
+		t.Error("app.js: renderReport must assign '_lastReport = r' so the report can be replayed when the locale changes")
+	}
+}
+
+// TestStaticJS_ApplyLocaleReRendersReport verifies that applyLocale() re-calls
+// renderReport(_lastReport) when a cached report is present.  This is the
+// mechanism that keeps all dynamically generated label text (target type, host,
+// generated-at, public IP, geo section, table headers, etc.) in sync with the
+// active locale without requiring data-i18n attributes in the generated HTML.
+func TestStaticJS_ApplyLocaleReRendersReport(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function applyLocale(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyLocale function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1200
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastReport") {
+		t.Error("app.js: applyLocale must reference _lastReport to conditionally re-render results on locale change")
+	}
+	if !strings.Contains(fnBody, "renderReport(_lastReport)") {
+		t.Error("app.js: applyLocale must call renderReport(_lastReport) so the results section labels are updated when the user switches language")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 8) tests — locale-aware history timestamps
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_LastHistoryItemsStateVar verifies that app.js declares a
+// module-level _lastHistoryItems variable used to cache the fetched history
+// items for re-rendering when the user switches locale.
+func TestStaticJS_LastHistoryItemsStateVar(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "let _lastHistoryItems = null") {
+		t.Error("app.js: module-level variable '_lastHistoryItems' not found — required to cache history list for locale-switch re-render")
+	}
+}
+
+// TestStaticJS_FormatHistoryTimeFunction verifies that app.js defines a
+// formatHistoryTime() function and that it passes _locale to toLocaleString()
+// so timestamps reflect the active language.
+func TestStaticJS_FormatHistoryTimeFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function formatHistoryTime(")
+	if fnStart == -1 {
+		t.Fatal("app.js: formatHistoryTime function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 300
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "toLocaleString(_locale)") {
+		t.Error("app.js: formatHistoryTime must call toLocaleString(_locale) to format timestamps using the active locale")
+	}
+}
+
+// TestStaticJS_RenderHistoryListCachesItems verifies that renderHistoryList()
+// assigns items to _lastHistoryItems so applyLocale() can re-render the list
+// when the user switches language.
+func TestStaticJS_RenderHistoryListCachesItems(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderHistoryList(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderHistoryList function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastHistoryItems = items") {
+		t.Error("app.js: renderHistoryList must assign '_lastHistoryItems = items' so the list can be replayed on locale change")
+	}
+	if !strings.Contains(fnBody, "formatHistoryTime(") {
+		t.Error("app.js: renderHistoryList must call formatHistoryTime() to produce locale-aware timestamps")
+	}
+}
+
+// TestStaticJS_ApplyLocaleReRendersHistory verifies that applyLocale()
+// re-calls renderHistoryList(_lastHistoryItems) so the timestamps in the
+// history panel are immediately updated when the user switches language.
+func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function applyLocale(")
+	if fnStart == -1 {
+		t.Fatal("app.js: applyLocale function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastHistoryItems") {
+		t.Error("app.js: applyLocale must reference _lastHistoryItems to conditionally re-render history on locale change")
+	}
+	if !strings.Contains(fnBody, "renderHistoryList(_lastHistoryItems)") {
+		t.Error("app.js: applyLocale must call renderHistoryList(_lastHistoryItems) so timestamps are updated when the user switches language")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 9) tests — gradient arc connector between origin and target
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_ConnectorLineStateVars verifies that app.js declares the
+// module-level state variables used by the connector arc system.
+func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	for _, decl := range []string{"let _connectorStyleId", "let _connectorLayer"} {
+		if !strings.Contains(appJS, decl) {
+			t.Errorf("app.js: module-level declaration %q not found — required by the connector arc system", decl)
+		}
+	}
+}
+
+// TestStaticJS_ConnectorLineConfigsDefined verifies that CONNECTOR_LINE_CONFIGS
+// contains the single connector style ('tick-xs').
+func TestStaticJS_ConnectorLineConfigsDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "CONNECTOR_LINE_CONFIGS") {
+		t.Fatal("app.js: CONNECTOR_LINE_CONFIGS not found")
+	}
+	for _, id := range []string{
+		"'tick-xs'",
+	} {
+		if !strings.Contains(appJS, id) {
+			t.Errorf("app.js: CONNECTOR_LINE_CONFIGS is missing entry %s", id)
+		}
+	}
+}
+
+// TestStaticJS_ConnectorLineFunctions verifies that app.js defines all
+// functions required by the gradient arc connector feature.
+func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	for _, fn := range []string{
+		"function lerpHex(",
+		"function buildArcLatLngs(",
+		"function buildArrowConnectorLayer(",
+		"function buildConnectorLayer(",
+		"function refreshConnectorLayer(",
+	} {
+		if !strings.Contains(appJS, fn) {
+			t.Errorf("app.js: function %q not found — required by the connector arc feature", fn)
+		}
+	}
+}
+
+// TestStaticJS_RenderMapUsesConnectorLayer verifies that renderMap() calls
+// buildConnectorLayer() to draw the gradient arc instead of a plain polyline.
+func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMap function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 4000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "buildConnectorLayer(") {
+		t.Error("app.js: renderMap must call buildConnectorLayer() to draw the gradient arc connector")
+	}
+	if strings.Contains(fnBody, "color: '#5b8dee'") {
+		t.Error("app.js: renderMap must not use the hardcoded '#5b8dee' polyline — use buildConnectorLayer() instead")
+	}
+}
+
+// TestStaticJS_ConnectorDefaultIsTickXs verifies that the initial connector
+// style identifier is set to 'tick-xs'.
+func TestStaticJS_ConnectorDefaultIsTickXs(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "_connectorStyleId = 'tick-xs'") {
+		t.Error("app.js: _connectorStyleId must default to 'tick-xs'")
+	}
+}
+
+// TestStaticI18n_ConnectorStyleKeysInBothLocales verifies that the sole
+// connector line-pattern i18n key exists in both en and zh-TW locales.
+func TestStaticI18n_ConnectorStyleKeysInBothLocales(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/i18n.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /i18n.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	keys := []string{
+		"'connector-tick-xs'",
+	}
+	for _, key := range keys {
+		if count := strings.Count(body, key); count < 2 {
+			t.Errorf("i18n.js: key %s found %d time(s) — must be present in both en and zh-TW locales", key, count)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 10) tests — 10 line-pattern styles + temporary picker
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_BuildArrowConnectorLayerFunction verifies that app.js defines
+// buildArrowConnectorLayer() and that it renders directional symbols using
+// pixel-distance-based placement (consistent density at every zoom level).
+func TestStaticJS_BuildArrowConnectorLayerFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildArrowConnectorLayer function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 2000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Delegates to the SVG helper.
+	if !strings.Contains(fnBody, "buildArrowSVG(") {
+		t.Error("app.js: buildArrowConnectorLayer must call buildArrowSVG() to render arrow icons")
+	}
+	// Shape is read from config, not a hardcoded Unicode glyph.
+	if !strings.Contains(fnBody, "arrowShape") {
+		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.arrowShape to select the SVG shape")
+	}
+	// Pixel-distance-based placement: cumulative distance table + arrowSpacing.
+	if !strings.Contains(fnBody, "cum") {
+		t.Error("app.js: buildArrowConnectorLayer must build a cumulative pixel-distance table ('cum') for even spacing")
+	}
+	if !strings.Contains(fnBody, "arrowSpacing") {
+		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.arrowSpacing to control symbol density")
+	}
+	// Rotation from screen-space tangent.
+	if !strings.Contains(fnBody, "latLngToLayerPoint(") {
+		t.Error("app.js: buildArrowConnectorLayer must call latLngToLayerPoint() to compute the arc tangent angle")
+	}
+	if !strings.Contains(fnBody, "atan2(") {
+		t.Error("app.js: buildArrowConnectorLayer must use Math.atan2() to derive arrow rotation from arc direction")
+	}
+}
+
+// TestStaticJS_BuildArcLatLngsMercatorSpace verifies that buildArcLatLngs()
+// computes the Bézier arc in Web-Mercator (EPSG:3857) space so the rendered
+// curve is geometrically smooth on the Leaflet Mercator map.
+func TestStaticJS_BuildArcLatLngsMercatorSpace(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildArcLatLngs(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildArcLatLngs function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1500
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Must contain Mercator forward projection (toMerc) and inverse (fromMerc).
+	if !strings.Contains(fnBody, "toMerc") {
+		t.Error("app.js: buildArcLatLngs must define a toMerc helper for forward Web-Mercator projection")
+	}
+	if !strings.Contains(fnBody, "fromMerc") {
+		t.Error("app.js: buildArcLatLngs must define a fromMerc helper for inverse Web-Mercator projection")
+	}
+	// Earth radius constant must be present for EPSG:3857 math.
+	if !strings.Contains(fnBody, "6378137") {
+		t.Error("app.js: buildArcLatLngs must use the WGS-84 Earth radius (6378137) for Mercator conversion")
+	}
+}
+
+// TestStaticJS_BuildConnectorLayerDispatchesByType verifies that
+// buildConnectorLayer() delegates to buildArrowConnectorLayer() when the
+// style config declares type === 'arrows', following the Open/Closed principle.
+func TestStaticJS_BuildConnectorLayerDispatchesByType(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildConnectorLayer function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "buildArrowConnectorLayer(") {
+		t.Error("app.js: buildConnectorLayer must call buildArrowConnectorLayer() for 'arrows' type styles")
+	}
+	if !strings.Contains(fnBody, "'arrows'") {
+		t.Error("app.js: buildConnectorLayer must check for type === 'arrows' to dispatch correctly")
+	}
+}
+
+// TestStaticJS_BuildArrowSVGHelper verifies that app.js defines a buildArrowSVG()
+// helper that renders all shape variants as inline SVG using a normalised viewBox.
+// SVG-based arrows avoid Unicode glyph size/font variance and ensure
+// pixel-accurate arrowheads at every zoom level.
+func TestStaticJS_BuildArrowSVGHelper(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildArrowSVG(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildArrowSVG helper function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Must produce inline SVG output.
+	if !strings.Contains(fnBody, "viewBox") {
+		t.Error("app.js: buildArrowSVG must use an SVG viewBox for normalised coordinate rendering")
+	}
+	// Must handle all defined shape variants via switch.
+	for _, shape := range []string{"chevron", "double", "open", "pointer", "fat"} {
+		if !strings.Contains(fnBody, "'"+shape+"'") {
+			t.Errorf("app.js: buildArrowSVG is missing a case for shape %q", shape)
+		}
+	}
+	// Rotation must be applied via SVG transform (not CSS) for anchor consistency.
+	if !strings.Contains(fnBody, "rotate(") {
+		t.Error("app.js: buildArrowSVG must apply rotation via SVG transform rotate()")
+	}
+}
+
+// TestStaticJS_ConnectorArcLayerSinglePassRendering verifies that
+// ConnectorArcLayer._redraw() draws the full arc in a single canvas drawing
+// pass using setLineDash (for seamless dot/dash patterns) and
+// createLinearGradient (for smooth colour gradient).  This replaces the old
+// N-polyline + dashOffset approach which produced doubled end-caps and
+// float-precision seams at every segment boundary.
+func TestStaticJS_ConnectorArcLayerSinglePassRendering(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	// ConnectorArcLayer must be defined as a L.Layer extension.
+	if !strings.Contains(appJS, "ConnectorArcLayer") {
+		t.Fatal("app.js: ConnectorArcLayer not found")
+	}
+	// Find the _redraw method body.
+	redrawStart := strings.Index(appJS, "_redraw: function()")
+	if redrawStart == -1 {
+		t.Fatal("app.js: ConnectorArcLayer._redraw method not found")
+	}
+	nextFn := strings.Index(appJS[redrawStart+1:], "\n  },")
+	var redrawBody string
+	if nextFn != -1 {
+		redrawBody = appJS[redrawStart : redrawStart+1+nextFn]
+	} else {
+		end := redrawStart + 1000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		redrawBody = appJS[redrawStart:end]
+	}
+	if !strings.Contains(redrawBody, "setLineDash(") {
+		t.Error("app.js: ConnectorArcLayer._redraw must call setLineDash() for seamless dot/dash patterns")
+	}
+	if !strings.Contains(redrawBody, "createLinearGradient(") {
+		t.Error("app.js: ConnectorArcLayer._redraw must call createLinearGradient() for smooth colour gradient")
+	}
+	if !strings.Contains(redrawBody, "ctx.stroke()") {
+		t.Error("app.js: ConnectorArcLayer._redraw must call ctx.stroke() to render the arc")
+	}
+}
+
+// TestStaticJS_BuildConnectorLayerUsesArcLayer verifies that
+// buildConnectorLayer() delegates dot/dash arc rendering to ConnectorArcLayer
+// (a single-canvas-path Leaflet layer) instead of creating N gradient
+// sub-polylines.  The single-pass architecture is the correct fix for
+// the visual discontinuities of the old polyline-per-segment approach.
+func TestStaticJS_BuildConnectorLayerUsesArcLayer(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildConnectorLayer function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "ConnectorArcLayer") {
+		t.Error("app.js: buildConnectorLayer must instantiate ConnectorArcLayer for polyline-type styles")
+	}
+	if !strings.Contains(fnBody, "group.addLayer(") {
+		t.Error("app.js: buildConnectorLayer must add ConnectorArcLayer to the LayerGroup via addLayer()")
+	}
+}
+
+// TestStaticJS_BuildArrowConnectorLayerSpine verifies that
+// buildArrowConnectorLayer() supports an optional spine drawn beneath the
+// arrow icons when styleCfg.spineWeight > 0.  The spine must use
+// ConnectorArcLayer so it benefits from the same single-canvas-pass
+// seamless gradient rendering as the dot-family connector styles.
+func TestStaticJS_BuildArrowConnectorLayerSpine(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildArrowConnectorLayer function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 4000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "spineWeight") {
+		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.spineWeight to conditionally draw a spine")
+	}
+	if !strings.Contains(fnBody, "ConnectorArcLayer") {
+		t.Error("app.js: buildArrowConnectorLayer spine must use ConnectorArcLayer for seamless single-pass rendering")
+	}
+}
+
+// TestStaticJS_HexToRgbaHelper verifies that app.js defines a hexToRgba()
+// helper that converts a '#rrggbb' hex colour and an alpha value [0,1] to the
+// rgba() CSS format required by ConnectorArcLayer for canvas strokeStyle.
+func TestStaticJS_HexToRgbaHelper(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "function hexToRgba(") {
+		t.Fatal("app.js: hexToRgba() helper function not found")
+	}
+	fnStart := strings.Index(appJS, "function hexToRgba(")
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 300
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+	if !strings.Contains(fnBody, "rgba(") {
+		t.Error("app.js: hexToRgba() must produce an rgba() CSS string")
+	}
+	if !strings.Contains(fnBody, "parseInt(") {
+		t.Error("app.js: hexToRgba() must parse hex channel values with parseInt()")
+	}
+}
+
+// TestStaticJS_ConnectorArcLayerDefined verifies that app.js defines
+// ConnectorArcLayer as a L.Layer extension with all required lifecycle methods,
+// map event bindings, and canvas placement inside the map container.
+func TestStaticJS_ConnectorArcLayerDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "ConnectorArcLayer = L.Layer.extend(") {
+		t.Fatal("app.js: ConnectorArcLayer must be defined as a L.Layer extension")
+	}
+	for _, method := range []string{"initialize: function(", "onAdd: function(", "onRemove: function(", "_redraw: function("} {
+		if !strings.Contains(appJS, method) {
+			t.Errorf("app.js: ConnectorArcLayer must define the %q method", method)
+		}
+	}
+	if !strings.Contains(appJS, "map.on('move zoom zoomend resize'") {
+		t.Error("app.js: ConnectorArcLayer.onAdd must bind 'move zoom zoomend resize' map events")
+	}
+	if !strings.Contains(appJS, "map.off('move zoom zoomend resize'") {
+		t.Error("app.js: ConnectorArcLayer.onRemove must unbind 'move zoom zoomend resize' map events")
+	}
+	if !strings.Contains(appJS, "map.getContainer().appendChild(") {
+		t.Error("app.js: ConnectorArcLayer.onAdd must append the canvas to map.getContainer()")
+	}
+}
+
+// TestStaticJS_IsMapLoadedHelper verifies that app.js defines an isMapLoaded()
+// helper that gates latLngToLayerPoint() calls.  It prevents the Leaflet error
+// "Set map center and zoom first." that occurs when map-dependent calculations
+// run before setView / fitBounds has been called.
+func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	// Helper must exist.
+	if !strings.Contains(appJS, "function isMapLoaded()") {
+		t.Fatal("app.js: isMapLoaded() helper function not found")
+	}
+	// Must test both _map existence and _map._loaded flag.
+	fnStart := strings.Index(appJS, "function isMapLoaded()")
+	fnEnd := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if fnEnd != -1 {
+		fnBody = appJS[fnStart : fnStart+1+fnEnd]
+	} else {
+		end := fnStart + 200
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+	if !strings.Contains(fnBody, "_map._loaded") {
+		t.Error("app.js: isMapLoaded() must check _map._loaded to detect full Leaflet initialisation")
+	}
+
+	// buildArrowConnectorLayer must guard with isMapLoaded(), not bare _map.
+	arrowStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
+	if arrowStart == -1 {
+		t.Fatal("app.js: buildArrowConnectorLayer not found")
+	}
+	arrowEnd := strings.Index(appJS[arrowStart+1:], "\nfunction ")
+	var arrowBody string
+	if arrowEnd != -1 {
+		arrowBody = appJS[arrowStart : arrowStart+1+arrowEnd]
+	} else {
+		end := arrowStart + 2000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		arrowBody = appJS[arrowStart:end]
+	}
+	if !strings.Contains(arrowBody, "isMapLoaded()") {
+		t.Error("app.js: buildArrowConnectorLayer must guard with isMapLoaded() before calling latLngToLayerPoint()")
+	}
+
+	// refreshConnectorLayer must guard with isMapLoaded() too.
+	if !strings.Contains(appJS, "function refreshConnectorLayer(") {
+		t.Fatal("app.js: refreshConnectorLayer not found")
+	}
+	rlStart := strings.Index(appJS, "function refreshConnectorLayer(")
+	rlEnd := strings.Index(appJS[rlStart+1:], "\nfunction ")
+	var rlBody string
+	if rlEnd != -1 {
+		rlBody = appJS[rlStart : rlStart+1+rlEnd]
+	} else {
+		end := rlStart + 400
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		rlBody = appJS[rlStart:end]
+	}
+	if !strings.Contains(rlBody, "isMapLoaded()") {
+		t.Error("app.js: refreshConnectorLayer must guard with isMapLoaded() to prevent premature map operations")
+	}
+}
+
+// TestStaticJS_RenderMapSetsViewBeforeConnector verifies that renderMap()
+// calls setView / fitBounds before buildConnectorLayer() so the Leaflet map
+// is fully initialised when latLngToLayerPoint() is first invoked.
+func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("app.js: renderMap function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 4000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	// Find relative positions: setView/fitBounds must appear before buildConnectorLayer.
+	setViewIdx := strings.Index(fnBody, ".setView(")
+	fitBoundsIdx := strings.Index(fnBody, ".fitBounds(")
+	connectorIdx := strings.Index(fnBody, "buildConnectorLayer(")
+
+	if setViewIdx == -1 && fitBoundsIdx == -1 {
+		t.Fatal("app.js: renderMap must call setView() or fitBounds() to initialise the map")
+	}
+	if connectorIdx == -1 {
+		t.Fatal("app.js: renderMap must call buildConnectorLayer()")
+	}
+
+	// At least one viewport-setting call must precede buildConnectorLayer.
+	viewportIdx := setViewIdx
+	if fitBoundsIdx != -1 && (viewportIdx == -1 || fitBoundsIdx < viewportIdx) {
+		viewportIdx = fitBoundsIdx
+	}
+	if viewportIdx >= connectorIdx {
+		t.Error("app.js: renderMap must call setView/fitBounds BEFORE buildConnectorLayer() " +
+			"so the Leaflet map is loaded before latLngToLayerPoint() is invoked")
+	}
+}
+
+// TestStaticHTML_GeoConnectorBarRemoved verifies that index.html no longer
+// contains #geo-connector-bar — the style picker was removed because only
+// one connector style exists and it is applied by default.
+func TestStaticHTML_GeoConnectorBarRemoved(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /: want 200, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `id="geo-connector-bar"`) {
+		t.Error(`index.html: #geo-connector-bar must be removed — style picker is no longer needed`)
+	}
+}
+
+// TestStaticCSS_ConnectorArrowIcon verifies that style.css defines the CSS
+// class for the arrow divIcon markers used on the map.
+func TestStaticCSS_ConnectorArrowIcon(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/style.css", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /style.css: want 200, got %d", rec.Code)
+	}
+	css := rec.Body.String()
+
+	if !strings.Contains(css, ".connector-arrow-icon") {
+		t.Error("style.css: selector .connector-arrow-icon not found — required for arrow divIcon markers")
+	}
+	for _, removed := range []string{".geo-connector-bar", ".connector-style-btn"} {
+		if strings.Contains(css, removed) {
+			t.Errorf("style.css: selector %q must be removed — style picker no longer exists", removed)
+		}
 	}
 }

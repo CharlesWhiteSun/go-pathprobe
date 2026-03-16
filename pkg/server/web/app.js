@@ -22,6 +22,29 @@ let _tileLayer = null;
 // Currently selected map tile variant; null means “not yet set by user”.
 // Initialised by syncMapTileVariantToTheme() when the app theme is applied.
 let _mapTileVariant = null;
+// Active marker style identifier.
+let _markerStyleId = 'diamond-pulse';
+// Active marker colour scheme ID.
+let _markerColorSchemeId = 'ocean';
+// Last rendered geo data; retained so refreshMapMarkers() can redraw markers
+// after a style change without a full map rebuild.
+let _lastPub = null;
+let _lastTgt = null;
+// The live Leaflet legend control; stored so refreshMapMarkers() can remove
+// the old legend and add a fresh one that reflects the current colour scheme.
+let _legendControl = null;
+// Active connector arc style identifier.
+let _connectorStyleId = 'tick-xs';
+// Live Leaflet layer group for the connector arc between origin and target;
+// stored so refreshConnectorLayer() can remove the old layer before rebuilding.
+let _connectorLayer  = null;
+// Last rendered diagnostic report; retained so applyLocale() can re-render
+// the results section in the new language whenever the user switches locale.
+let _lastReport = null;
+// Last fetched history item array; retained so applyLocale() can re-render
+// the history list with correct locale-aware timestamps whenever the user
+// switches language.
+let _lastHistoryItems = null;
 
 // ── Map point role configurations ─────────────────────────────────────────
 // Each entry defines the CSS class and i18n label key used for a geocoded
@@ -29,8 +52,70 @@ let _mapTileVariant = null;
 // renderMap(), buildMarkerIcon(), buildPopupHtml(), and buildMapLegend() all
 // read this object so no other code needs to change.
 const MAP_POINT_CONFIGS = {
-  origin: { cssClass: 'geo-marker--origin', i18nKey: 'map-origin' },
-  target: { cssClass: 'geo-marker--target', i18nKey: 'map-target' },
+  origin: { cssClass: 'geo-marker--origin', i18nKey: 'map-origin', shortLabel: 'A' },
+  target: { cssClass: 'geo-marker--target', i18nKey: 'map-target', shortLabel: 'B' },
+};
+
+// ── Marker colour scheme configurations ───────────────────────────────────────
+// Each entry provides originColor and targetColor for the two map roles.
+// The active scheme is applied by applyMarkerColorScheme(), which writes
+// --mc-origin / --mc-target CSS custom properties onto the <html> element.
+// All marker CSS rules use var(--mc-origin) / var(--mc-target) so switching
+// schemes requires no DOM rebuild—only a single property update.
+//
+// To add a new scheme: add a key here + a matching i18n key (en + zh-TW).
+// No other code changes are required.
+const MARKER_COLOR_SCHEME_CONFIGS = {
+  // ocean — teal-blue origin / warm amber target
+  'ocean': { originColor: '#0891b2', targetColor: '#f59e0b', i18nKey: 'marker-color-ocean' },
+};
+
+// ── Marker style configuration ────────────────────────────────────────────
+// buildHtml(roleCfg) receives the MAP_POINT_CONFIGS entry for the current role
+// and returns an HTML string used as the Leaflet divIcon inner HTML.
+// The pulse variant uses CSS tokens (--marker-border / --marker-inner /
+// --marker-shadow) and role colour tokens (--mc-origin / --mc-target) so it
+// adapts automatically when the active [data-theme] changes.
+const MARKER_STYLE_CONFIGS = {
+  'diamond-pulse': {
+    i18nKey:     'marker-style-diamond-pulse',
+    iconSize:    [36, 36],
+    iconAnchor:  [18, 18],
+    popupAnchor: [0, -20],
+    buildHtml:   (_rc) =>
+      '<span class="geo-marker__dia-pulse-ring"></span>' +
+      '<span class="geo-marker__dia-pulse-core"></span>',
+  },
+};
+
+// ── Connector line style configurations ──────────────────────────────────────────────
+// Each entry defines how the gradient arc connector between origin and target
+// is rendered.  All styles use a northward quadratic-bezier arch.
+//
+// arcFactor:    height of the arch (0 ≈ flat, 0.65 = very high arch).
+// weight:       stroke width in pixels (polyline type).
+// opacity:      stroke opacity (0–1).
+// dashArray:    null for solid; an SVG stroke-dasharray string for patterned lines.
+//               For non-sticky dots use '0.1 <gap>' where gap > weight so
+//               rounded caps never overlap each other.
+// segments:     number of arc waypoints (higher → smoother Bézier and finer
+//               gradient; 120 is a good balance for smooth rendering).
+// type:         'polyline' (default) — gradient SVG sub-polylines.
+//               'arrows'            — divIcon arrow symbols spaced along the arc.
+// arrowSymbol:  (arrows) Unicode glyph placed at each position.
+// arrowSize:    (arrows) font-size + icon bounding box in px (default 14).
+// arrowSpacing: (arrows) screen-pixel gap between successive arrow symbols.
+//               Density stays visually consistent at every zoom level.
+// groupStart:   true on the first entry of each style family (dash, arrow);
+//               triggers a flex line-break in the picker bar.
+//
+// To add a new style: add a key here + matching translations in i18n.js.
+// No other code changes are required.
+const CONNECTOR_LINE_CONFIGS = {
+  // ── Tick family (›) ── compact open-chevron indicator aligned to arc tangent ───
+  // arrowSize 4 px + arrowSpacing 6 px gives a subtle directional texture that
+  // reads as flow without overpowering the map.  spineWeight 0 = no spine arc.
+  'tick-xs': { i18nKey: 'connector-tick-xs', arcFactor: 0.25, weight: 1, opacity: 0.85, dashArray: null, segments: 120, type: 'arrows', arrowShape: 'open', arrowSize: 4, arrowSpacing: 6, spineWeight: 0 },
 };
 
 // Ordered list of map tile variant identifiers shown as the three buttons above
@@ -172,6 +257,13 @@ function applyLocale() {
   document.documentElement.lang = _locale;
   // Update footer copyright year range after i18n strings have been applied.
   updateCopyrightYear();
+  // Re-render the results section so all labels reflect the new locale.
+  // renderReport() uses t() for every label, so re-running it with the same
+  // report data is sufficient — no data-i18n attributes are needed in the
+  // dynamically generated HTML.
+  if (_lastReport) { renderReport(_lastReport); }
+  // Re-render history list so timestamps are formatted in the new locale.
+  if (_lastHistoryItems) { renderHistoryList(_lastHistoryItems); }
 }
 
 /** Persist and apply a new locale choice. */
@@ -947,6 +1039,7 @@ function localizeError(msg) {
 
 // ── Report rendering ──────────────────────────────────────────────────────
 function renderReport(r) {
+  _lastReport = r;
   document.getElementById('results-inner').innerHTML = [
     renderSummary(r),
     renderPortsSection(r.Ports),
@@ -1233,6 +1326,46 @@ function setMapTileVariant(variant) {
   refreshMapTiles();
 }
 
+/** Redraw only the Leaflet Marker layers using the current _markerStyleId.
+ *  Preserves the tile layer; also removes and re-adds the legend so its icon
+ *  reflects the new style, and rebuilds the connector arc layer.
+ *  No-op when the map has not been initialised or no geo data is available.
+ */
+function refreshMapMarkers() {
+  if (!_map || (!_lastPub && !_lastTgt)) return;
+  _map.eachLayer(layer => {
+    if (layer instanceof L.Marker) _map.removeLayer(layer);
+  });
+  // Remove stale legend before rebuilding.
+  if (_legendControl) { _legendControl.remove(); _legendControl = null; }
+  const points = [];
+  if (_lastPub && _lastPub.HasLocation) points.push({ geo: _lastPub, type: 'origin' });
+  if (_lastTgt && _lastTgt.HasLocation) points.push({ geo: _lastTgt, type: 'target' });
+  for (const p of points) {
+    L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
+      .addTo(_map)
+      .bindPopup(buildPopupHtml(p.geo, p.type));
+  }
+  if (points.length > 1) {
+    _legendControl = buildMapLegend(points.map(p => p.type));
+    _legendControl.addTo(_map);
+  }
+  // Rebuild the gradient arc connector so it stays in sync with any
+  // colour scheme or style changes that triggered this refresh.
+  refreshConnectorLayer();
+}
+
+/** Apply the active colour scheme by writing --mc-origin / --mc-target onto
+ *  the document root.  All diamond-marker CSS rules reference these two tokens
+ *  so no DOM rebuild is needed when the scheme changes.
+ */
+function applyMarkerColorScheme() {
+  const scheme = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
+               || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
+  document.documentElement.style.setProperty('--mc-origin', scheme.originColor);
+  document.documentElement.style.setProperty('--mc-target', scheme.targetColor);
+}
+
 /** Render the three map tile variant dot-buttons inside #geo-map-bar.
  *  Buttons are styled as coloured circles matching the header .theme-btn style
  *  — no visible text, accessible via aria-label and native title tooltip.
@@ -1273,13 +1406,14 @@ function haversineKm(lat1, lon1, lat2, lon2) {
  *  when new roles are added.
  */
 function buildMarkerIcon(type) {
-  const cfg = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
+  const roleCfg  = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
+  const styleCfg = MARKER_STYLE_CONFIGS[_markerStyleId] || MARKER_STYLE_CONFIGS.dot;
   return L.divIcon({
-    className:   'geo-marker ' + cfg.cssClass,
-    html:        '<span class="geo-marker__dot"></span>',
-    iconSize:    [20, 20],
-    iconAnchor:  [10, 10],
-    popupAnchor: [0, -14],
+    className:   'geo-marker ' + roleCfg.cssClass,
+    html:        styleCfg.buildHtml(roleCfg),
+    iconSize:    styleCfg.iconSize,
+    iconAnchor:  styleCfg.iconAnchor,
+    popupAnchor: styleCfg.popupAnchor,
   });
 }
 
@@ -1302,16 +1436,21 @@ function buildPopupHtml(geo, type) {
 
 /** Build a Leaflet Control legend for the given set of point types.
  *  Accepts an array of role strings so only visible marker types are shown.
+ *  The legend icon mirrors the active marker style via buildHtml() so it
+ *  stays in sync when the picker changes the shape or colour scheme.
  */
 function buildMapLegend(pointTypes) {
   const legend = L.control({ position: 'bottomright' });
   legend.onAdd = function () {
     const div = L.DomUtil.create('div', 'geo-legend');
+    const styleCfg = MARKER_STYLE_CONFIGS[_markerStyleId] || MARKER_STYLE_CONFIGS['diamond-pulse'];
     div.innerHTML = pointTypes.map(type => {
       const cfg = MAP_POINT_CONFIGS[type] || MAP_POINT_CONFIGS.target;
       return '<div class="geo-legend__item">' +
-        '<span class="' + cfg.cssClass + ' geo-legend__dot"></span>' +
-        '<span>' + esc(t(cfg.i18nKey)) + '</span>' +
+        '<span class="geo-marker ' + esc(cfg.cssClass) + ' geo-legend__marker">' +
+        styleCfg.buildHtml(cfg) +
+        '</span>' +
+        '<span data-i18n="' + esc(cfg.i18nKey) + '">' + esc(t(cfg.i18nKey)) + '</span>' +
         '</div>';
     }).join('');
     return div;
@@ -1319,10 +1458,324 @@ function buildMapLegend(pointTypes) {
   return legend;
 }
 
+// ── Connector arc utilities ───────────────────────────────────────────────────
+
+/** Linearly interpolate between two hex colours.
+ *  t is a value in [0, 1]; 0 returns hex1, 1 returns hex2.
+ */
+function lerpHex(hex1, hex2, t) {
+  const parse = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const toHex = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  const [r1, g1, b1] = parse(hex1);
+  const [r2, g2, b2] = parse(hex2);
+  return '#' + toHex(r1 + (r2 - r1) * t) + toHex(g1 + (g2 - g1) * t) + toHex(b1 + (b2 - b1) * t);
+}
+
+/** Generate lat/lon waypoints along a northward quadratic-bezier arc.
+ *  The Bézier control point is computed in Web-Mercator (EPSG:3857) space so
+ *  the rendered curve appears geometrically smooth on the Leaflet Mercator map
+ *  regardless of geographic scale or latitude.  arcFactor scales the control-
+ *  point offset as a fraction of the Mercator straight-line distance.
+ *  Returns an array of [lat, lon] pairs.
+ */
+function buildArcLatLngs(lat1, lon1, lat2, lon2, arcFactor, numSegments) {
+  // Helpers: geographic ↔ Web-Mercator (metres, EPSG:3857).
+  const R        = 6378137;
+  const toMerc   = (lat, lon) => ({
+    x: lon * Math.PI / 180 * R,
+    y: Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * R,
+  });
+  const fromMerc = (x, y) => [
+    (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI,
+    x / R * 180 / Math.PI,
+  ];
+  const m1   = toMerc(lat1, lon1);
+  const m2   = toMerc(lat2, lon2);
+  const midX = (m1.x + m2.x) / 2;
+  const midY = (m1.y + m2.y) / 2;
+  const dist = Math.sqrt((m2.x - m1.x) ** 2 + (m2.y - m1.y) ** 2);
+  // Control point bowed northward (positive Y in Mercator = north on the map).
+  const ctlX = midX;
+  const ctlY = midY + arcFactor * dist;
+  const pts  = [];
+  for (let i = 0; i <= numSegments; i++) {
+    const t = i / numSegments;
+    const u = 1 - t;
+    pts.push(fromMerc(
+      u * u * m1.x + 2 * u * t * ctlX + t * t * m2.x,
+      u * u * m1.y + 2 * u * t * ctlY + t * t * m2.y,
+    ));
+  }
+  return pts;
+}
+
+/** Render one directional arrowhead as an inline SVG element for use inside a
+ *  Leaflet divIcon.  All shapes are defined on a normalised 10×10 viewBox and
+ *  scaled to sz×sz screen pixels.  The SVG's own transform attribute rotates
+ *  around the viewBox centre (5,5) so the anchor stays pixel-perfect.
+ *
+ *  shape values: 'triangle' | 'fat' | 'chevron' | 'double' | 'open' | 'pointer'
+ */
+function buildArrowSVG(shape, sz, color, opacity, rotateDeg) {
+  const f  = ' fill="'   + color + '" opacity="' + opacity + '"';
+  const sw = ' stroke="' + color + '" opacity="' + opacity +
+             '" stroke-linecap="round" fill="none" stroke-width="1.8"';
+  let inner;
+  switch (shape) {
+    case 'fat':     inner = '<polygon points="0,0.5 10,5 0,9.5"'    + f  + '/>'; break;
+    case 'chevron': inner = '<polygon points="0,0 8,5 0,10 2,5"'    + f  + '/>'; break;
+    case 'double':  inner = '<polygon points="0,0 5,5 0,10 1,5"'    + f  + '/>' +
+                            '<polygon points="4,0 10,5 4,10 5.5,5"' + f  + '/>'; break;
+    case 'open':    inner = '<polyline points="0.5,1 9,5 0.5,9"'    + sw + '/>'; break;
+    case 'pointer': inner = '<polygon points="0,1.5 8,5 0,8.5 3,5"' + f  + '/>'; break;
+    default:        inner = '<polygon points="0,1 10,5 0,9"'         + f  + '/>'; break;
+  }
+  return '<svg width="'  + sz + '" height="' + sz +
+         '" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">' +
+         '<g transform="rotate(' + rotateDeg + ',5,5)">' + inner + '</g>' +
+         '</svg>';
+}
+
+/** Returns true when the Leaflet map has been both created and initialised
+ *  (setView / fitBounds has been called).  Operations that require a loaded
+ *  map — such as latLngToLayerPoint() — must guard with isMapLoaded() to
+ *  avoid Leaflet throwing "Set map center and zoom first."
+ */
+function isMapLoaded() {
+  return Boolean(_map && _map._loaded);
+}
+
+/** Convert a '#rrggbb' hex colour and an alpha value [0,1] into an rgba() CSS
+ *  string suitable for use as a canvas strokeStyle or fillStyle.
+ */
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+
+/** ConnectorArcLayer — a Leaflet custom layer that draws the gradient arc
+ *  connector on a dedicated HTML5 canvas in ONE drawing pass.
+ *
+ *  This is the correct architecture for seamless dot/dash patterns with a
+ *  gradient colour.  Drawing the full arc as a single canvas path with
+ *  createLinearGradient and setLineDash completely eliminates the three
+ *  failure modes of the old N-polyline approach:
+ *
+ *    1. Sub-pixel gaps between adjacent SVG/canvas polyline segments.
+ *    2. Doubled round end-caps where two segments meet (doubled dot at
+ *       every junction point).
+ *    3. Floating-point drift in the per-segment dashOffset accumulation.
+ *
+ *  Lifecycle
+ *  ---------
+ *  onAdd    Creates a <canvas> element inside the map container, sized to
+ *           the visible viewport, and binds map event listeners.
+ *  _redraw  Projects arc waypoints via latLngToContainerPoint(), builds one
+ *           canvas path, applies a linear gradient (createLinearGradient)
+ *           and an optional dot/dash rhythm (setLineDash), then strokes.
+ *           Runs on every 'move', 'zoom', 'zoomend', and 'resize' event
+ *           so the arc always tracks the live viewport.
+ *  onRemove Unregisters listeners and removes the <canvas> element.
+ */
+const ConnectorArcLayer = L.Layer.extend({
+  initialize: function(pts, styleCfg, originColor, targetColor) {
+    this._pts         = pts;
+    this._styleCfg    = styleCfg;
+    this._originColor = originColor;
+    this._targetColor = targetColor;
+    this._canvas      = null;
+    this._onRedraw    = null;
+  },
+
+  onAdd: function(map) {
+    this._map = map;
+    const canvas = document.createElement('canvas');
+    // Place the canvas directly in the map container (not inside a pane)
+    // so it is never affected by the CSS transforms Leaflet applies to
+    // panes during animated pan / zoom.  z-index 450 puts it above the
+    // overlayPane (400) but below the markerPane (600).
+    canvas.style.cssText =
+      'position:absolute;left:0;top:0;pointer-events:none;z-index:450;';
+    map.getContainer().appendChild(canvas);
+    this._canvas   = canvas;
+    this._onRedraw = this._redraw.bind(this);
+    map.on('move zoom zoomend resize', this._onRedraw);
+    this._redraw();
+    return this;
+  },
+
+  onRemove: function(map) {
+    map.off('move zoom zoomend resize', this._onRedraw);
+    if (this._canvas && this._canvas.parentNode) {
+      this._canvas.parentNode.removeChild(this._canvas);
+    }
+    this._canvas   = null;
+    this._onRedraw = null;
+    this._map      = null;
+  },
+
+  _redraw: function() {
+    if (!this._map || !this._canvas || !this._map._loaded) return;
+    const map    = this._map;
+    const size   = map.getSize();
+    const canvas = this._canvas;
+    const cfg    = this._styleCfg;
+    const pts    = this._pts;
+    if (pts.length < 2) return;
+
+    // Resize canvas to cover the current viewport exactly.
+    canvas.width  = size.x;
+    canvas.height = size.y;
+
+    // Project geographic arc waypoints to container-relative pixel coords.
+    const sp  = pts.map(p => map.latLngToContainerPoint(L.latLng(p[0], p[1])));
+    const ctx = canvas.getContext('2d');
+
+    // Single continuous arc path — no segment boundaries, no repeated end-caps.
+    ctx.beginPath();
+    ctx.moveTo(sp[0].x, sp[0].y);
+    for (let i = 1; i < sp.length; i++) ctx.lineTo(sp[i].x, sp[i].y);
+
+    // Linear gradient from arc start to arc end gives a smooth colour flow
+    // that closely follows the arc direction without per-segment complexity.
+    const grad = ctx.createLinearGradient(
+      sp[0].x, sp[0].y, sp[sp.length - 1].x, sp[sp.length - 1].y,
+    );
+    grad.addColorStop(0, hexToRgba(this._originColor, cfg.opacity));
+    grad.addColorStop(1, hexToRgba(this._targetColor, cfg.opacity));
+
+    ctx.strokeStyle = grad;
+    ctx.lineWidth   = cfg.weight;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    if (cfg.dashArray) {
+      ctx.setLineDash(cfg.dashArray.split(/\s+/).map(Number));
+    } else {
+      ctx.setLineDash([]);
+    }
+    ctx.stroke();
+  },
+});
+
+/** Build a Leaflet LayerGroup containing gradient-coloured divIcon arrow symbols
+ *  distributed along the arc at a fixed screen-pixel spacing.  By working in
+ *  pixel space the visual density is consistent at every zoom level and
+ *  geographic scale, avoiding the sparse "   >    >    >   " appearance that
+ *  arises when symbols are placed at equal geographic intervals.  Each symbol
+ *  is rotated to align with the local arc tangent direction.
+ *  Used by styles with type === 'arrows'.
+ */
+function buildArrowConnectorLayer(pub, tgt, styleCfg, originColor, targetColor) {
+  const pts = buildArcLatLngs(pub.Lat, pub.Lon, tgt.Lat, tgt.Lon,
+                               styleCfg.arcFactor, styleCfg.segments);
+  const group = L.layerGroup();
+  if (!isMapLoaded() || pts.length < 2) return group;
+
+  // ── Optional spine ── a thin gradient polyline rendered behind the arrow icons.
+  // When spineWeight > 0 the full arc path is always visible even at wide icon
+  // spacing, preventing a "floating arrows in empty space" appearance.
+  const spineW = styleCfg.spineWeight || 0;
+  if (spineW > 0) {
+    // Spine uses ConnectorArcLayer (single canvas path) for the same seamless
+    // gradient rendering quality as the dot-family connector styles.
+    const spineCfg = { weight: spineW, opacity: styleCfg.opacity, dashArray: null };
+    group.addLayer(new ConnectorArcLayer(pts, spineCfg, originColor, targetColor));
+  }
+
+  // Convert all arc waypoints to screen pixels (consistent with current zoom/pan).
+  const scrPts = pts.map(p => _map.latLngToLayerPoint(L.latLng(p[0], p[1])));
+  const n      = scrPts.length;
+
+  // Build a cumulative pixel-distance table so each symbol can be placed at a
+  // precise fixed screen-pixel interval regardless of segment length variation.
+  const cum = [0];
+  for (let i = 1; i < n; i++) {
+    const dx = scrPts[i].x - scrPts[i - 1].x;
+    const dy = scrPts[i].y - scrPts[i - 1].y;
+    cum.push(cum[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const totalPx = cum[n - 1];
+  if (totalPx < 1) return group;
+
+  const spacing = styleCfg.arrowSpacing || 40; // screen-px between successive symbols
+  const sz      = styleCfg.arrowSize    || 14;
+  let   nextPx  = spacing / 2;                 // start centred in first interval
+  let   j       = 0;
+
+  while (nextPx < totalPx) {
+    // Advance segment pointer until the current segment straddles nextPx.
+    while (j < n - 2 && cum[j + 1] < nextPx) j++;
+    const segLen = cum[j + 1] - cum[j];
+    const t      = segLen > 0 ? (nextPx - cum[j]) / segLen : 0;
+    // Interpolated geographic position for the marker anchor.
+    const lat = pts[j][0] + t * (pts[j + 1][0] - pts[j][0]);
+    const lon = pts[j][1] + t * (pts[j + 1][1] - pts[j][1]);
+    // Screen-space tangent for accurate per-symbol rotation (origin → target).
+    const dx        = scrPts[j + 1].x - scrPts[j].x;
+    const dy        = scrPts[j + 1].y - scrPts[j].y;
+    const rotateDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI);
+    // Gradient colour proportional to pixel distance along the arc.
+    const color = lerpHex(originColor, targetColor, nextPx / totalPx);
+    L.marker([lat, lon], {
+      icon: L.divIcon({
+        className: 'connector-arrow-icon',
+        html: buildArrowSVG(
+          styleCfg.arrowShape || 'triangle', sz, color, styleCfg.opacity, rotateDeg),
+        iconSize:   [sz, sz],
+        iconAnchor: [sz / 2, sz / 2],
+      }),
+      interactive: false,
+      keyboard:    false,
+    }).addTo(group);
+    nextPx += spacing;
+  }
+  return group;
+}
+
+/** Build a Leaflet LayerGroup that draws the origin→target connector arc.
+ *  Dispatches to buildArrowConnectorLayer() for styles with type === 'arrows'.
+ *  For polyline styles, a single ConnectorArcLayer is used: the whole arc is
+ *  drawn on one HTML5 canvas path with createLinearGradient + setLineDash,
+ *  giving a seamless gradient dot/dash pattern with no inter-segment gaps.
+ */
+function buildConnectorLayer(pub, tgt, styleCfg, originColor, targetColor) {
+  if ((styleCfg.type || 'polyline') === 'arrows') {
+    return buildArrowConnectorLayer(pub, tgt, styleCfg, originColor, targetColor);
+  }
+  const pts   = buildArcLatLngs(pub.Lat, pub.Lon, tgt.Lat, tgt.Lon,
+                                 styleCfg.arcFactor, styleCfg.segments);
+  const group = L.layerGroup();
+  group.addLayer(new ConnectorArcLayer(pts, styleCfg, originColor, targetColor));
+  return group;
+}
+
+/** Remove any existing connector arc layer and draw a fresh one using the
+ *  current _connectorStyleId and colour scheme.  No-op when the map has
+ *  not been initialised or geo data for both endpoints is unavailable.
+ */
+function refreshConnectorLayer() {
+  if (!isMapLoaded() || !_lastPub || !_lastTgt) return;
+  if (_connectorLayer) { _connectorLayer.remove(); _connectorLayer = null; }
+  if (!_lastPub.HasLocation || !_lastTgt.HasLocation) return;
+  const scheme   = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
+                 || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
+  const styleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
+                 || CONNECTOR_LINE_CONFIGS['dot-bead'];
+  _connectorLayer = buildConnectorLayer(_lastPub, _lastTgt, styleCfg,
+                                        scheme.originColor, scheme.targetColor);
+  _connectorLayer.addTo(_map);
+}
+
 /** Render (or remove) the Leaflet map based on geo results.
  *  pub / tgt are GeoAnnotation objects that may be null/undefined.
  */
 function renderMap(pub, tgt) {
+  // Retain geo data so refreshMapMarkers() can redraw without a full rebuild.
+  _lastPub = pub;
+  _lastTgt = tgt;
+
   const container = document.getElementById('geo-map');
   const distEl    = document.getElementById('geo-distance');
   if (!container || typeof L === 'undefined') return;
@@ -1343,7 +1796,7 @@ function renderMap(pub, tgt) {
     container.classList.remove('visible');
     const outerEl = document.getElementById('geo-map-outer');
     if (outerEl) outerEl.hidden = true;
-    if (_map) { _map.remove(); _map = null; _tileLayer = null; }
+    if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
     return;
   }
 
@@ -1352,11 +1805,12 @@ function renderMap(pub, tgt) {
   if (outerEl) outerEl.hidden = false;
   container.classList.add('visible');
 
-  // Render the map tile bar (light/osm/dark) above the map on first creation.
+  // Render tile-variant bar and apply the colour scheme.
   renderMapBar();
+  applyMarkerColorScheme();
 
   // Destroy any existing map instance before creating a new one.
-  if (_map) { _map.remove(); _map = null; _tileLayer = null; }
+  if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
 
   _map = L.map('geo-map');
   // Tile layer is driven by the current application theme via TILE_LAYER_CONFIGS.
@@ -1374,11 +1828,30 @@ function renderMap(pub, tgt) {
     latLngs.push([p.geo.Lat, p.geo.Lon]);
   }
 
-  // Draw a dashed polyline and show the distance badge when both endpoints exist.
+  // Set the map viewport BEFORE building the connector because functions such
+  // as latLngToLayerPoint() and the dash-offset calculation require the map to
+  // be fully initialised (Leaflet throws "Set map center and zoom first." if
+  // called before setView / fitBounds).
+  if (latLngs.length === 1) {
+    _map.setView(latLngs[0], 8);
+  } else {
+    _map.fitBounds(latLngs, { padding: [40, 40] });
+  }
+
+  // Draw the gradient arc connector and show the distance badge when both
+  // endpoints exist.  The connector style and colour scheme come from the
+  // module-level state variables so switching pickers refreshes the arc
+  // without a full map rebuild.
   if (latLngs.length === 2) {
-    L.polyline(latLngs, {
-      color: '#5b8dee', weight: 2, dashArray: '6 5', opacity: 0.75,
-    }).addTo(_map);
+    const arcScheme   = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
+                      || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
+    const arcStyleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
+                      || CONNECTOR_LINE_CONFIGS['dot-bead'];
+    _connectorLayer   = buildConnectorLayer(
+      points[0].geo, points[1].geo,
+      arcStyleCfg, arcScheme.originColor, arcScheme.targetColor
+    );
+    _connectorLayer.addTo(_map);
     if (distEl) {
       const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
       distEl.textContent = t('map-distance') + ': ' + Math.round(km).toLocaleString() + ' km';
@@ -1389,13 +1862,8 @@ function renderMap(pub, tgt) {
   // Add a legend when multiple marker types are present so users can
   // distinguish origin (偵測起點) from target (偵測目標).
   if (points.length > 1) {
-    buildMapLegend(points.map(p => p.type)).addTo(_map);
-  }
-
-  if (latLngs.length === 1) {
-    _map.setView(latLngs[0], 8);
-  } else {
-    _map.fitBounds(latLngs, { padding: [40, 40] });
+    _legendControl = buildMapLegend(points.map(p => p.type));
+    _legendControl.addTo(_map);
   }
 
   // Leaflet cannot correctly position tiles when the container (or an ancestor)
@@ -1411,6 +1879,19 @@ function renderMap(pub, tgt) {
 
 // -- History ------------------------------------------------------------------
 
+/** Format a UTC ISO timestamp string for display using the active locale.
+ *  The locale code stored in _locale (e.g. 'en', 'zh-TW') is a valid BCP-47
+ *  tag and can be passed directly to toLocaleString().
+ */
+function formatHistoryTime(isoString) {
+  if (!isoString) return '';
+  try {
+    return new Date(isoString).toLocaleString(_locale);
+  } catch (_) {
+    return new Date(isoString).toLocaleString();
+  }
+}
+
 /** Fetch the history list from the server and re-render the panel. */
 async function loadHistory() {
   try {
@@ -1423,6 +1904,9 @@ async function loadHistory() {
 
 /** Render the history list items into #history-list. */
 function renderHistoryList(items) {
+  // Cache for locale-switch re-renders triggered by applyLocale().
+  _lastHistoryItems = items;
+
   const emptyEl = document.getElementById('history-empty');
   const listEl  = document.getElementById('history-list');
   if (!listEl || !emptyEl) return;
@@ -1436,9 +1920,7 @@ function renderHistoryList(items) {
   emptyEl.hidden = true;
   listEl.hidden  = false;
   listEl.innerHTML = items.map(item => {
-    const ts = item.created_at
-      ? new Date(item.created_at).toLocaleString()
-      : '';
+    const ts = formatHistoryTime(item.created_at);
     const id = JSON.stringify(String(item.id));
     return '<li class="history-item" onclick="loadHistoryEntry(' + id + ')">' +
       '<span class="hi-badge">' + esc(item.target      || '\u2014') + '</span>' +

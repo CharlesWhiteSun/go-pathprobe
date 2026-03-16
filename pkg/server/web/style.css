@@ -61,6 +61,23 @@
   /* --radius is an alias for --r so Phase 5+ component rules that use the
      more descriptive name resolve to the same base value.  Change --r only. */
   --radius:               var(--r);
+  /* Marker icon design tokens — drive the secondary chrome (border, inner
+     highlight, shadow, glow) that adapts between light and dark themes.
+     The three dark theme overrides (deep-blue / forest-green / dark) shift
+     the first three tokens to near-black for legible contrast on dark map
+     tiles.
+     Role colours are controlled by --mc-origin / --mc-target below and are
+     updated at runtime by applyMarkerColorScheme() when the user picks a
+     colour scheme. */
+  --marker-border:  rgba(255,255,255,.90);
+  --marker-inner:   rgba(255,255,255,.82);
+  --marker-shadow:  0 2px 6px rgba(0,0,0,.38);
+  /* Default marker role colours (classic: green origin / red target).
+     applyMarkerColorScheme() overwrites these on <html> inline style at
+     runtime.  Glow and split-gradient rules derive their alpha variant via
+     color-mix() so they follow --mc-* automatically without extra tokens. */
+  --mc-origin: #22a55b;
+  --mc-target:  #e03c3c;
   /* Inform the browser of the default light colour-scheme so form controls
      (autofill, date-pickers, etc.) render with light-mode UA styles by
      default.  Dark themes override this to `dark` below, preventing Chrome
@@ -783,6 +800,21 @@ fieldset.target-fields legend {
 .map-tile-btn[data-tile-variant="osm"]   { background: #8dc03c; }
 .map-tile-btn[data-tile-variant="dark"]  { background: #2a3441; }
 
+/* Arrow marker icons placed along the arc path by the 'arrows' connector type. */
+.connector-arrow-icon {
+  background: transparent !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.connector-arrow-icon span {
+  font-size: 1rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
 /* Custom Leaflet divIcon marker: replace default pin with a coloured dot.
    Colours are intentionally fixed (not theme-variable) so the two roles are
    always visually distinct regardless of the active colour scheme.
@@ -793,17 +825,36 @@ fieldset.target-fields legend {
   display: flex !important;
   align-items: center;
   justify-content: center;
+  position: relative; /* required for pulse animation absolute child */
 }
-.geo-marker__dot {
+
+/* ── Diamond pulse marker style ───────────────────────────────────────────── */
+
+/* ── diamond-pulse ─ */
+.geo-marker__dia-pulse-core {
   display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,.9);
-  box-shadow: 0 1px 5px rgba(0,0,0,.45);
+  width: 12px; height: 12px;
+  transform: rotate(45deg);
+  border: 2px solid var(--marker-border);
+  box-shadow: var(--marker-shadow);
+  position: relative; z-index: 1;
 }
-.geo-marker--origin .geo-marker__dot { background: #22a55b; }
-.geo-marker--target .geo-marker__dot { background: #e03c3c; }
+.geo-marker--origin .geo-marker__dia-pulse-core { background: var(--mc-origin); }
+.geo-marker--target .geo-marker__dia-pulse-core { background: var(--mc-target); }
+.geo-marker__dia-pulse-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 30px; height: 30px;
+  transform: translate(-50%, -50%) rotate(45deg) scale(0);
+  animation: geo-dia-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.geo-marker--origin .geo-marker__dia-pulse-ring { background: color-mix(in srgb, var(--mc-origin) 45%, transparent); }
+.geo-marker--target .geo-marker__dia-pulse-ring { background: color-mix(in srgb, var(--mc-target) 45%, transparent); }
+@keyframes geo-dia-pulse {
+  0%   { transform: translate(-50%, -50%) rotate(45deg) scale(0); opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(45deg) scale(1); opacity: 0; }
+}
 
 /* In-map legend control (Leaflet bottomright position) */
 .geo-legend {
@@ -821,17 +872,20 @@ fieldset.target-fields legend {
   gap: .35rem;
 }
 .geo-legend__item + .geo-legend__item { margin-top: .2rem; }
-.geo-legend__dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,.75);
-  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+/* .geo-legend__marker: wraps the actual diamond HTML produced by buildHtml()
+   inside the legend, ensuring the legend icon mirrors the active marker style.
+   Scale-down keeps the icon small enough to fit beside the label text. */
+.geo-legend__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  transform: scale(.62);
+  transform-origin: center;
+  overflow: visible;
 }
-.geo-marker--origin.geo-legend__dot { background: #22a55b; }
-.geo-marker--target.geo-legend__dot { background: #e03c3c; }
 
 /* Distance badge displayed below the map */
 .geo-distance {
@@ -858,8 +912,8 @@ fieldset.target-fields legend {
   margin-bottom: .3rem;
   color: #fff;
 }
-.geo-popup__role--origin { background: #22a55b; }
-.geo-popup__role--target { background: #e03c3c; }
+.geo-popup__role--origin { background: var(--mc-origin); }
+.geo-popup__role--target { background: var(--mc-target); }
 .geo-popup__ip  { font-weight: 600; }
 .geo-popup__row { color: #555; font-size: .82rem; }
 .geo-popup__asn { font-size: .74rem; color: #888; margin-top: .15rem; }
@@ -999,6 +1053,10 @@ fieldset.target-fields legend {
   --badge-fail-bg: #2d0a0a;
   --focus-ring:    rgba(74,144,217,.25);
   --shadow:        0 1px 6px rgba(0,0,0,.35);
+  /* Marker chrome — dark-themed variants */
+  --marker-border:      rgba(12,12,12,.80);
+  --marker-inner:       rgba(18,18,18,.78);
+  --marker-shadow:      0 2px 8px rgba(0,0,0,.65);
 }
 
 /* ── Theme: light-green (淺綠，深灰色文字) ───────────────────────────────── */
@@ -1038,6 +1096,10 @@ fieldset.target-fields legend {
   --badge-fail-bg: #2d0a0a;
   --focus-ring:    rgba(76,175,80,.25);
   --shadow:        0 1px 6px rgba(0,0,0,.35);
+  /* Marker chrome — dark-themed variants */
+  --marker-border:      rgba(12,12,12,.80);
+  --marker-inner:       rgba(18,18,18,.78);
+  --marker-shadow:      0 2px 8px rgba(0,0,0,.65);
 }
 
 /* ── Theme: dark (暗黑，白色文字) ────────────────────────────────────────── */
@@ -1061,6 +1123,10 @@ fieldset.target-fields legend {
   /* #bb86fc (dark-theme primary) is a light pastel — dark surface text gives
      a 7.5:1 contrast ratio on that background, far above the WCAG AA bar. */
   --option-checked-fg: var(--surface);
+  /* Marker chrome — dark-themed variants */
+  --marker-border:      rgba(12,12,12,.80);
+  --marker-inner:       rgba(18,18,18,.78);
+  --marker-shadow:      0 2px 8px rgba(0,0,0,.65);
 }
 
 /* ── Web port picker ────────────────────────────────────────────────────── */
