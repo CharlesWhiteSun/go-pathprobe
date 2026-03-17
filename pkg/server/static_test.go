@@ -5869,3 +5869,252 @@ func TestStaticCSS_ConnectorArrowIcon(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 7 (Round 11) tests — meteor glow animation on connector arc
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_ConnectorGlowConfigsDefined verifies that app.js declares the
+// CONNECTOR_GLOW_CONFIGS constant with a 'default' preset containing all
+// required timing and visual parameters for the meteor animation.
+func TestStaticJS_ConnectorGlowConfigsDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "CONNECTOR_GLOW_CONFIGS") {
+		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS constant must be declared")
+	}
+	// 'default' preset must define all required animation parameters.
+	for _, param := range []string{"travelMs", "pauseMs", "glowRadius", "glowOpacity", "tailLength"} {
+		if !strings.Contains(appJS, param) {
+			t.Errorf("app.js: CONNECTOR_GLOW_CONFIGS must include parameter %q", param)
+		}
+	}
+}
+
+// TestStaticJS_ConnectorTickXsGlowEnabled verifies that the 'tick-xs' connector
+// style config opts into the meteor animation via glowEnabled: true and
+// references the 'default' glow preset via glowConfig.
+func TestStaticJS_ConnectorTickXsGlowEnabled(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "glowEnabled: true") {
+		t.Error("app.js: CONNECTOR_LINE_CONFIGS 'tick-xs' must set glowEnabled: true to enable the meteor animation")
+	}
+	if !strings.Contains(appJS, "glowConfig: 'default'") {
+		t.Error("app.js: CONNECTOR_LINE_CONFIGS 'tick-xs' must set glowConfig: 'default' to reference the glow preset")
+	}
+}
+
+// TestStaticJS_ConnectorGlowLayerDefined verifies that app.js defines
+// ConnectorGlowLayer as a L.Layer extension with the required lifecycle
+// methods and animation helpers for the meteor light-pulse effect.
+func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "ConnectorGlowLayer = L.Layer.extend(") {
+		t.Fatal("app.js: ConnectorGlowLayer must be defined as a L.Layer extension")
+	}
+	for _, method := range []string{
+		"initialize: function(",
+		"onAdd: function(",
+		"onRemove: function(",
+		"_tick: function(",
+		"_drawGlow: function(",
+		"_posAtPx: function(",
+		"_getScreenPts: function(",
+	} {
+		if !strings.Contains(appJS, method) {
+			t.Errorf("app.js: ConnectorGlowLayer must define the %q method", method)
+		}
+	}
+}
+
+// TestStaticJS_ConnectorGlowLayerAnimation verifies that ConnectorGlowLayer
+// uses requestAnimationFrame for the animation loop, cancels it in onRemove,
+// and binds map move/zoom events to invalidate the cached screen projection.
+func TestStaticJS_ConnectorGlowLayerAnimation(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	// Find the body of ConnectorGlowLayer.
+	start := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
+	if start == -1 {
+		t.Fatal("app.js: ConnectorGlowLayer not found")
+	}
+	// Locate the end of the const declaration (next top-level "function " or "const ").
+	rest := appJS[start:]
+	endIdx := strings.Index(rest, "\nfunction ")
+	var layerBody string
+	if endIdx != -1 {
+		layerBody = rest[:endIdx]
+	} else {
+		end := start + 4000
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		layerBody = appJS[start:end]
+	}
+
+	if !strings.Contains(layerBody, "requestAnimationFrame(") {
+		t.Error("app.js: ConnectorGlowLayer must use requestAnimationFrame for the animation loop")
+	}
+	if !strings.Contains(layerBody, "cancelAnimationFrame(") {
+		t.Error("app.js: ConnectorGlowLayer.onRemove must call cancelAnimationFrame to stop the loop")
+	}
+	if !strings.Contains(layerBody, "clearRect(") {
+		t.Error("app.js: ConnectorGlowLayer._tick must call clearRect to erase the previous frame")
+	}
+	if !strings.Contains(layerBody, "createRadialGradient(") {
+		t.Error("app.js: ConnectorGlowLayer._drawGlow must use createRadialGradient for the glow halo")
+	}
+	if !strings.Contains(layerBody, "lerpHex(") {
+		t.Error("app.js: ConnectorGlowLayer._drawGlow must call lerpHex to interpolate head colour along the arc")
+	}
+}
+
+// TestStaticJS_BuildConnectorLayerAddsGlowLayer verifies that
+// buildConnectorLayer() instantiates ConnectorGlowLayer when the style config
+// carries glowEnabled === true, adding the meteor animation on top of the base
+// arc without coupling the two layers.
+func TestStaticJS_BuildConnectorLayerAddsGlowLayer(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	if fnStart == -1 {
+		t.Fatal("app.js: buildConnectorLayer function not found")
+	}
+	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = appJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 800
+		if end > len(appJS) {
+			end = len(appJS)
+		}
+		fnBody = appJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "glowEnabled") {
+		t.Error("app.js: buildConnectorLayer must check styleCfg.glowEnabled to decide whether to add the glow layer")
+	}
+	if !strings.Contains(fnBody, "ConnectorGlowLayer") {
+		t.Error("app.js: buildConnectorLayer must instantiate ConnectorGlowLayer when glowEnabled is true")
+	}
+	if !strings.Contains(fnBody, "CONNECTOR_GLOW_CONFIGS") {
+		t.Error("app.js: buildConnectorLayer must look up the glow config from CONNECTOR_GLOW_CONFIGS")
+	}
+	if !strings.Contains(fnBody, "group.addLayer(") {
+		t.Error("app.js: buildConnectorLayer must add ConnectorGlowLayer to the LayerGroup via addLayer()")
+	}
+}
+
+// TestStaticJS_ConnectorGlowConfigsFadeMs verifies that CONNECTOR_GLOW_CONFIGS
+// declares a fadeMs parameter in the 'default' preset.  fadeMs defines the
+// duration of the extinguish phase after the head reaches the destination and
+// is the structural requirement for the three-phase animation cycle.
+func TestStaticJS_ConnectorGlowConfigsFadeMs(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	if !strings.Contains(appJS, "fadeMs") {
+		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS must declare a fadeMs parameter for the extinguish phase")
+	}
+	// fadeMs must appear inside the CONNECTOR_GLOW_CONFIGS block.
+	cfgStart := strings.Index(appJS, "CONNECTOR_GLOW_CONFIGS")
+	if cfgStart == -1 {
+		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS not found")
+	}
+	cfgEnd := strings.Index(appJS[cfgStart:], "};")
+	if cfgEnd == -1 {
+		cfgEnd = 300
+	}
+	cfgBlock := appJS[cfgStart : cfgStart+cfgEnd+2]
+	if !strings.Contains(cfgBlock, "fadeMs") {
+		t.Error("app.js: fadeMs must be declared inside CONNECTOR_GLOW_CONFIGS (not elsewhere)")
+	}
+}
+
+// TestStaticJS_ConnectorGlowLayerExtinguish verifies that ConnectorGlowLayer
+// implements the three-phase extinguish animation:
+//   - Phase 1 (travel): masterAlpha = 1, progress ramps 0→1.
+//   - Phase 2 (fade-out): progress fixed at 1, masterAlpha ramps 1→0, tail
+//     converges back into the head (tailPx ∝ masterAlpha).
+//   - Phase 3 (dark): canvas cleared, no drawing until next cycle.
+//
+// These invariants are verified by checking for the structural keywords that
+// the three-phase _tick() and masterAlpha-aware _drawGlow() must contain.
+func TestStaticJS_ConnectorGlowLayerExtinguish(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
+
+	layerStart := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
+	if layerStart == -1 {
+		t.Fatal("app.js: ConnectorGlowLayer not found")
+	}
+	// Capture enough of the layer body to cover all methods (~8 KB).
+	end := layerStart + 8000
+	if end > len(appJS) {
+		end = len(appJS)
+	}
+	layerBody := appJS[layerStart:end]
+
+	// _tick must compute a three-phase cycle: travelMs + fadeMs + pauseMs.
+	if !strings.Contains(layerBody, "fadeMs") {
+		t.Error("app.js: ConnectorGlowLayer._tick must read cfg.fadeMs to compute the three-phase cycle duration")
+	}
+	if !strings.Contains(layerBody, "masterAlpha") {
+		t.Error("app.js: ConnectorGlowLayer._tick must declare masterAlpha as a phase-dependent brightness multiplier")
+	}
+	// _drawGlow must accept and apply masterAlpha.
+	if !strings.Contains(layerBody, "_drawGlow: function(ctx, progress, masterAlpha)") {
+		t.Error("app.js: ConnectorGlowLayer._drawGlow must accept masterAlpha as its third parameter")
+	}
+	// Tail convergence: tailPx must be proportional to masterAlpha.
+	if !strings.Contains(layerBody, "tailPx") || !strings.Contains(layerBody, "* masterAlpha") {
+		t.Error("app.js: ConnectorGlowLayer._drawGlow must multiply tailPx by masterAlpha to converge the tail on fade-out")
+	}
+	// Phase 3: the dark phase must return early without calling _drawGlow.
+	if !strings.Contains(layerBody, "return;") {
+		t.Error("app.js: ConnectorGlowLayer._tick must return early in phase 3 (dark) without drawing")
+	}
+}

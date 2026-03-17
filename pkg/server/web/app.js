@@ -115,7 +115,41 @@ const CONNECTOR_LINE_CONFIGS = {
   // ── Tick family (›) ── compact open-chevron indicator aligned to arc tangent ───
   // arrowSize 4 px + arrowSpacing 6 px gives a subtle directional texture that
   // reads as flow without overpowering the map.  spineWeight 0 = no spine arc.
-  'tick-xs': { i18nKey: 'connector-tick-xs', arcFactor: 0.25, weight: 1, opacity: 0.85, dashArray: null, segments: 120, type: 'arrows', arrowShape: 'open', arrowSize: 4, arrowSpacing: 6, spineWeight: 0 },
+  // glowEnabled / glowConfig enable the ConnectorGlowLayer meteor animation.
+  'tick-xs': { i18nKey: 'connector-tick-xs', arcFactor: 0.25, weight: 1, opacity: 0.85, dashArray: null, segments: 120, type: 'arrows', arrowShape: 'open', arrowSize: 4, arrowSpacing: 6, spineWeight: 0, glowEnabled: true, glowConfig: 'default' },
+};
+
+// ── Connector glow animation configuration ────────────────────────────────────
+// Controls the "meteor" light-pulse animation that travels along the connector
+// arc from origin to target, then pauses before looping smoothly.
+//
+// travelMs:    milliseconds for the glowing orb to travel from origin to target.
+// pauseMs:     milliseconds the orb lingers at the target before restarting.
+// glowRadius:  outer radial-gradient radius of the orb in screen pixels.
+// glowOpacity: peak opacity of the outer glow (0–1).
+// tailLength:  fraction of the total arc pixel-length used for the comet tail.
+// fadeMs:      milliseconds to fade the glow from full brightness to zero after
+//              the head arrives at the destination.  During this phase the tail
+//              converges back into the head (tailPx shrinks proportionally) and
+//              all opacity values are multiplied by a linear ramp 1 → 0.  This
+//              creates the "extinguish / breathing-lamp" effect.
+// pauseMs:     milliseconds of complete darkness after the fade-out, before
+//              the next travel cycle begins.  Canvas is blank during this phase.
+//
+// Animation cycle: travel → fade-out → dark → travel → …
+//   cycleDur = travelMs + fadeMs + pauseMs
+//
+// To add a new preset: add a key here and reference it via
+// CONNECTOR_LINE_CONFIGS[id].glowConfig.  No other code changes required.
+const CONNECTOR_GLOW_CONFIGS = {
+  'default': {
+    travelMs:    2500,
+    fadeMs:      700,
+    pauseMs:     1000,
+    glowRadius:  14,
+    glowOpacity: 0.85,
+    tailLength:  0.18,
+  },
 };
 
 // Ordered list of map tile variant identifiers shown as the three buttons above
@@ -1659,6 +1693,221 @@ const ConnectorArcLayer = L.Layer.extend({
   },
 });
 
+/** ConnectorGlowLayer — a Leaflet custom layer that animates a glowing "meteor"
+ *  orb travelling from origin to target along the arc and looping with a brief
+ *  pause at the destination.  Runs entirely on a dedicated HTML5 canvas using
+ *  requestAnimationFrame so it never blocks the UI thread.
+ *
+ *  Visual anatomy
+ *  --------------
+ *  • Comet tail  — a series of fading radial-gradient circles receding behind
+ *                  the head, shrinking and becoming transparent toward the back.
+ *  • Outer glow  — a large radial-gradient circle centered on the current head
+ *                  position, providing the "light source" halo effect.
+ *  • Bright core — a small, near-white radial-gradient circle at the very front
+ *                  that gives the impression of intense illumination.
+ *
+ *  Colour interpolates from originColor to targetColor as the orb travels,
+ *  matching the arc's own gradient palette for visual coherence.
+ *
+ *  Lifecycle (same contract as ConnectorArcLayer)
+ *  -----------------------------------------------
+ *  onAdd    Creates a canvas above the arc layer, starts the rAF loop.
+ *  onRemove Cancels the loop, removes the canvas, resets all state.
+ */
+const ConnectorGlowLayer = L.Layer.extend({
+  initialize: function(pts, originColor, targetColor, glowCfg) {
+    this._pts         = pts;
+    this._originColor = originColor;
+    this._targetColor = targetColor;
+    this._glowCfg     = glowCfg;
+    this._canvas      = null;
+    this._rafId       = null;
+    this._startTs     = null;
+    this._scrPts      = null;
+    this._cumDist     = null;
+    this._needsResize = true;
+    this._map         = null;
+    this._onMapEvent  = null;
+    this._boundTick   = null;
+  },
+
+  onAdd: function(map) {
+    this._map = map;
+    const canvas = document.createElement('canvas');
+    // z-index 452: above ConnectorArcLayer (450) but below markers (600).
+    canvas.style.cssText =
+      'position:absolute;left:0;top:0;pointer-events:none;z-index:452;';
+    map.getContainer().appendChild(canvas);
+    this._canvas     = canvas;
+    this._needsResize = true;
+    this._onMapEvent = () => { this._scrPts = null; this._needsResize = true; };
+    map.on('move zoom zoomend resize', this._onMapEvent);
+    this._boundTick = this._tick.bind(this);
+    this._rafId     = requestAnimationFrame(this._boundTick);
+    return this;
+  },
+
+  onRemove: function(map) {
+    if (this._onMapEvent) map.off('move zoom zoomend resize', this._onMapEvent);
+    if (this._rafId !== null) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+    if (this._canvas && this._canvas.parentNode) {
+      this._canvas.parentNode.removeChild(this._canvas);
+    }
+    this._canvas     = null;
+    this._scrPts     = null;
+    this._cumDist    = null;
+    this._map        = null;
+    this._onMapEvent = null;
+    this._boundTick  = null;
+  },
+
+  _tick: function(ts) {
+    if (!this._map || !this._canvas || !this._map._loaded) {
+      this._rafId = requestAnimationFrame(this._boundTick);
+      return;
+    }
+    if (this._startTs === null) this._startTs = ts;
+    // Resize the canvas lazily whenever the viewport changes.
+    if (this._needsResize) {
+      const sz          = this._map.getSize();
+      this._canvas.width  = sz.x;
+      this._canvas.height = sz.y;
+      this._needsResize   = false;
+    }
+    const cfg      = this._glowCfg;
+    const fadeMs   = cfg.fadeMs   || 0;
+    const cycleDur = cfg.travelMs + fadeMs + cfg.pauseMs;
+    const elapsed  = (ts - this._startTs) % cycleDur;
+
+    // Three-phase animation cycle:
+    //   Phase 1 — travel  : head moves 0 → 1 along the arc at full brightness.
+    //   Phase 2 — fade-out: head stays at destination, tail converges, all light
+    //                        dissolves to 0 ("extinguish / breathing-lamp" effect).
+    //   Phase 3 — dark    : canvas is blank until the next cycle begins.
+    let progress;    // head position along arc [0, 1]
+    let masterAlpha; // global brightness/opacity multiplier [0, 1]
+
+    const ctx = this._canvas.getContext('2d');
+    ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+
+    if (elapsed < cfg.travelMs) {
+      // Phase 1: travelling.
+      progress    = elapsed / cfg.travelMs;
+      masterAlpha = 1.0;
+    } else if (fadeMs > 0 && elapsed < cfg.travelMs + fadeMs) {
+      // Phase 2: fade-out — head fixed at destination, linear brightness ramp.
+      progress    = 1.0;
+      masterAlpha = 1.0 - (elapsed - cfg.travelMs) / fadeMs;
+    } else {
+      // Phase 3: dark — canvas already cleared above, nothing to paint.
+      this._rafId = requestAnimationFrame(this._boundTick);
+      return;
+    }
+
+    this._drawGlow(ctx, progress, masterAlpha);
+    this._rafId = requestAnimationFrame(this._boundTick);
+  },
+
+  /** Return cached screen-pixel projection; recomputes when invalidated. */
+  _getScreenPts: function() {
+    if (this._scrPts) return this._scrPts;
+    const map = this._map;
+    this._scrPts = this._pts.map(p =>
+      map.latLngToContainerPoint(L.latLng(p[0], p[1])));
+    const sp  = this._scrPts;
+    const cum = [0];
+    for (let i = 1; i < sp.length; i++) {
+      const dx = sp[i].x - sp[i - 1].x;
+      const dy = sp[i].y - sp[i - 1].y;
+      cum.push(cum[i - 1] + Math.sqrt(dx * dx + dy * dy));
+    }
+    this._cumDist = cum;
+    return sp;
+  },
+
+  /** Interpolate a screen-space {x,y} position at targetPx along the arc. */
+  _posAtPx: function(sp, cum, targetPx) {
+    const maxPx = cum[cum.length - 1];
+    targetPx    = Math.max(0, Math.min(targetPx, maxPx));
+    let j = 0;
+    while (j < sp.length - 2 && cum[j + 1] < targetPx) j++;
+    const segLen = cum[j + 1] - cum[j];
+    const t      = segLen > 0 ? (targetPx - cum[j]) / segLen : 0;
+    return {
+      x: sp[j].x + t * (sp[j + 1].x - sp[j].x),
+      y: sp[j].y + t * (sp[j + 1].y - sp[j].y),
+    };
+  },
+
+  /** Draw the comet tail, outer glow halo, and bright core at `progress`.
+   *  masterAlpha [0, 1] is a global brightness multiplier applied to every
+   *  opacity value.  When it ramps from 1 → 0 during the fade-out phase:
+   *    • tailPx shrinks proportionally so the tail converges into the head.
+   *    • All radial-gradient alphas fade to 0, creating the extinguish effect.
+   */
+  _drawGlow: function(ctx, progress, masterAlpha) {
+    const sp  = this._getScreenPts();
+    const cum = this._cumDist;
+    if (!sp || sp.length < 2 || !cum) return;
+    const totalPx = cum[cum.length - 1];
+    if (totalPx < 1) return;
+
+    const cfg    = this._glowCfg;
+    const headPx = progress * totalPx;
+    const radius = cfg.glowRadius;
+    // Scale base opacity by masterAlpha so all elements fade in unison.
+    const alpha  = cfg.glowOpacity * masterAlpha;
+
+    // ── Comet tail: shrinks with masterAlpha → converges into the head on fade-out ──
+    const tailPx   = (cfg.tailLength || 0.18) * totalPx * masterAlpha;
+    const TAIL_SAMP = 18;
+    for (let i = TAIL_SAMP; i > 0; i--) {
+      const ratio    = i / TAIL_SAMP;          // 1 = farthest back, 0 ≈ head
+      const samplePx = Math.max(0, headPx - tailPx * ratio);
+      const frac     = samplePx / totalPx;
+      const pos      = this._posAtPx(sp, cum, samplePx);
+      const color    = lerpHex(this._originColor, this._targetColor, frac);
+      const a        = (1 - ratio) * alpha * 0.55;
+      const r        = radius * (1 - ratio * 0.75);
+      const grd      = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, r);
+      grd.addColorStop(0, hexToRgba(color, a));
+      grd.addColorStop(1, hexToRgba(color, 0));
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = grd;
+      ctx.fill();
+    }
+
+    // ── Outer glow halo ──────────────────────────────────────────────────────
+    const headPos   = this._posAtPx(sp, cum, headPx);
+    const headColor = lerpHex(this._originColor, this._targetColor, progress);
+    const outerGrd  = ctx.createRadialGradient(
+      headPos.x, headPos.y, 0, headPos.x, headPos.y, radius,
+    );
+    outerGrd.addColorStop(0,    hexToRgba(headColor, alpha));
+    outerGrd.addColorStop(0.45, hexToRgba(headColor, alpha * 0.45));
+    outerGrd.addColorStop(1,    hexToRgba(headColor, 0));
+    ctx.beginPath();
+    ctx.arc(headPos.x, headPos.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = outerGrd;
+    ctx.fill();
+
+    // ── Bright white core ────────────────────────────────────────────────────
+    const coreR   = Math.max(2, radius * 0.28);
+    const coreGrd = ctx.createRadialGradient(
+      headPos.x, headPos.y, 0, headPos.x, headPos.y, coreR,
+    );
+    coreGrd.addColorStop(0,   hexToRgba('#ffffff', 0.96 * masterAlpha));
+    coreGrd.addColorStop(0.6, hexToRgba(headColor, 0.85 * masterAlpha));
+    coreGrd.addColorStop(1,   hexToRgba(headColor, 0));
+    ctx.beginPath();
+    ctx.arc(headPos.x, headPos.y, coreR, 0, Math.PI * 2);
+    ctx.fillStyle = coreGrd;
+    ctx.fill();
+  },
+});
+
 /** Build a Leaflet LayerGroup containing gradient-coloured divIcon arrow symbols
  *  distributed along the arc at a fixed screen-pixel spacing.  By working in
  *  pixel space the visual density is consistent at every zoom level and
@@ -1739,15 +1988,27 @@ function buildArrowConnectorLayer(pub, tgt, styleCfg, originColor, targetColor) 
  *  For polyline styles, a single ConnectorArcLayer is used: the whole arc is
  *  drawn on one HTML5 canvas path with createLinearGradient + setLineDash,
  *  giving a seamless gradient dot/dash pattern with no inter-segment gaps.
+ *  When styleCfg.glowEnabled is true a ConnectorGlowLayer is added on top,
+ *  rendering the meteor light-pulse animation without coupling to the base arc.
  */
 function buildConnectorLayer(pub, tgt, styleCfg, originColor, targetColor) {
+  let group;
   if ((styleCfg.type || 'polyline') === 'arrows') {
-    return buildArrowConnectorLayer(pub, tgt, styleCfg, originColor, targetColor);
-  }
-  const pts   = buildArcLatLngs(pub.Lat, pub.Lon, tgt.Lat, tgt.Lon,
+    group = buildArrowConnectorLayer(pub, tgt, styleCfg, originColor, targetColor);
+  } else {
+    const pts = buildArcLatLngs(pub.Lat, pub.Lon, tgt.Lat, tgt.Lon,
                                  styleCfg.arcFactor, styleCfg.segments);
-  const group = L.layerGroup();
-  group.addLayer(new ConnectorArcLayer(pts, styleCfg, originColor, targetColor));
+    group = L.layerGroup();
+    group.addLayer(new ConnectorArcLayer(pts, styleCfg, originColor, targetColor));
+  }
+  // Overlay the glowing meteor animation when the style opts in.
+  if (styleCfg.glowEnabled) {
+    const pts     = buildArcLatLngs(pub.Lat, pub.Lon, tgt.Lat, tgt.Lon,
+                                    styleCfg.arcFactor, styleCfg.segments);
+    const glowCfg = CONNECTOR_GLOW_CONFIGS[styleCfg.glowConfig || 'default']
+                  || CONNECTOR_GLOW_CONFIGS['default'];
+    group.addLayer(new ConnectorGlowLayer(pts, originColor, targetColor, glowCfg));
+  }
   return group;
 }
 
