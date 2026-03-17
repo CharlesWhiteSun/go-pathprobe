@@ -223,10 +223,10 @@ func TestBuildOptions_WebTypesDefaultWhenOmitted(t *testing.T) {
 // Compile-time assertion: netprobe.ParseRecordTypes is used correctly.
 var _ = netprobe.ParseRecordTypes
 
-// ---- resolveLocator (DiagHandler / StreamDiagHandler) -------------------
+// ---- resolveLocator (diagPipeline) --------------------------------------
 
-func newTestDiagHandler(loc geo.Locator) *DiagHandler {
-	return &DiagHandler{
+func newTestPipeline(loc geo.Locator) diagPipeline {
+	return diagPipeline{
 		dispatcher: diag.NewDispatcher(nil),
 		locator:    loc,
 		store:      store.NewMemoryStore(1),
@@ -234,56 +234,23 @@ func newTestDiagHandler(loc geo.Locator) *DiagHandler {
 	}
 }
 
-func newTestStreamDiagHandler(loc geo.Locator) *StreamDiagHandler {
-	return &StreamDiagHandler{
-		dispatcher: diag.NewDispatcher(nil),
-		locator:    loc,
-		store:      store.NewMemoryStore(1),
-		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
-}
-
-// Compile-time: ensure context import is not optimised away.
-var _ = context.Background
-
-// TestDiagHandler_ResolveLocator_FalseReturnsConfigure verifies that when
-// DisableGeo is false the handler's own locator is returned unchanged.
-func TestDiagHandler_ResolveLocator_FalseReturnsConfigured(t *testing.T) {
+// TestDiagPipeline_ResolveLocator_FalseReturnsConfigured verifies that when
+// DisableGeo is false the pipeline's own locator is returned unchanged.
+func TestDiagPipeline_ResolveLocator_FalseReturnsConfigured(t *testing.T) {
 	spy := geo.NoopLocator{}
-	h := newTestDiagHandler(spy)
-	got := h.resolveLocator(false)
+	p := newTestPipeline(spy)
+	got := p.resolveLocator(false)
 	if got != spy {
 		t.Errorf("resolveLocator(false) returned %T, want configured NoopLocator", got)
 	}
 }
 
-// TestDiagHandler_ResolveLocator_TrueReturnsNoop verifies that setting
+// TestDiagPipeline_ResolveLocator_TrueReturnsNoop verifies that setting
 // DisableGeo = true always yields a NoopLocator regardless of the configured
 // locator.
-func TestDiagHandler_ResolveLocator_TrueReturnsNoop(t *testing.T) {
-	h := newTestDiagHandler(geo.NoopLocator{})
-	got := h.resolveLocator(true)
-	if _, ok := got.(geo.NoopLocator); !ok {
-		t.Errorf("resolveLocator(true) returned %T, want NoopLocator", got)
-	}
-}
-
-// TestStreamDiagHandler_ResolveLocator_FalseReturnsConfigured mirrors the
-// same contract for StreamDiagHandler.
-func TestStreamDiagHandler_ResolveLocator_FalseReturnsConfigured(t *testing.T) {
-	spy := geo.NoopLocator{}
-	h := newTestStreamDiagHandler(spy)
-	got := h.resolveLocator(false)
-	if got != spy {
-		t.Errorf("resolveLocator(false) returned %T, want configured NoopLocator", got)
-	}
-}
-
-// TestStreamDiagHandler_ResolveLocator_TrueReturnsNoop mirrors the same
-// contract for StreamDiagHandler.
-func TestStreamDiagHandler_ResolveLocator_TrueReturnsNoop(t *testing.T) {
-	h := newTestStreamDiagHandler(geo.NoopLocator{})
-	got := h.resolveLocator(true)
+func TestDiagPipeline_ResolveLocator_TrueReturnsNoop(t *testing.T) {
+	p := newTestPipeline(geo.NoopLocator{})
+	got := p.resolveLocator(true)
 	if _, ok := got.(geo.NoopLocator); !ok {
 		t.Errorf("resolveLocator(true) returned %T, want NoopLocator", got)
 	}

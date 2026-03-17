@@ -50,18 +50,14 @@ func New(cfg Config, dispatcher *diag.Dispatcher, locator geo.Locator, st store.
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", &HealthHandler{logger: logger})
-	mux.Handle("POST /api/diag", &DiagHandler{
+	pipeline := diagPipeline{
 		dispatcher: dispatcher,
 		locator:    locator,
 		store:      st,
 		logger:     logger,
-	})
-	mux.Handle("POST /api/diag/stream", &StreamDiagHandler{
-		dispatcher: dispatcher,
-		locator:    locator,
-		store:      st,
-		logger:     logger,
-	})
+	}
+	mux.Handle("POST /api/diag", &DiagHandler{pipeline: pipeline})
+	mux.Handle("POST /api/diag/stream", &StreamDiagHandler{pipeline: pipeline})
 	mux.Handle("GET /api/history", &HistoryHandler{store: st})
 	mux.Handle("GET /api/history/{id}", &HistoryDetailHandler{store: st})
 	// Static web UI — registered last; GET / acts as catch-all for all paths

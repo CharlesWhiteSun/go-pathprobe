@@ -1,17 +1,12 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"go-pathprobe/pkg/diag"
-	"go-pathprobe/pkg/geo"
-	"go-pathprobe/pkg/report"
-	"go-pathprobe/pkg/store"
 )
 
 // StreamDiagHandler serves POST /api/diag/stream.
@@ -30,10 +25,7 @@ import (
 //	event: error
 //	data: {"error":"<message>"}
 type StreamDiagHandler struct {
-	dispatcher *diag.Dispatcher
-	locator    geo.Locator
-	store      store.Store
-	logger     *slog.Logger
+	pipeline diagPipeline
 }
 
 // ServeHTTP handles POST /api/diag/stream.
@@ -59,72 +51,19 @@ func (h *StreamDiagHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := diag.Target(req.Target)
-	if !isValidTarget(target) {
-		writeSSEError(w, flusher, "unknown target: "+req.Target)
-		return
-	}
-
-	opts, err := buildOptions(req.Options)
-	if err != nil {
-		writeSSEError(w, flusher, "invalid options: "+err.Error())
-		return
-	}
-	if err := opts.Global.Validate(); err != nil {
-		writeSSEError(w, flusher, err.Error())
-		return
-	}
-
-	diagReport := &diag.DiagReport{Target: target, Host: opts.Net.Host}
-
-	timeout := ensureTracerouteTimeout(parseDiagTimeout(req.Options.Timeout), opts)
-	ctx, cancel := context.WithTimeout(r.Context(), timeout)
-	defer cancel()
-
 	hook := func(ev diag.ProgressEvent) {
 		writeSSEEvent(w, flusher, "progress", ev)
 	}
 
-	dreq := diag.Request{
-		Target:  target,
-		Options: opts,
-		Report:  diagReport,
-		Hook:    hook,
-	}
-
-	if err := h.dispatcher.Dispatch(ctx, dreq); err != nil {
-		if errors.Is(err, diag.ErrRunnerNotFound) {
-			writeSSEError(w, flusher, "no runner registered for target: "+req.Target)
-			return
-		}
-		h.logger.Warn("streaming diagnostic failed",
-			"target", target,
-			"host", opts.Net.Host,
-			"mode", string(opts.Web.Mode),
-			"error", err)
-		writeSSEError(w, flusher, fmtDiagError(err, opts))
-		return
-	}
-
-	locator := h.resolveLocator(req.Options.DisableGeo)
-	ar, err := report.Build(ctx, diagReport, locator)
+	ar, err := h.pipeline.runDiag(r.Context(), req, hook)
 	if err != nil {
-		writeSSEError(w, flusher, "report build failed: "+err.Error())
+		var pe *pipelineError
+		errors.As(err, &pe)
+		writeSSEError(w, flusher, pe.msg)
 		return
 	}
-
-	h.store.Save(store.HistoryEntry{Report: ar})
 
 	writeSSEEvent(w, flusher, "result", ar)
-}
-
-// resolveLocator returns the handler's locator normally, or a NoopLocator when
-// the caller has opted out of geo annotation for this request.
-func (h *StreamDiagHandler) resolveLocator(disableGeo bool) geo.Locator {
-	if disableGeo {
-		return geo.NoopLocator{}
-	}
-	return h.locator
 }
 
 // writeSSEEvent encodes payload as JSON and writes a named SSE event, then
