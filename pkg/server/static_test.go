@@ -3042,13 +3042,17 @@ func TestStaticJS_RenderMapPolyline(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
 	}
-	body := rec.Body.String()
-
-	if !strings.Contains(body, "buildConnectorLayer(") {
+	if !strings.Contains(rec.Body.String(), "buildConnectorLayer(") {
 		t.Error("app.js: renderMap must call buildConnectorLayer() to connect origin and target markers")
 	}
-	if !strings.Contains(body, "dashArray") {
-		t.Error("app.js: CONNECTOR_LINE_CONFIGS must include dashArray entries for dot/dash rhythm styles")
+	// dashArray configuration lives in config.js (CONNECTOR_LINE_CONFIGS presets).
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/config.js", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("GET /config.js: want 200, got %d", rec2.Code)
+	}
+	if !strings.Contains(rec2.Body.String(), "dashArray") {
+		t.Error("config.js: CONNECTOR_LINE_CONFIGS must include dashArray entries for dot/dash rhythm styles")
 	}
 }
 
@@ -5356,27 +5360,37 @@ func TestStaticJS_ConnectorLineConfigsDefined(t *testing.T) {
 	}
 }
 
-// TestStaticJS_ConnectorLineFunctions verifies that app.js defines all
-// functions required by the gradient arc connector feature.
+// TestStaticJS_ConnectorLineFunctions verifies that map-connector.js defines
+// the arc-rendering helpers and that app.js retains refreshConnectorLayer.
 func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
+	// map-connector.js must expose the extracted arc-rendering helpers.
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
 	for _, fn := range []string{
 		"function lerpHex(",
 		"function buildArcLatLngs(",
 		"function buildArrowConnectorLayer(",
 		"function buildConnectorLayer(",
-		"function refreshConnectorLayer(",
 	} {
-		if !strings.Contains(appJS, fn) {
-			t.Errorf("app.js: function %q not found — required by the connector arc feature", fn)
+		if !strings.Contains(mcJS, fn) {
+			t.Errorf("map-connector.js: function %q not found — required by the connector arc feature", fn)
 		}
+	}
+
+	// app.js must retain refreshConnectorLayer (thin orchestrator injecting _map).
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec2.Code)
+	}
+	if !strings.Contains(rec2.Body.String(), "function refreshConnectorLayer(") {
+		t.Error("app.js: function refreshConnectorLayer not found — must remain in app.js")
 	}
 }
 
@@ -5454,55 +5468,55 @@ func TestStaticI18n_ConnectorStyleKeysInBothLocales(t *testing.T) {
 // Phase 7 (Round 10) tests — 10 line-pattern styles + temporary picker
 // ---------------------------------------------------------------------------
 
-// TestStaticJS_BuildArrowConnectorLayerFunction verifies that app.js defines
+// TestStaticJS_BuildArrowConnectorLayerFunction verifies that map-connector.js defines
 // buildArrowConnectorLayer() and that it renders directional symbols using
 // pixel-distance-based placement (consistent density at every zoom level).
 func TestStaticJS_BuildArrowConnectorLayerFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
+	fnStart := strings.Index(mcJS, "function buildArrowConnectorLayer(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildArrowConnectorLayer function not found")
+		t.Fatal("map-connector.js: buildArrowConnectorLayer function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 2000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 6000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	// Delegates to the SVG helper.
 	if !strings.Contains(fnBody, "buildArrowSVG(") {
-		t.Error("app.js: buildArrowConnectorLayer must call buildArrowSVG() to render arrow icons")
+		t.Error("map-connector.js: buildArrowConnectorLayer must call buildArrowSVG() to render arrow icons")
 	}
 	// Shape is read from config, not a hardcoded Unicode glyph.
 	if !strings.Contains(fnBody, "arrowShape") {
-		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.arrowShape to select the SVG shape")
+		t.Error("map-connector.js: buildArrowConnectorLayer must read styleCfg.arrowShape to select the SVG shape")
 	}
 	// Pixel-distance-based placement: cumulative distance table + arrowSpacing.
 	if !strings.Contains(fnBody, "cum") {
-		t.Error("app.js: buildArrowConnectorLayer must build a cumulative pixel-distance table ('cum') for even spacing")
+		t.Error("map-connector.js: buildArrowConnectorLayer must build a cumulative pixel-distance table ('cum') for even spacing")
 	}
 	if !strings.Contains(fnBody, "arrowSpacing") {
-		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.arrowSpacing to control symbol density")
+		t.Error("map-connector.js: buildArrowConnectorLayer must read styleCfg.arrowSpacing to control symbol density")
 	}
 	// Rotation from screen-space tangent.
 	if !strings.Contains(fnBody, "latLngToLayerPoint(") {
-		t.Error("app.js: buildArrowConnectorLayer must call latLngToLayerPoint() to compute the arc tangent angle")
+		t.Error("map-connector.js: buildArrowConnectorLayer must call latLngToLayerPoint() to compute the arc tangent angle")
 	}
 	if !strings.Contains(fnBody, "atan2(") {
-		t.Error("app.js: buildArrowConnectorLayer must use Math.atan2() to derive arrow rotation from arc direction")
+		t.Error("map-connector.js: buildArrowConnectorLayer must use Math.atan2() to derive arrow rotation from arc direction")
 	}
 }
 
@@ -5512,38 +5526,38 @@ func TestStaticJS_BuildArrowConnectorLayerFunction(t *testing.T) {
 func TestStaticJS_BuildArcLatLngsMercatorSpace(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildArcLatLngs(")
+	fnStart := strings.Index(mcJS, "function buildArcLatLngs(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildArcLatLngs function not found")
+		t.Fatal("map-connector.js: buildArcLatLngs function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 1500
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2500
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	// Must contain Mercator forward projection (toMerc) and inverse (fromMerc).
 	if !strings.Contains(fnBody, "toMerc") {
-		t.Error("app.js: buildArcLatLngs must define a toMerc helper for forward Web-Mercator projection")
+		t.Error("map-connector.js: buildArcLatLngs must define a toMerc helper for forward Web-Mercator projection")
 	}
 	if !strings.Contains(fnBody, "fromMerc") {
-		t.Error("app.js: buildArcLatLngs must define a fromMerc helper for inverse Web-Mercator projection")
+		t.Error("map-connector.js: buildArcLatLngs must define a fromMerc helper for inverse Web-Mercator projection")
 	}
 	// Earth radius constant must be present for EPSG:3857 math.
 	if !strings.Contains(fnBody, "6378137") {
-		t.Error("app.js: buildArcLatLngs must use the WGS-84 Earth radius (6378137) for Mercator conversion")
+		t.Error("map-connector.js: buildArcLatLngs must use the WGS-84 Earth radius (6378137) for Mercator conversion")
 	}
 }
 
@@ -5553,78 +5567,78 @@ func TestStaticJS_BuildArcLatLngsMercatorSpace(t *testing.T) {
 func TestStaticJS_BuildConnectorLayerDispatchesByType(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	fnStart := strings.Index(mcJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildConnectorLayer function not found")
+		t.Fatal("map-connector.js: buildConnectorLayer function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 600
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2500
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "buildArrowConnectorLayer(") {
-		t.Error("app.js: buildConnectorLayer must call buildArrowConnectorLayer() for 'arrows' type styles")
+		t.Error("map-connector.js: buildConnectorLayer must call buildArrowConnectorLayer() for 'arrows' type styles")
 	}
 	if !strings.Contains(fnBody, "'arrows'") {
-		t.Error("app.js: buildConnectorLayer must check for type === 'arrows' to dispatch correctly")
+		t.Error("map-connector.js: buildConnectorLayer must check for type === 'arrows' to dispatch correctly")
 	}
 }
 
-// TestStaticJS_BuildArrowSVGHelper verifies that app.js defines a buildArrowSVG()
+// TestStaticJS_BuildArrowSVGHelper verifies that map-connector.js defines a buildArrowSVG()
 // helper that renders all shape variants as inline SVG using a normalised viewBox.
 // SVG-based arrows avoid Unicode glyph size/font variance and ensure
 // pixel-accurate arrowheads at every zoom level.
 func TestStaticJS_BuildArrowSVGHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildArrowSVG(")
+	fnStart := strings.Index(mcJS, "function buildArrowSVG(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildArrowSVG helper function not found")
+		t.Fatal("map-connector.js: buildArrowSVG helper function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 800
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	// Must produce inline SVG output.
 	if !strings.Contains(fnBody, "viewBox") {
-		t.Error("app.js: buildArrowSVG must use an SVG viewBox for normalised coordinate rendering")
+		t.Error("map-connector.js: buildArrowSVG must use an SVG viewBox for normalised coordinate rendering")
 	}
 	// Must handle all defined shape variants via switch.
 	for _, shape := range []string{"chevron", "double", "open", "pointer", "fat"} {
 		if !strings.Contains(fnBody, "'"+shape+"'") {
-			t.Errorf("app.js: buildArrowSVG is missing a case for shape %q", shape)
+			t.Errorf("map-connector.js: buildArrowSVG is missing a case for shape %q", shape)
 		}
 	}
 	// Rotation must be applied via SVG transform (not CSS) for anchor consistency.
 	if !strings.Contains(fnBody, "rotate(") {
-		t.Error("app.js: buildArrowSVG must apply rotation via SVG transform rotate()")
+		t.Error("map-connector.js: buildArrowSVG must apply rotation via SVG transform rotate()")
 	}
 }
 
@@ -5637,40 +5651,40 @@ func TestStaticJS_BuildArrowSVGHelper(t *testing.T) {
 func TestStaticJS_ConnectorArcLayerSinglePassRendering(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
 	// ConnectorArcLayer must be defined as a L.Layer extension.
-	if !strings.Contains(appJS, "ConnectorArcLayer") {
-		t.Fatal("app.js: ConnectorArcLayer not found")
+	if !strings.Contains(mcJS, "ConnectorArcLayer") {
+		t.Fatal("map-connector.js: ConnectorArcLayer not found")
 	}
 	// Find the _redraw method body.
-	redrawStart := strings.Index(appJS, "_redraw: function()")
+	redrawStart := strings.Index(mcJS, "_redraw: function()")
 	if redrawStart == -1 {
-		t.Fatal("app.js: ConnectorArcLayer._redraw method not found")
+		t.Fatal("map-connector.js: ConnectorArcLayer._redraw method not found")
 	}
-	nextFn := strings.Index(appJS[redrawStart+1:], "\n  },")
+	nextFn := strings.Index(mcJS[redrawStart+1:], "\n    },")
 	var redrawBody string
 	if nextFn != -1 {
-		redrawBody = appJS[redrawStart : redrawStart+1+nextFn]
+		redrawBody = mcJS[redrawStart : redrawStart+1+nextFn]
 	} else {
-		end := redrawStart + 1000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := redrawStart + 3000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		redrawBody = appJS[redrawStart:end]
+		redrawBody = mcJS[redrawStart:end]
 	}
 	if !strings.Contains(redrawBody, "setLineDash(") {
-		t.Error("app.js: ConnectorArcLayer._redraw must call setLineDash() for seamless dot/dash patterns")
+		t.Error("map-connector.js: ConnectorArcLayer._redraw must call setLineDash() for seamless dot/dash patterns")
 	}
 	if !strings.Contains(redrawBody, "createLinearGradient(") {
-		t.Error("app.js: ConnectorArcLayer._redraw must call createLinearGradient() for smooth colour gradient")
+		t.Error("map-connector.js: ConnectorArcLayer._redraw must call createLinearGradient() for smooth colour gradient")
 	}
 	if !strings.Contains(redrawBody, "ctx.stroke()") {
-		t.Error("app.js: ConnectorArcLayer._redraw must call ctx.stroke() to render the arc")
+		t.Error("map-connector.js: ConnectorArcLayer._redraw must call ctx.stroke() to render the arc")
 	}
 }
 
@@ -5682,33 +5696,33 @@ func TestStaticJS_ConnectorArcLayerSinglePassRendering(t *testing.T) {
 func TestStaticJS_BuildConnectorLayerUsesArcLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	fnStart := strings.Index(mcJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildConnectorLayer function not found")
+		t.Fatal("map-connector.js: buildConnectorLayer function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 600
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2500
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "ConnectorArcLayer") {
-		t.Error("app.js: buildConnectorLayer must instantiate ConnectorArcLayer for polyline-type styles")
+		t.Error("map-connector.js: buildConnectorLayer must instantiate ConnectorArcLayer for polyline-type styles")
 	}
 	if !strings.Contains(fnBody, "group.addLayer(") {
-		t.Error("app.js: buildConnectorLayer must add ConnectorArcLayer to the LayerGroup via addLayer()")
+		t.Error("map-connector.js: buildConnectorLayer must add ConnectorArcLayer to the LayerGroup via addLayer()")
 	}
 }
 
@@ -5720,108 +5734,108 @@ func TestStaticJS_BuildConnectorLayerUsesArcLayer(t *testing.T) {
 func TestStaticJS_BuildArrowConnectorLayerSpine(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
+	fnStart := strings.Index(mcJS, "function buildArrowConnectorLayer(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildArrowConnectorLayer function not found")
+		t.Fatal("map-connector.js: buildArrowConnectorLayer function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 4000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 6000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "spineWeight") {
-		t.Error("app.js: buildArrowConnectorLayer must read styleCfg.spineWeight to conditionally draw a spine")
+		t.Error("map-connector.js: buildArrowConnectorLayer must read styleCfg.spineWeight to conditionally draw a spine")
 	}
 	if !strings.Contains(fnBody, "ConnectorArcLayer") {
-		t.Error("app.js: buildArrowConnectorLayer spine must use ConnectorArcLayer for seamless single-pass rendering")
+		t.Error("map-connector.js: buildArrowConnectorLayer spine must use ConnectorArcLayer for seamless single-pass rendering")
 	}
 }
 
-// TestStaticJS_HexToRgbaHelper verifies that app.js defines a hexToRgba()
+// TestStaticJS_HexToRgbaHelper verifies that map-connector.js defines a hexToRgba()
 // helper that converts a '#rrggbb' hex colour and an alpha value [0,1] to the
 // rgba() CSS format required by ConnectorArcLayer for canvas strokeStyle.
 func TestStaticJS_HexToRgbaHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "function hexToRgba(") {
-		t.Fatal("app.js: hexToRgba() helper function not found")
+	if !strings.Contains(mcJS, "function hexToRgba(") {
+		t.Fatal("map-connector.js: hexToRgba() helper function not found")
 	}
-	fnStart := strings.Index(appJS, "function hexToRgba(")
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	fnStart := strings.Index(mcJS, "function hexToRgba(")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 300
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 500
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 	if !strings.Contains(fnBody, "rgba(") {
-		t.Error("app.js: hexToRgba() must produce an rgba() CSS string")
+		t.Error("map-connector.js: hexToRgba() must produce an rgba() CSS string")
 	}
 	if !strings.Contains(fnBody, "parseInt(") {
-		t.Error("app.js: hexToRgba() must parse hex channel values with parseInt()")
+		t.Error("map-connector.js: hexToRgba() must parse hex channel values with parseInt()")
 	}
 }
 
-// TestStaticJS_ConnectorArcLayerDefined verifies that app.js defines
+// TestStaticJS_ConnectorArcLayerDefined verifies that map-connector.js defines
 // ConnectorArcLayer as a L.Layer extension with all required lifecycle methods,
 // map event bindings, and canvas placement inside the map container.
 func TestStaticJS_ConnectorArcLayerDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "ConnectorArcLayer = L.Layer.extend(") {
-		t.Fatal("app.js: ConnectorArcLayer must be defined as a L.Layer extension")
+	if !strings.Contains(mcJS, "ConnectorArcLayer = L.Layer.extend(") {
+		t.Fatal("map-connector.js: ConnectorArcLayer must be defined as a L.Layer extension")
 	}
 	for _, method := range []string{"initialize: function(", "onAdd: function(", "onRemove: function(", "_redraw: function("} {
-		if !strings.Contains(appJS, method) {
-			t.Errorf("app.js: ConnectorArcLayer must define the %q method", method)
+		if !strings.Contains(mcJS, method) {
+			t.Errorf("map-connector.js: ConnectorArcLayer must define the %q method", method)
 		}
 	}
-	if !strings.Contains(appJS, "map.on('move zoom zoomend resize'") {
-		t.Error("app.js: ConnectorArcLayer.onAdd must bind 'move zoom zoomend resize' map events")
+	if !strings.Contains(mcJS, "map.on('move zoom zoomend resize'") {
+		t.Error("map-connector.js: ConnectorArcLayer.onAdd must bind 'move zoom zoomend resize' map events")
 	}
-	if !strings.Contains(appJS, "map.off('move zoom zoomend resize'") {
-		t.Error("app.js: ConnectorArcLayer.onRemove must unbind 'move zoom zoomend resize' map events")
+	if !strings.Contains(mcJS, "map.off('move zoom zoomend resize'") {
+		t.Error("map-connector.js: ConnectorArcLayer.onRemove must unbind 'move zoom zoomend resize' map events")
 	}
-	if !strings.Contains(appJS, "map.getContainer().appendChild(") {
-		t.Error("app.js: ConnectorArcLayer.onAdd must append the canvas to map.getContainer()")
+	if !strings.Contains(mcJS, "map.getContainer().appendChild(") {
+		t.Error("map-connector.js: ConnectorArcLayer.onAdd must append the canvas to map.getContainer()")
 	}
 }
 
 // TestStaticJS_IsMapLoadedHelper verifies that app.js defines an isMapLoaded()
-// helper that gates latLngToLayerPoint() calls.  It prevents the Leaflet error
-// "Set map center and zoom first." that occurs when map-dependent calculations
-// run before setView / fitBounds has been called.
+// shim and that map-connector.js guards buildArrowConnectorLayer with isMapLoaded().
 func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
+
+	// ── app.js must still expose the isMapLoaded() shim ─────────────────────
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
 	if rec.Code != http.StatusOK {
@@ -5829,11 +5843,9 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 	}
 	appJS := rec.Body.String()
 
-	// Helper must exist.
 	if !strings.Contains(appJS, "function isMapLoaded()") {
-		t.Fatal("app.js: isMapLoaded() helper function not found")
+		t.Fatal("app.js: isMapLoaded() shim not found")
 	}
-	// Must test both _map existence and _map._loaded flag.
 	fnStart := strings.Index(appJS, "function isMapLoaded()")
 	fnEnd := strings.Index(appJS[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -5847,30 +5859,37 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 		fnBody = appJS[fnStart:end]
 	}
 	if !strings.Contains(fnBody, "_map._loaded") {
-		t.Error("app.js: isMapLoaded() must check _map._loaded to detect full Leaflet initialisation")
+		t.Error("app.js: isMapLoaded() shim must check _map._loaded")
 	}
 
-	// buildArrowConnectorLayer must guard with isMapLoaded(), not bare _map.
-	arrowStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
-	if arrowStart == -1 {
-		t.Fatal("app.js: buildArrowConnectorLayer not found")
+	// ── map-connector.js: buildArrowConnectorLayer must guard with isMapLoaded() ──
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec2.Code)
 	}
-	arrowEnd := strings.Index(appJS[arrowStart+1:], "\nfunction ")
+	mcJS := rec2.Body.String()
+
+	arrowStart := strings.Index(mcJS, "function buildArrowConnectorLayer(")
+	if arrowStart == -1 {
+		t.Fatal("map-connector.js: buildArrowConnectorLayer not found")
+	}
+	arrowEnd := strings.Index(mcJS[arrowStart+1:], "\n  function ")
 	var arrowBody string
 	if arrowEnd != -1 {
-		arrowBody = appJS[arrowStart : arrowStart+1+arrowEnd]
+		arrowBody = mcJS[arrowStart : arrowStart+1+arrowEnd]
 	} else {
-		end := arrowStart + 2000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := arrowStart + 6000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		arrowBody = appJS[arrowStart:end]
+		arrowBody = mcJS[arrowStart:end]
 	}
-	if !strings.Contains(arrowBody, "isMapLoaded()") {
-		t.Error("app.js: buildArrowConnectorLayer must guard with isMapLoaded() before calling latLngToLayerPoint()")
+	if !strings.Contains(arrowBody, "isMapLoaded(") {
+		t.Error("map-connector.js: buildArrowConnectorLayer must guard with isMapLoaded() before calling latLngToLayerPoint()")
 	}
 
-	// refreshConnectorLayer must guard with isMapLoaded() too.
+	// ── app.js: refreshConnectorLayer must guard with isMapLoaded() ──────────
 	if !strings.Contains(appJS, "function refreshConnectorLayer(") {
 		t.Fatal("app.js: refreshConnectorLayer not found")
 	}
@@ -5982,25 +6001,25 @@ func TestStaticCSS_ConnectorArrowIcon(t *testing.T) {
 // Phase 7 (Round 11) tests — meteor glow animation on connector arc
 // ---------------------------------------------------------------------------
 
-// TestStaticJS_ConnectorGlowConfigsDefined verifies that app.js declares the
-// CONNECTOR_GLOW_CONFIGS constant with a 'default' preset containing all
-// required timing and visual parameters for the meteor animation.
+// TestStaticJS_ConnectorGlowConfigsDefined verifies that map-connector.js references
+// CONNECTOR_GLOW_CONFIGS and uses all required timing and visual parameters
+// for the meteor animation.
 func TestStaticJS_ConnectorGlowConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "CONNECTOR_GLOW_CONFIGS") {
-		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS constant must be declared")
+	if !strings.Contains(mcJS, "CONNECTOR_GLOW_CONFIGS") {
+		t.Fatal("map-connector.js: CONNECTOR_GLOW_CONFIGS must be referenced")
 	}
 	// 'default' preset must define all required animation parameters.
 	for _, param := range []string{"travelMs", "pauseMs", "glowRadius", "glowOpacity", "tailLength"} {
-		if !strings.Contains(appJS, param) {
-			t.Errorf("app.js: CONNECTOR_GLOW_CONFIGS must include parameter %q", param)
+		if !strings.Contains(mcJS, param) {
+			t.Errorf("map-connector.js: CONNECTOR_GLOW_CONFIGS must include parameter %q", param)
 		}
 	}
 }
@@ -6025,20 +6044,20 @@ func TestStaticJS_ConnectorTickXsGlowEnabled(t *testing.T) {
 	}
 }
 
-// TestStaticJS_ConnectorGlowLayerDefined verifies that app.js defines
+// TestStaticJS_ConnectorGlowLayerDefined verifies that map-connector.js defines
 // ConnectorGlowLayer as a L.Layer extension with the required lifecycle
 // methods and animation helpers for the meteor light-pulse effect.
 func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "ConnectorGlowLayer = L.Layer.extend(") {
-		t.Fatal("app.js: ConnectorGlowLayer must be defined as a L.Layer extension")
+	if !strings.Contains(mcJS, "ConnectorGlowLayer = L.Layer.extend(") {
+		t.Fatal("map-connector.js: ConnectorGlowLayer must be defined as a L.Layer extension")
 	}
 	for _, method := range []string{
 		"initialize: function(",
@@ -6049,8 +6068,8 @@ func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
 		"_posAtPx: function(",
 		"_getScreenPts: function(",
 	} {
-		if !strings.Contains(appJS, method) {
-			t.Errorf("app.js: ConnectorGlowLayer must define the %q method", method)
+		if !strings.Contains(mcJS, method) {
+			t.Errorf("map-connector.js: ConnectorGlowLayer must define the %q method", method)
 		}
 	}
 }
@@ -6061,45 +6080,45 @@ func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
 func TestStaticJS_ConnectorGlowLayerAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
 	// Find the body of ConnectorGlowLayer.
-	start := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
+	start := strings.Index(mcJS, "ConnectorGlowLayer = L.Layer.extend(")
 	if start == -1 {
-		t.Fatal("app.js: ConnectorGlowLayer not found")
+		t.Fatal("map-connector.js: ConnectorGlowLayer not found")
 	}
-	// Locate the end of the const declaration (next top-level "function " or "const ").
-	rest := appJS[start:]
-	endIdx := strings.Index(rest, "\nfunction ")
+	// Locate the end of the const declaration (next IIFE-level function).
+	rest := mcJS[start:]
+	endIdx := strings.Index(rest, "\n  function ")
 	var layerBody string
 	if endIdx != -1 {
 		layerBody = rest[:endIdx]
 	} else {
-		end := start + 4000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := start + 15000
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		layerBody = appJS[start:end]
+		layerBody = mcJS[start:end]
 	}
 
 	if !strings.Contains(layerBody, "requestAnimationFrame(") {
-		t.Error("app.js: ConnectorGlowLayer must use requestAnimationFrame for the animation loop")
+		t.Error("map-connector.js: ConnectorGlowLayer must use requestAnimationFrame for the animation loop")
 	}
 	if !strings.Contains(layerBody, "cancelAnimationFrame(") {
-		t.Error("app.js: ConnectorGlowLayer.onRemove must call cancelAnimationFrame to stop the loop")
+		t.Error("map-connector.js: ConnectorGlowLayer.onRemove must call cancelAnimationFrame to stop the loop")
 	}
 	if !strings.Contains(layerBody, "clearRect(") {
-		t.Error("app.js: ConnectorGlowLayer._tick must call clearRect to erase the previous frame")
+		t.Error("map-connector.js: ConnectorGlowLayer._tick must call clearRect to erase the previous frame")
 	}
 	if !strings.Contains(layerBody, "createRadialGradient(") {
-		t.Error("app.js: ConnectorGlowLayer._drawGlow must use createRadialGradient for the glow halo")
+		t.Error("map-connector.js: ConnectorGlowLayer._drawGlow must use createRadialGradient for the glow halo")
 	}
 	if !strings.Contains(layerBody, "lerpHex(") {
-		t.Error("app.js: ConnectorGlowLayer._drawGlow must call lerpHex to interpolate head colour along the arc")
+		t.Error("map-connector.js: ConnectorGlowLayer._drawGlow must call lerpHex to interpolate head colour along the arc")
 	}
 }
 
@@ -6110,39 +6129,58 @@ func TestStaticJS_ConnectorGlowLayerAnimation(t *testing.T) {
 func TestStaticJS_BuildConnectorLayerAddsGlowLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
+	fnStart := strings.Index(mcJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildConnectorLayer function not found")
+		t.Fatal("map-connector.js: buildConnectorLayer function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(mcJS[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = mcJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 800
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2500
+		if end > len(mcJS) {
+			end = len(mcJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mcJS[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "glowEnabled") {
-		t.Error("app.js: buildConnectorLayer must check styleCfg.glowEnabled to decide whether to add the glow layer")
+		t.Error("map-connector.js: buildConnectorLayer must check styleCfg.glowEnabled to decide whether to add the glow layer")
 	}
 	if !strings.Contains(fnBody, "ConnectorGlowLayer") {
-		t.Error("app.js: buildConnectorLayer must instantiate ConnectorGlowLayer when glowEnabled is true")
+		t.Error("map-connector.js: buildConnectorLayer must instantiate ConnectorGlowLayer when glowEnabled is true")
 	}
 	if !strings.Contains(fnBody, "CONNECTOR_GLOW_CONFIGS") {
-		t.Error("app.js: buildConnectorLayer must look up the glow config from CONNECTOR_GLOW_CONFIGS")
+		t.Error("map-connector.js: buildConnectorLayer must look up the glow config from CONNECTOR_GLOW_CONFIGS")
 	}
 	if !strings.Contains(fnBody, "group.addLayer(") {
-		t.Error("app.js: buildConnectorLayer must add ConnectorGlowLayer to the LayerGroup via addLayer()")
+		t.Error("map-connector.js: buildConnectorLayer must add ConnectorGlowLayer to the LayerGroup via addLayer()")
+	}
+}
+
+// TestStaticHandler_ServesMapConnectorJS verifies that the static file server
+// handles GET /map-connector.js with HTTP 200 and returns the module that
+// exposes PathProbe.MapConnector.
+func TestStaticHandler_ServesMapConnectorJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "PathProbe.MapConnector") {
+		t.Error("/map-connector.js: response must export PathProbe.MapConnector")
+	}
+	if !strings.Contains(body, "buildConnectorLayer") {
+		t.Error("/map-connector.js: response must expose buildConnectorLayer in PathProbe.MapConnector")
 	}
 }
 
@@ -6189,41 +6227,41 @@ func TestStaticJS_ConnectorGlowConfigsFadeMs(t *testing.T) {
 func TestStaticJS_ConnectorGlowLayerExtinguish(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mcJS := rec.Body.String()
 
-	layerStart := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
+	layerStart := strings.Index(mcJS, "ConnectorGlowLayer = L.Layer.extend(")
 	if layerStart == -1 {
-		t.Fatal("app.js: ConnectorGlowLayer not found")
+		t.Fatal("map-connector.js: ConnectorGlowLayer not found")
 	}
 	// Capture enough of the layer body to cover all methods (~8 KB).
-	end := layerStart + 8000
-	if end > len(appJS) {
-		end = len(appJS)
+	end := layerStart + 15000
+	if end > len(mcJS) {
+		end = len(mcJS)
 	}
-	layerBody := appJS[layerStart:end]
+	layerBody := mcJS[layerStart:end]
 
 	// _tick must compute a three-phase cycle: travelMs + fadeMs + pauseMs.
 	if !strings.Contains(layerBody, "fadeMs") {
-		t.Error("app.js: ConnectorGlowLayer._tick must read cfg.fadeMs to compute the three-phase cycle duration")
+		t.Error("map-connector.js: ConnectorGlowLayer._tick must read cfg.fadeMs to compute the three-phase cycle duration")
 	}
 	if !strings.Contains(layerBody, "masterAlpha") {
-		t.Error("app.js: ConnectorGlowLayer._tick must declare masterAlpha as a phase-dependent brightness multiplier")
+		t.Error("map-connector.js: ConnectorGlowLayer._tick must declare masterAlpha as a phase-dependent brightness multiplier")
 	}
 	// _drawGlow must accept and apply masterAlpha.
 	if !strings.Contains(layerBody, "_drawGlow: function(ctx, progress, masterAlpha)") {
-		t.Error("app.js: ConnectorGlowLayer._drawGlow must accept masterAlpha as its third parameter")
+		t.Error("map-connector.js: ConnectorGlowLayer._drawGlow must accept masterAlpha as its third parameter")
 	}
 	// Tail convergence: tailPx must be proportional to masterAlpha.
 	if !strings.Contains(layerBody, "tailPx") || !strings.Contains(layerBody, "* masterAlpha") {
-		t.Error("app.js: ConnectorGlowLayer._drawGlow must multiply tailPx by masterAlpha to converge the tail on fade-out")
+		t.Error("map-connector.js: ConnectorGlowLayer._drawGlow must multiply tailPx by masterAlpha to converge the tail on fade-out")
 	}
 	// Phase 3: the dark phase must return early without calling _drawGlow.
 	if !strings.Contains(layerBody, "return;") {
-		t.Error("app.js: ConnectorGlowLayer._tick must return early in phase 3 (dark) without drawing")
+		t.Error("map-connector.js: ConnectorGlowLayer._tick must return early in phase 3 (dark) without drawing")
 	}
 }
 
