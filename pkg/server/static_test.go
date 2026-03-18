@@ -1,4 +1,4 @@
-﻿package server_test
+package server_test
 
 import (
 	"net/http"
@@ -8,29 +8,6 @@ import (
 
 	"go-pathprobe/pkg/diag"
 )
-
-// jsBundle concatenates all JS module files for content assertions.
-// Tests that check JS *content* (not static-file serving) call this instead of
-// fetching /app.js directly, because functionality is now split across modules.
-func jsBundle(t *testing.T, h http.Handler) string {
-	t.Helper()
-	modules := []string{
-		"/config.js", "/locale.js", "/theme.js", "/form.js",
-		"/api-builder.js", "/renderer.js", "/map-connector.js",
-		"/map.js", "/api-client.js", "/history.js", "/app.js",
-	}
-	var sb strings.Builder
-	for _, path := range modules {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("GET %s: want 200, got %d", path, rec.Code)
-		}
-		sb.WriteString(rec.Body.String())
-		sb.WriteByte('\n')
-	}
-	return sb.String()
-}
 
 // TestStaticHandler_ServesIndexHTML verifies that GET / returns the embedded
 // HTML page with the expected Content-Type and known content markers.
@@ -504,7 +481,12 @@ func TestStaticHTML_DefaultThemeAttribute(t *testing.T) {
 // than relying on a hardcoded string literal.
 func TestStaticJS_DefaultThemeConstant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// DEFAULT_THEME constant must be declared.
 	if !strings.Contains(body, "const DEFAULT_THEME") {
@@ -936,7 +918,12 @@ func TestStaticHTML_ModeLabelFallbackText(t *testing.T) {
 // system has been removed from app.js now that the logo style is fixed.
 func TestStaticJS_BrandSystemRemoved(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	for _, absent := range []string{
 		"BRAND_STYLES",
@@ -1212,7 +1199,12 @@ func TestStaticCSS_PanelTransition(t *testing.T) {
 // prevents the entrance animation from firing on the cold page load.
 func TestStaticJS_CustomSelectFunctions(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "initCustomSelect") {
 		t.Error("app.js: initCustomSelect function must be defined")
@@ -1653,7 +1645,12 @@ func TestStaticCSS_PanelLeaveAnimation(t *testing.T) {
 // exists for safe rapid target-switching.
 func TestStaticJS_PanelLeaveAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "panel-leaving") {
 		t.Error("app.js: onTargetChange must add 'panel-leaving' class to the departing panel for the exit animation")
@@ -1684,7 +1681,12 @@ func TestStaticJS_PanelLeaveAnimation(t *testing.T) {
 // the in-flight transition and prevent a stale reveal from running.
 func TestStaticJS_PanelSequentialTransition(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The incoming panel must be explicitly hidden while the outgoing panel
 	// is animating so both panels never occupy layout space at the same time.
@@ -1827,7 +1829,12 @@ func TestStaticI18n_ImapPopLegendKeys(t *testing.T) {
 // the user is never presented with an empty bordered box.
 func TestStaticJS_EmptyPanelHandling(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// JS reads dataset.panelEmpty to decide whether to reveal the incoming panel.
 	if !strings.Contains(body, "dataset.panelEmpty") {
@@ -1856,7 +1863,12 @@ func TestStaticJS_EmptyPanelHandling(t *testing.T) {
 // the card border to appear instantly instead of growing in.
 func TestStaticJS_EmptyToContentTransition(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The grow-from-empty branch must lock the stage at '0px' before
 	// triggering the transition, so CSS has an explicit start value to
@@ -1973,7 +1985,12 @@ func TestStaticCSS_AdvancedOptsAnimation(t *testing.T) {
 // adv-entering / adv-leaving CSS classes, and calls transitionend cleanup.
 func TestStaticJS_AdvancedOptsAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// Core function must be defined and called from DOMContentLoaded.
 	if !strings.Contains(body, "initAdvancedOpts") {
@@ -2177,7 +2194,12 @@ func TestStaticI18n_WebModeTracerouteKeys(t *testing.T) {
 // the API request payload so the server's WebOptions.MaxHops is populated.
 func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The traceroute mode string constant must appear in buildWebOpts / TARGET_MODE_PANELS.
 	if !strings.Contains(body, `'traceroute'`) {
@@ -2200,7 +2222,12 @@ func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
 // are shown in the results pane when a traceroute diagnostic is returned.
 func TestStaticJS_RenderRouteSection(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The render function must be defined.
 	if !strings.Contains(body, "renderRouteSection") {
@@ -2337,7 +2364,12 @@ func TestStaticCSS_AutofillTheme(t *testing.T) {
 // removed in favour of the fixed dots choice.
 func TestStaticJS_DotsRunAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// getRunningHTML must exist and emit the dots markup.
 	if !strings.Contains(body, "getRunningHTML") {
@@ -2363,7 +2395,12 @@ func TestStaticJS_DotsRunAnimation(t *testing.T) {
 // partial traceroute output does not remain visible below the error banner.
 func TestStaticJS_ErrorClearsProgressLog(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// Both the catch block and the SSE error handler must clear innerHTML.
 	// We verify by counting occurrences of the clear pattern.
@@ -2379,7 +2416,12 @@ func TestStaticJS_ErrorClearsProgressLog(t *testing.T) {
 // diagnostic request, preventing spurious deadline-exceeded errors.
 func TestStaticJS_TracerouteTimeoutAutoCompute(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The traceroute-specific timeout guard must be present.
 	if !strings.Contains(body, "traceroute") {
@@ -2395,7 +2437,12 @@ func TestStaticJS_TracerouteTimeoutAutoCompute(t *testing.T) {
 // replacing opaque Go internal strings like "context deadline exceeded".
 func TestStaticJS_LocalizeError(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "localizeError") {
 		t.Error("app.js: localizeError function must be defined")
@@ -2629,7 +2676,12 @@ func TestStaticHTML_PortGroupLabelHint(t *testing.T) {
 // removed checkbox picker.  getWebPorts() must no longer exist in the codebase.
 func TestStaticJS_WebPortModeReadsTextInput(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// getWebPorts() has been removed; buildRequest reads val('ports') for web/port.
 	if strings.Contains(body, "function getWebPorts(") {
@@ -2653,7 +2705,12 @@ func TestStaticJS_WebPortModeReadsTextInput(t *testing.T) {
 // when the user selects web target + port connectivity mode.
 func TestStaticJS_WebTargetPortDefaults(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// TARGET_PORTS.web must include both HTTP (80) and HTTPS (443) defaults.
 	if !strings.Contains(body, "web:  [80, 443]") {
@@ -2666,7 +2723,12 @@ func TestStaticJS_WebTargetPortDefaults(t *testing.T) {
 // (mirrors the auto-fill onTargetChange() already does for target switches).
 func TestStaticJS_PortGroupModeAutoFill(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The radio change handler must auto-fill ports for web/port mode.
 	if !strings.Contains(body, "WEB_MODES_WITH_PORTS.includes(mode)") {
@@ -2683,7 +2745,12 @@ func TestStaticJS_PortGroupModeAutoFill(t *testing.T) {
 // constant so logic is data-driven rather than hardcoded per-mode.
 func TestStaticJS_PortGroupToggle(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// The unified port-group ID must be referenced.
 	if !strings.Contains(body, "port-group") {
@@ -2700,7 +2767,12 @@ func TestStaticJS_PortGroupToggle(t *testing.T) {
 // data-driven, non-hardcoded manner.
 func TestStaticJS_WEB_MODES_WITH_PORTS(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "WEB_MODES_WITH_PORTS") {
 		t.Error("app.js: WEB_MODES_WITH_PORTS constant must be declared")
@@ -2715,7 +2787,12 @@ func TestStaticJS_WEB_MODES_WITH_PORTS(t *testing.T) {
 // function which manages visibility of #port-group and its inner variants.
 func TestStaticJS_UpdatePortGroup(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function updatePortGroup(") {
 		t.Error("app.js: updatePortGroup() function must be defined")
@@ -2739,7 +2816,12 @@ func TestStaticJS_UpdatePortGroup(t *testing.T) {
 // blank grey areas on the OpenStreetMap canvas.
 func TestStaticJS_RenderMapInvalidateSize(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// renderMap must call invalidateSize to correct blank-tile regression.
 	if !strings.Contains(body, "invalidateSize") {
@@ -2759,7 +2841,12 @@ func TestStaticJS_RenderMapInvalidateSize(t *testing.T) {
 // map gets a 0×0 size and tiles are blank.
 func TestStaticJS_SSEResultRevealOrder(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// Locate handleSSEMessage and the evtName==='result' branch within it.
 	fnStart := strings.Index(body, "function handleSSEMessage(")
@@ -2793,7 +2880,12 @@ func TestStaticJS_SSEResultRevealOrder(t *testing.T) {
 // in the SSE handler.
 func TestStaticJS_HistoryEntryRevealOrder(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function loadHistoryEntry(")
 	if fnStart == -1 {
@@ -2834,7 +2926,12 @@ func TestStaticJS_HistoryEntryRevealOrder(t *testing.T) {
 // than hardcoding logic inside renderMap().
 func TestStaticJS_MapPointConfigs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MAP_POINT_CONFIGS") {
 		t.Error("app.js: MAP_POINT_CONFIGS constant not found — map marker config must be data-driven")
@@ -2852,7 +2949,12 @@ func TestStaticJS_MapPointConfigs(t *testing.T) {
 // badge displayed below the map between origin and target markers.
 func TestStaticJS_HaversineKm(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function haversineKm(") {
 		t.Error("app.js: haversineKm function not found — distance calculation must be a named helper")
@@ -2868,7 +2970,12 @@ func TestStaticJS_HaversineKm(t *testing.T) {
 // default Leaflet marker pin with a role-coloured dot.
 func TestStaticJS_BuildMarkerIcon(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function buildMarkerIcon(") {
 		t.Error("app.js: buildMarkerIcon function not found — marker icon creation must be a named helper")
@@ -2883,7 +2990,12 @@ func TestStaticJS_BuildMarkerIcon(t *testing.T) {
 // geo-popup__role badge to clearly identify origin vs target.
 func TestStaticJS_BuildPopupHtml(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function buildPopupHtml(") {
 		t.Error("app.js: buildPopupHtml function not found")
@@ -2903,7 +3015,12 @@ func TestStaticJS_BuildPopupHtml(t *testing.T) {
 // that dot/dash rhythms are configured via dashArray in CONNECTOR_LINE_CONFIGS.
 func TestStaticJS_RenderMapPolyline(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "buildConnectorLayer(") {
 		t.Error("app.js: renderMap must call buildConnectorLayer() to connect origin and target markers")
@@ -2997,7 +3114,12 @@ func TestStaticI18n_MapOriginAndDistanceKeys(t *testing.T) {
 // Tile URLs must not use the raw OSM URL so theme-aware switching works correctly.
 func TestStaticJS_TileLayerConfigs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "TILE_LAYER_CONFIGS") {
 		t.Error("app.js: TILE_LAYER_CONFIGS constant not found — tile URLs must be data-driven")
@@ -3023,7 +3145,12 @@ func TestStaticJS_TileLayerConfigs(t *testing.T) {
 // the authoritative set of theme IDs that map to the dark tile variant.
 func TestStaticJS_MapDarkThemes(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MAP_DARK_THEMES") {
 		t.Error("app.js: MAP_DARK_THEMES constant not found — dark/light tile selection must be data-driven")
@@ -3046,7 +3173,12 @@ func TestStaticJS_MapDarkThemes(t *testing.T) {
 // mapping the active application theme to a tile-layer variant string.
 func TestStaticJS_GetMapTileVariant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function getMapTileVariant(") {
 		t.Error("app.js: getMapTileVariant function not found")
@@ -3060,7 +3192,12 @@ func TestStaticJS_GetMapTileVariant(t *testing.T) {
 // are handled silently by syncMapTileVariantToTheme().
 func TestStaticJS_RefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function refreshMapTiles(") {
 		t.Error("app.js: refreshMapTiles function not found")
@@ -3073,7 +3210,12 @@ func TestStaticJS_RefreshMapTiles(t *testing.T) {
 // itself calls refreshMapTiles() internally.
 func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function applyTheme(")
 	if fnStart == -1 {
@@ -3211,7 +3353,12 @@ func TestStaticCSS_RadiusTokenDefined(t *testing.T) {
 // events — triggers the theme swap.
 func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function applyTheme(")
 	if fnStart == -1 {
@@ -3243,7 +3390,12 @@ func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
 // when the map is visible.
 func TestStaticJS_MapBarHiddenToggled(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderMap(")
 	if fnStart == -1 {
@@ -3279,7 +3431,12 @@ func TestStaticJS_MapBarHiddenToggled(t *testing.T) {
 // would never fire (since removing the class triggers the transition, not ends it).
 func TestStaticJS_RefreshMapTilesRequestAnimationFrame(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function refreshMapTiles(")
 	if fnStart == -1 {
@@ -3313,7 +3470,12 @@ func TestStaticJS_RefreshMapTilesRequestAnimationFrame(t *testing.T) {
 // would leave geo-map--fading stuck permanently.
 func TestStaticJS_SyncMapTileVariantNoFadeAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function syncMapTileVariantToTheme(")
 	if fnStart == -1 {
@@ -3346,7 +3508,12 @@ func TestStaticJS_SyncMapTileVariantNoFadeAnimation(t *testing.T) {
 // 'light' or 'dark', providing the default tile variant for each theme.
 func TestStaticJS_MapThemeToTileVariant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MAP_THEME_TO_TILE_VARIANT") {
 		t.Fatal("app.js: MAP_THEME_TO_TILE_VARIANT constant not found")
@@ -3362,7 +3529,12 @@ func TestStaticJS_MapThemeToTileVariant(t *testing.T) {
 // app.js as an ordered array containing all three supported tile variants.
 func TestStaticJS_MapTileVariants(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MAP_TILE_VARIANTS") {
 		t.Fatal("app.js: MAP_TILE_VARIANTS constant not found")
@@ -3379,7 +3551,12 @@ func TestStaticJS_MapTileVariants(t *testing.T) {
 // TILE_LAYER_CONFIGS points to tile.openstreetmap.org.
 func TestStaticJS_OsmTileInConfigs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	// 'osm' key must exist as a variant key.
 	if !strings.Contains(body, "osm:") && !strings.Contains(body, "'osm'") {
@@ -3394,7 +3571,12 @@ func TestStaticJS_OsmTileInConfigs(t *testing.T) {
 // setMapTileVariant() function which is called from the map bar buttons.
 func TestStaticJS_SetMapTileVariant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function setMapTileVariant(") {
 		t.Error("app.js: setMapTileVariant function not found")
@@ -3405,7 +3587,12 @@ func TestStaticJS_SetMapTileVariant(t *testing.T) {
 // function that builds the three tile-variant buttons above the map.
 func TestStaticJS_RenderMapBar(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function renderMapBar(") {
 		t.Error("app.js: renderMapBar function not found")
@@ -3417,7 +3604,12 @@ func TestStaticJS_RenderMapBar(t *testing.T) {
 // initTheme() to align the tile variant with the active colour theme.
 func TestStaticJS_SyncMapTileVariantToTheme(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function syncMapTileVariantToTheme(") {
 		t.Error("app.js: syncMapTileVariantToTheme function not found")
@@ -3428,7 +3620,12 @@ func TestStaticJS_SyncMapTileVariantToTheme(t *testing.T) {
 // 'theme-transitioning' class to body to drive the fade-out/in animation.
 func TestStaticJS_ThemeTransitioning(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "theme-transitioning") {
 		t.Error("app.js: 'theme-transitioning' class not found — theme fade animation requires it")
@@ -3722,7 +3919,12 @@ func TestStaticHTML_GeoMapOuter(t *testing.T) {
 // geo-map-outer to toggle the entire map area (wrapper + bar + map) as one unit.
 func TestStaticJS_RenderMapUsesOuterWrapper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderMap(")
 	if fnStart == -1 {
@@ -3749,7 +3951,12 @@ func TestStaticJS_RenderMapUsesOuterWrapper(t *testing.T) {
 // buttons without text content — dot-only style, accessible via aria-label.
 func TestStaticJS_RenderMapBarNoTextContent(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderMapBar(")
 	if fnStart == -1 {
@@ -3933,7 +4140,12 @@ func TestStaticCSS_ThemeTransitioningMainOpacity(t *testing.T) {
 // header/footer remain fully visible throughout.
 func TestStaticJS_ApplyThemeUsesMainElement(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function applyTheme(")
 	if fnStart == -1 {
@@ -3964,7 +4176,12 @@ func TestStaticJS_ApplyThemeUsesMainElement(t *testing.T) {
 // single, readable source-of-truth rather than scattered literal values.
 func TestStaticJS_CopyrightStartYearConst(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "COPYRIGHT_START_YEAR") {
 		t.Error("app.js: COPYRIGHT_START_YEAR constant not found — copyright year logic requires a single source-of-truth")
@@ -3980,7 +4197,12 @@ func TestStaticJS_CopyrightStartYearConst(t *testing.T) {
 // and builds an en-dash year range from COPYRIGHT_START_YEAR to the current year.
 func TestStaticJS_UpdateCopyrightYearFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function updateCopyrightYear(")
 	if fnStart == -1 {
@@ -4015,7 +4237,12 @@ func TestStaticJS_UpdateCopyrightYearFunction(t *testing.T) {
 // locale is applied (including on page load and when the user switches language).
 func TestStaticJS_ApplyLocaleCallsCopyrightYear(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function applyLocale(")
 	if fnStart == -1 {
@@ -4048,7 +4275,12 @@ func TestStaticJS_ApplyLocaleCallsCopyrightYear(t *testing.T) {
 // text field is covered without per-field opt-out.
 func TestStaticJS_SpellcheckDisabledInDOMContentLoaded(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "spellcheck") {
 		t.Error("app.js: must disable spellcheck on text inputs")
@@ -4074,7 +4306,12 @@ func TestStaticJS_SpellcheckDisabledInDOMContentLoaded(t *testing.T) {
 // white-flash artefact cannot be fixed without hardcoding values elsewhere.
 func TestStaticJS_TileLayerConfigsBgColor(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	cfgStart := strings.Index(appJS, "const TILE_LAYER_CONFIGS")
 	if cfgStart == -1 {
@@ -4116,7 +4353,12 @@ func TestStaticJS_TileLayerConfigsBgColor(t *testing.T) {
 // the background-colour update.
 func TestStaticJS_ApplyMapBgColorFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function applyMapBgColor(")
 	if fnStart == -1 {
@@ -4148,7 +4390,12 @@ func TestStaticJS_ApplyMapBgColorFunction(t *testing.T) {
 // fades back in.
 func TestStaticJS_RefreshMapTilesCallsApplyMapBgColor(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function refreshMapTiles(")
 	if fnStart == -1 {
@@ -4179,7 +4426,12 @@ func TestStaticJS_RefreshMapTilesCallsApplyMapBgColor(t *testing.T) {
 // MARKER_STYLE_CONFIGS with the diamond-pulse style entry.
 func TestStaticJS_MarkerStyleConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MARKER_STYLE_CONFIGS") {
 		t.Fatal("app.js: MARKER_STYLE_CONFIGS constant must be declared")
@@ -4199,7 +4451,12 @@ func TestStaticJS_MarkerStyleConfigsDefined(t *testing.T) {
 // marker letter without hardcoding it inside the style config.
 func TestStaticJS_MapPointConfigsShortLabel(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	cfgStart := strings.Index(body, "const MAP_POINT_CONFIGS")
 	if cfgStart == -1 {
@@ -4221,7 +4478,12 @@ func TestStaticJS_MapPointConfigsShortLabel(t *testing.T) {
 // L.divIcon — clean separation of role vs. visual style.
 func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMarkerIcon(")
 	if fnStart == -1 {
@@ -4255,7 +4517,12 @@ func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
 // without destroying the tile layer, polyline, or legend.
 func TestStaticJS_RefreshMapMarkersFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function refreshMapMarkers(") {
 		t.Fatal("app.js: refreshMapMarkers function not found")
@@ -4356,7 +4623,12 @@ func TestStaticI18n_MarkerStyleKeys(t *testing.T) {
 // can recreate markers without requiring a full map rebuild.
 func TestStaticJS_RenderMapStoresLastGeo(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
@@ -4478,7 +4750,12 @@ func TestStaticCSS_MarkerStyleTokensDarkThemes(t *testing.T) {
 // MARKER_COLOR_SCHEME_CONFIGS with the ocean colour scheme entry.
 func TestStaticJS_MarkerColorSchemeConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "MARKER_COLOR_SCHEME_CONFIGS") {
 		t.Fatal("app.js: MARKER_COLOR_SCHEME_CONFIGS constant must be declared")
@@ -4495,7 +4772,12 @@ func TestStaticJS_MarkerColorSchemeConfigsDefined(t *testing.T) {
 // _markerColorSchemeId and _legendControl module-level state variables.
 func TestStaticJS_MarkerColorSchemeStateVars(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "_markerColorSchemeId") {
 		t.Error("app.js: _markerColorSchemeId state variable not declared")
@@ -4509,7 +4791,12 @@ func TestStaticJS_MarkerColorSchemeStateVars(t *testing.T) {
 // applyMarkerColorScheme() which applies the active colour scheme.
 func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	if !strings.Contains(body, "function applyMarkerColorScheme") {
 		t.Error("app.js: function applyMarkerColorScheme not found")
@@ -4543,7 +4830,12 @@ func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
 // the legend icon so it mirrors the active marker style (legend sync fix).
 func TestStaticJS_BuildMapLegendUsesBuildHtml(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMapLegend(")
 	if fnStart == -1 {
@@ -4644,7 +4936,12 @@ func TestStaticCSS_McColorTokensInMarkerRules(t *testing.T) {
 // never reflect a locale change.
 func TestStaticJS_BuildMapLegendDataI18nAttribute(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	body := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMapLegend(")
 	if fnStart == -1 {
@@ -4700,7 +4997,12 @@ func TestStaticI18n_MapLegendKeysInBothLocales(t *testing.T) {
 // report for re-rendering when the user switches locale.
 func TestStaticJS_LastReportStateVar(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "let _lastReport = null") {
 		t.Error("app.js: module-level variable '_lastReport' not found — required to cache the report for locale-switch re-render")
@@ -4711,7 +5013,12 @@ func TestStaticJS_LastReportStateVar(t *testing.T) {
 // the report object into _lastReport so applyLocale() can re-render it later.
 func TestStaticJS_RenderReportStoresLastReport(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderReport(")
 	if fnStart == -1 {
@@ -4741,7 +5048,12 @@ func TestStaticJS_RenderReportStoresLastReport(t *testing.T) {
 // active locale without requiring data-i18n attributes in the generated HTML.
 func TestStaticJS_ApplyLocaleReRendersReport(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function applyLocale(")
 	if fnStart == -1 {
@@ -4759,8 +5071,11 @@ func TestStaticJS_ApplyLocaleReRendersReport(t *testing.T) {
 		fnBody = appJS[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "PathProbe.Renderer.rerenderLast") {
-		t.Error("app.js: applyLocale must call PathProbe.Renderer.rerenderLast() so results are re-rendered on locale change")
+	if !strings.Contains(fnBody, "_lastReport") {
+		t.Error("app.js: applyLocale must reference _lastReport to conditionally re-render results on locale change")
+	}
+	if !strings.Contains(fnBody, "renderReport(_lastReport)") {
+		t.Error("app.js: applyLocale must call renderReport(_lastReport) so the results section labels are updated when the user switches language")
 	}
 }
 
@@ -4773,7 +5088,12 @@ func TestStaticJS_ApplyLocaleReRendersReport(t *testing.T) {
 // items for re-rendering when the user switches locale.
 func TestStaticJS_LastHistoryItemsStateVar(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	if !strings.Contains(jsBundle(t, h), "let _lastHistoryItems = null") {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "let _lastHistoryItems = null") {
 		t.Error("app.js: module-level variable '_lastHistoryItems' not found — required to cache history list for locale-switch re-render")
 	}
 }
@@ -4783,7 +5103,12 @@ func TestStaticJS_LastHistoryItemsStateVar(t *testing.T) {
 // so timestamps reflect the active language.
 func TestStaticJS_FormatHistoryTimeFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function formatHistoryTime(")
 	if fnStart == -1 {
@@ -4801,8 +5126,8 @@ func TestStaticJS_FormatHistoryTimeFunction(t *testing.T) {
 		fnBody = appJS[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "toLocaleString(locale)") {
-		t.Error("app.js: formatHistoryTime must call toLocaleString(locale) to format timestamps using the active locale")
+	if !strings.Contains(fnBody, "toLocaleString(_locale)") {
+		t.Error("app.js: formatHistoryTime must call toLocaleString(_locale) to format timestamps using the active locale")
 	}
 }
 
@@ -4811,7 +5136,12 @@ func TestStaticJS_FormatHistoryTimeFunction(t *testing.T) {
 // when the user switches language.
 func TestStaticJS_RenderHistoryListCachesItems(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderHistoryList(")
 	if fnStart == -1 {
@@ -4842,7 +5172,12 @@ func TestStaticJS_RenderHistoryListCachesItems(t *testing.T) {
 // history panel are immediately updated when the user switches language.
 func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function applyLocale(")
 	if fnStart == -1 {
@@ -4860,8 +5195,11 @@ func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
 		fnBody = appJS[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "PathProbe.History.rerenderLast") {
-		t.Error("app.js: applyLocale must call PathProbe.History.rerenderLast() so history timestamps are updated on locale change")
+	if !strings.Contains(fnBody, "_lastHistoryItems") {
+		t.Error("app.js: applyLocale must reference _lastHistoryItems to conditionally re-render history on locale change")
+	}
+	if !strings.Contains(fnBody, "renderHistoryList(_lastHistoryItems)") {
+		t.Error("app.js: applyLocale must call renderHistoryList(_lastHistoryItems) so timestamps are updated when the user switches language")
 	}
 }
 
@@ -4873,7 +5211,12 @@ func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
 // module-level state variables used by the connector arc system.
 func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	for _, decl := range []string{"let _connectorStyleId", "let _connectorLayer"} {
 		if !strings.Contains(appJS, decl) {
@@ -4886,7 +5229,12 @@ func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
 // contains the single connector style ('tick-xs').
 func TestStaticJS_ConnectorLineConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "CONNECTOR_LINE_CONFIGS") {
 		t.Fatal("app.js: CONNECTOR_LINE_CONFIGS not found")
@@ -4904,7 +5252,12 @@ func TestStaticJS_ConnectorLineConfigsDefined(t *testing.T) {
 // functions required by the gradient arc connector feature.
 func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	for _, fn := range []string{
 		"function lerpHex(",
@@ -4923,7 +5276,12 @@ func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
 // buildConnectorLayer() to draw the gradient arc instead of a plain polyline.
 func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderMap(")
 	if fnStart == -1 {
@@ -4953,7 +5311,12 @@ func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 // style identifier is set to 'tick-xs'.
 func TestStaticJS_ConnectorDefaultIsTickXs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	if !strings.Contains(jsBundle(t, h), "_connectorStyleId = 'tick-xs'") {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "_connectorStyleId = 'tick-xs'") {
 		t.Error("app.js: _connectorStyleId must default to 'tick-xs'")
 	}
 }
@@ -4988,7 +5351,12 @@ func TestStaticI18n_ConnectorStyleKeysInBothLocales(t *testing.T) {
 // pixel-distance-based placement (consistent density at every zoom level).
 func TestStaticJS_BuildArrowConnectorLayerFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
 	if fnStart == -1 {
@@ -5035,7 +5403,12 @@ func TestStaticJS_BuildArrowConnectorLayerFunction(t *testing.T) {
 // curve is geometrically smooth on the Leaflet Mercator map.
 func TestStaticJS_BuildArcLatLngsMercatorSpace(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildArcLatLngs(")
 	if fnStart == -1 {
@@ -5071,7 +5444,12 @@ func TestStaticJS_BuildArcLatLngsMercatorSpace(t *testing.T) {
 // style config declares type === 'arrows', following the Open/Closed principle.
 func TestStaticJS_BuildConnectorLayerDispatchesByType(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
@@ -5103,7 +5481,12 @@ func TestStaticJS_BuildConnectorLayerDispatchesByType(t *testing.T) {
 // pixel-accurate arrowheads at every zoom level.
 func TestStaticJS_BuildArrowSVGHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildArrowSVG(")
 	if fnStart == -1 {
@@ -5145,7 +5528,12 @@ func TestStaticJS_BuildArrowSVGHelper(t *testing.T) {
 // float-precision seams at every segment boundary.
 func TestStaticJS_ConnectorArcLayerSinglePassRendering(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	// ConnectorArcLayer must be defined as a L.Layer extension.
 	if !strings.Contains(appJS, "ConnectorArcLayer") {
@@ -5185,7 +5573,12 @@ func TestStaticJS_ConnectorArcLayerSinglePassRendering(t *testing.T) {
 // the visual discontinuities of the old polyline-per-segment approach.
 func TestStaticJS_BuildConnectorLayerUsesArcLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
@@ -5218,7 +5611,12 @@ func TestStaticJS_BuildConnectorLayerUsesArcLayer(t *testing.T) {
 // seamless gradient rendering as the dot-family connector styles.
 func TestStaticJS_BuildArrowConnectorLayerSpine(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildArrowConnectorLayer(")
 	if fnStart == -1 {
@@ -5249,7 +5647,12 @@ func TestStaticJS_BuildArrowConnectorLayerSpine(t *testing.T) {
 // rgba() CSS format required by ConnectorArcLayer for canvas strokeStyle.
 func TestStaticJS_HexToRgbaHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "function hexToRgba(") {
 		t.Fatal("app.js: hexToRgba() helper function not found")
@@ -5279,7 +5682,12 @@ func TestStaticJS_HexToRgbaHelper(t *testing.T) {
 // map event bindings, and canvas placement inside the map container.
 func TestStaticJS_ConnectorArcLayerDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "ConnectorArcLayer = L.Layer.extend(") {
 		t.Fatal("app.js: ConnectorArcLayer must be defined as a L.Layer extension")
@@ -5306,7 +5714,12 @@ func TestStaticJS_ConnectorArcLayerDefined(t *testing.T) {
 // run before setView / fitBounds has been called.
 func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	// Helper must exist.
 	if !strings.Contains(appJS, "function isMapLoaded()") {
@@ -5345,8 +5758,8 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 		}
 		arrowBody = appJS[arrowStart:end]
 	}
-	if !strings.Contains(arrowBody, "isMapLoaded()") && !strings.Contains(arrowBody, "map._loaded") {
-		t.Error("app.js: buildArrowConnectorLayer must guard against unready map (isMapLoaded() or map._loaded) before calling latLngToLayerPoint()")
+	if !strings.Contains(arrowBody, "isMapLoaded()") {
+		t.Error("app.js: buildArrowConnectorLayer must guard with isMapLoaded() before calling latLngToLayerPoint()")
 	}
 
 	// refreshConnectorLayer must guard with isMapLoaded() too.
@@ -5375,7 +5788,12 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 // is fully initialised when latLngToLayerPoint() is first invoked.
 func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function renderMap(")
 	if fnStart == -1 {
@@ -5461,7 +5879,12 @@ func TestStaticCSS_ConnectorArrowIcon(t *testing.T) {
 // required timing and visual parameters for the meteor animation.
 func TestStaticJS_ConnectorGlowConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "CONNECTOR_GLOW_CONFIGS") {
 		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS constant must be declared")
@@ -5479,7 +5902,12 @@ func TestStaticJS_ConnectorGlowConfigsDefined(t *testing.T) {
 // references the 'default' glow preset via glowConfig.
 func TestStaticJS_ConnectorTickXsGlowEnabled(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "glowEnabled: true") {
 		t.Error("app.js: CONNECTOR_LINE_CONFIGS 'tick-xs' must set glowEnabled: true to enable the meteor animation")
@@ -5494,7 +5922,12 @@ func TestStaticJS_ConnectorTickXsGlowEnabled(t *testing.T) {
 // methods and animation helpers for the meteor light-pulse effect.
 func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "ConnectorGlowLayer = L.Layer.extend(") {
 		t.Fatal("app.js: ConnectorGlowLayer must be defined as a L.Layer extension")
@@ -5519,7 +5952,12 @@ func TestStaticJS_ConnectorGlowLayerDefined(t *testing.T) {
 // and binds map move/zoom events to invalidate the cached screen projection.
 func TestStaticJS_ConnectorGlowLayerAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	// Find the body of ConnectorGlowLayer.
 	start := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
@@ -5563,7 +6001,12 @@ func TestStaticJS_ConnectorGlowLayerAnimation(t *testing.T) {
 // arc without coupling the two layers.
 func TestStaticJS_BuildConnectorLayerAddsGlowLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	fnStart := strings.Index(appJS, "function buildConnectorLayer(")
 	if fnStart == -1 {
@@ -5601,7 +6044,12 @@ func TestStaticJS_BuildConnectorLayerAddsGlowLayer(t *testing.T) {
 // is the structural requirement for the three-phase animation cycle.
 func TestStaticJS_ConnectorGlowConfigsFadeMs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	if !strings.Contains(appJS, "fadeMs") {
 		t.Fatal("app.js: CONNECTOR_GLOW_CONFIGS must declare a fadeMs parameter for the extinguish phase")
@@ -5632,7 +6080,12 @@ func TestStaticJS_ConnectorGlowConfigsFadeMs(t *testing.T) {
 // the three-phase _tick() and masterAlpha-aware _drawGlow() must contain.
 func TestStaticJS_ConnectorGlowLayerExtinguish(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	appJS := jsBundle(t, h)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+	}
+	appJS := rec.Body.String()
 
 	layerStart := strings.Index(appJS, "ConnectorGlowLayer = L.Layer.extend(")
 	if layerStart == -1 {
@@ -5663,159 +6116,5 @@ func TestStaticJS_ConnectorGlowLayerExtinguish(t *testing.T) {
 	// Phase 3: the dark phase must return early without calling _drawGlow.
 	if !strings.Contains(layerBody, "return;") {
 		t.Error("app.js: ConnectorGlowLayer._tick must return early in phase 3 (dark) without drawing")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Module static-handler tests — each new JS module must be embedded and served
-// ---------------------------------------------------------------------------
-
-func TestStaticHandler_ServesConfigJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/config.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /config.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Config") {
-		t.Error("config.js must export PathProbe.Config")
-	}
-}
-
-func TestStaticHandler_ServesLocaleJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/locale.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /locale.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Locale") {
-		t.Error("locale.js must export PathProbe.Locale")
-	}
-}
-
-func TestStaticHandler_ServesThemeJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Theme") {
-		t.Error("theme.js must export PathProbe.Theme")
-	}
-}
-
-func TestStaticHandler_ServesFormJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/form.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /form.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Form") {
-		t.Error("form.js must export PathProbe.Form")
-	}
-}
-
-func TestStaticHandler_ServesApiBuilderJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.ApiBuilder") {
-		t.Error("api-builder.js must export PathProbe.ApiBuilder")
-	}
-}
-
-func TestStaticHandler_ServesRendererJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Renderer") {
-		t.Error("renderer.js must export PathProbe.Renderer")
-	}
-}
-
-func TestStaticHandler_ServesMapConnectorJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map-connector.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /map-connector.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.MapConnector") {
-		t.Error("map-connector.js must export PathProbe.MapConnector")
-	}
-}
-
-func TestStaticHandler_ServesMapJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.Map") {
-		t.Error("map.js must export PathProbe.Map")
-	}
-}
-
-func TestStaticHandler_ServesApiClientJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-client.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api-client.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.ApiClient") {
-		t.Error("api-client.js must export PathProbe.ApiClient")
-	}
-}
-
-func TestStaticHandler_ServesHistoryJS(t *testing.T) {
-	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/history.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /history.js: want 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("Content-Type = %q, want javascript", rec.Header().Get("Content-Type"))
-	}
-	if !strings.Contains(rec.Body.String(), "PathProbe.History") {
-		t.Error("history.js must export PathProbe.History")
 	}
 }
