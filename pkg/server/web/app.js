@@ -46,205 +46,52 @@ let _lastReport = null;
 // switches language.
 let _lastHistoryItems = null;
 
-// ── Map point role configurations ─────────────────────────────────────────
-// Each entry defines the CSS class and i18n label key used for a geocoded
-// point on the Leaflet map.  Adding a new role requires only a new key here —
-// renderMap(), buildMarkerIcon(), buildPopupHtml(), and buildMapLegend() all
-// read this object so no other code needs to change.
-const MAP_POINT_CONFIGS = {
-  origin: { cssClass: 'geo-marker--origin', i18nKey: 'map-origin', shortLabel: 'A' },
-  target: { cssClass: 'geo-marker--target', i18nKey: 'map-target', shortLabel: 'B' },
-};
-
-// ── Marker colour scheme configurations ───────────────────────────────────────
-// Each entry provides originColor and targetColor for the two map roles.
-// The active scheme is applied by applyMarkerColorScheme(), which writes
-// --mc-origin / --mc-target CSS custom properties onto the <html> element.
-// All marker CSS rules use var(--mc-origin) / var(--mc-target) so switching
-// schemes requires no DOM rebuild—only a single property update.
+// ── Config aliases — sourced from PathProbe.Config (config.js) ───────────
+// config.js is loaded before app.js (see index.html) via a <script defer>
+// tag, which guarantees execution order.  However, a stale browser cache may
+// serve an old index.html that lacks the config.js <script> tag, causing
+// window.PathProbe to be undefined when this file runs.
 //
-// To add a new scheme: add a key here + a matching i18n key (en + zh-TW).
-// No other code changes are required.
-const MARKER_COLOR_SCHEME_CONFIGS = {
-  // ocean — teal-blue origin / warm amber target
-  'ocean': { originColor: '#0891b2', targetColor: '#f59e0b', i18nKey: 'marker-color-ocean' },
-};
-
-// ── Marker style configuration ────────────────────────────────────────────
-// buildHtml(roleCfg) receives the MAP_POINT_CONFIGS entry for the current role
-// and returns an HTML string used as the Leaflet divIcon inner HTML.
-// The pulse variant uses CSS tokens (--marker-border / --marker-inner /
-// --marker-shadow) and role colour tokens (--mc-origin / --mc-target) so it
-// adapts automatically when the active [data-theme] changes.
-const MARKER_STYLE_CONFIGS = {
-  'diamond-pulse': {
-    i18nKey:     'marker-style-diamond-pulse',
-    iconSize:    [36, 36],
-    iconAnchor:  [18, 18],
-    popupAnchor: [0, -20],
-    buildHtml:   (_rc) =>
-      '<span class="geo-marker__dia-pulse-ring"></span>' +
-      '<span class="geo-marker__dia-pulse-core"></span>',
-  },
-};
-
-// ── Connector line style configurations ──────────────────────────────────────────────
-// Each entry defines how the gradient arc connector between origin and target
-// is rendered.  All styles use a northward quadratic-bezier arch.
+// Accessing via window.PathProbe (rather than the bare PathProbe identifier)
+// avoids a ReferenceError when window.PathProbe was never set — bare
+// identifier lookup throws ReferenceError for undeclared globals, whereas
+// window.PathProbe returns undefined safely.  The defensive (…) || {} guard
+// means this line NEVER throws, so all function declarations below (setTheme,
+// setLocale, etc.) remain callable from inline onclick attributes even when
+// config.js is unavailable.
 //
-// arcFactor:    height of the arch (0 ≈ flat, 0.65 = very high arch).
-// weight:       stroke width in pixels (polyline type).
-// opacity:      stroke opacity (0–1).
-// dashArray:    null for solid; an SVG stroke-dasharray string for patterned lines.
-//               For non-sticky dots use '0.1 <gap>' where gap > weight so
-//               rounded caps never overlap each other.
-// segments:     number of arc waypoints (higher → smoother Bézier and finer
-//               gradient; 120 is a good balance for smooth rendering).
-// type:         'polyline' (default) — gradient SVG sub-polylines.
-//               'arrows'            — divIcon arrow symbols spaced along the arc.
-// arrowSymbol:  (arrows) Unicode glyph placed at each position.
-// arrowSize:    (arrows) font-size + icon bounding box in px (default 14).
-// arrowSpacing: (arrows) screen-pixel gap between successive arrow symbols.
-//               Density stays visually consistent at every zoom level.
-// groupStart:   true on the first entry of each style family (dash, arrow);
-//               triggers a flex line-break in the picker bar.
-//
-// To add a new style: add a key here + matching translations in i18n.js.
-// No other code changes are required.
-const CONNECTOR_LINE_CONFIGS = {
-  // ── Tick family (›) ── compact open-chevron indicator aligned to arc tangent ───
-  // arrowSize 4 px + arrowSpacing 6 px gives a subtle directional texture that
-  // reads as flow without overpowering the map.  spineWeight 0 = no spine arc.
-  // glowEnabled / glowConfig enable the ConnectorGlowLayer meteor animation.
-  'tick-xs': { i18nKey: 'connector-tick-xs', arcFactor: 0.25, weight: 1, opacity: 0.85, dashArray: null, segments: 120, type: 'arrows', arrowShape: 'open', arrowSize: 4, arrowSpacing: 6, spineWeight: 0, glowEnabled: true, glowConfig: 'default' },
-};
-
-// ── Connector glow animation configuration ────────────────────────────────────
-// Controls the "meteor" light-pulse animation that travels along the connector
-// arc from origin to target, then pauses before looping smoothly.
-//
-// travelMs:    milliseconds for the glowing orb to travel from origin to target.
-// pauseMs:     milliseconds the orb lingers at the target before restarting.
-// glowRadius:  outer radial-gradient radius of the orb in screen pixels.
-// glowOpacity: peak opacity of the outer glow (0–1).
-// tailLength:  fraction of the total arc pixel-length used for the comet tail.
-// fadeMs:      milliseconds to fade the glow from full brightness to zero after
-//              the head arrives at the destination.  During this phase the tail
-//              converges back into the head (tailPx shrinks proportionally) and
-//              all opacity values are multiplied by a linear ramp 1 → 0.  This
-//              creates the "extinguish / breathing-lamp" effect.
-// pauseMs:     milliseconds of complete darkness after the fade-out, before
-//              the next travel cycle begins.  Canvas is blank during this phase.
-//
-// Animation cycle: travel → fade-out → dark → travel → …
-//   cycleDur = travelMs + fadeMs + pauseMs
-//
-// To add a new preset: add a key here and reference it via
-// CONNECTOR_LINE_CONFIGS[id].glowConfig.  No other code changes required.
-const CONNECTOR_GLOW_CONFIGS = {
-  'default': {
-    travelMs:    2500,
-    fadeMs:      700,
-    pauseMs:     1000,
-    glowRadius:  14,
-    glowOpacity: 0.85,
-    tailLength:  0.18,
-  },
-};
-
-// Ordered list of map tile variant identifiers shown as the three buttons above
-// the map.  Order determines the left→right button layout.
-const MAP_TILE_VARIANTS = ['light', 'osm', 'dark'];
-
-// Maps each application theme to its default map tile variant.
-// Only this table needs updating when a new app theme is added.
-const MAP_THEME_TO_TILE_VARIANT = {
-  'default':       'light',
-  'light-green':   'light',
-  'deep-blue':     'dark',
-  'forest-green':  'dark',
-  'dark':          'dark',
-};
-
-// Theme IDs that should use the dark tile variant.  All other themes fall back
-// to the light/neutral style.  Must stay in sync with THEMES (above).
-const MAP_DARK_THEMES = new Set(['dark', 'deep-blue', 'forest-green']);
-
-// Tile layer configurations keyed by variant ('light' | 'osm' | 'dark').
-// Using CARTO basemaps for light/dark; osm is the canonical OpenStreetMap style.
-// Only change the URLs here if a different provider is desired — no other code
-// needs to be touched.
-// bgColor: the representative base background colour of each tile set.  Applied
-// to the #geo-map container immediately after a tile-layer swap so that any
-// not-yet-loaded tile gaps show the expected colour instead of white, preventing
-// the white-flash artefact visible when switching to a dark tile variant.
-const TILE_LAYER_CONFIGS = {
-  light: {
-    url:         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    i18nKey:     'map-tile-light',
-    bgColor:     '#f5f5f0',  // CARTO light_all base background
-  },
-  osm: {
-    url:         'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    i18nKey:     'map-tile-osm',
-    bgColor:     '#f2efe9',  // OpenStreetMap standard base background
-  },
-  dark: {
-    url:         'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    i18nKey:     'map-tile-dark',
-    bgColor:     '#1a1a1a',  // CARTO dark_all base background
-  },
-};
-
-// ── Per-target default ports ──────────────────────────────────────────────
-const TARGET_PORTS = {
-  web:  [80, 443],
-  smtp: [25, 465, 587],
-  imap: [143, 993],
-  pop:  [110, 995],
-  ftp:  [21, 990],
-  sftp: [22],
-};
-
-// Maps target → { panelId: [modes that show it] }.
-// Only panels that are conditionally visible need an entry here.
-const TARGET_MODE_PANELS = {
-  web: {
-    'web-fields-dns':        ['dns'],
-    'web-fields-http':       ['http'],
-    'web-fields-traceroute': ['traceroute'],
-  },
-  smtp: {
-    'smtp-fields-auth': ['auth', 'send'],
-    'smtp-fields-send': ['send'],
-  },
-};
-
-// Web modes that require the port-group text input to be shown.
-// public-ip/dns/http/traceroute derive ports from protocol defaults or
-// do not perform port-level connectivity checks, so they suppress port-group.
-const WEB_MODES_WITH_PORTS = ['port'];
-
-// ── Per-target host placeholder i18n keys ─────────────────────────────────
-const TARGET_PLACEHOLDER_KEYS = {
-  web:  'ph-web',
-  smtp: 'ph-smtp',
-  imap: 'ph-imap',
-  pop:  'ph-pop',
-  ftp:  'ph-ftp',
-  sftp: 'ph-sftp',
-};
+// THEMES and DEFAULT_THEME carry explicit fallbacks so applyTheme() can
+// safely call THEMES.includes() without crashing in degraded mode.
+if (!window.PathProbe || !window.PathProbe.Config) {
+  // Surfacing this in the console makes the misconfiguration immediately
+  // visible to developers.  Check the Network tab for a failed /config.js.
+  console.error(
+    '[PathProbe] PathProbe.Config is unavailable. ' +
+    'Ensure config.js loads before app.js. ' +
+    'Hint: force-refresh the browser (Ctrl+Shift+R) to clear a stale cache.',
+  );
+}
+const {
+  MAP_POINT_CONFIGS          = {},
+  MARKER_COLOR_SCHEME_CONFIGS = {},
+  MARKER_STYLE_CONFIGS       = {},
+  CONNECTOR_LINE_CONFIGS     = {},
+  CONNECTOR_GLOW_CONFIGS     = {},
+  MAP_TILE_VARIANTS          = [],
+  MAP_THEME_TO_TILE_VARIANT  = {},
+  MAP_DARK_THEMES            = new Set(),
+  TILE_LAYER_CONFIGS         = {},
+  TARGET_PORTS               = {},
+  TARGET_MODE_PANELS         = {},
+  WEB_MODES_WITH_PORTS       = [],
+  TARGET_PLACEHOLDER_KEYS    = {},
+  COPYRIGHT_START_YEAR       = 2026,
+  THEMES      = ['default', 'deep-blue', 'light-green', 'forest-green', 'dark'],
+  DEFAULT_THEME = 'default',
+} = (window.PathProbe && window.PathProbe.Config) || {};
 
 // ── Locale management ─────────────────────────────────────────────────────
 let _locale = 'en';
-
-// The year this project was first published.  Used to build a copyright range
-// that automatically extends as calendar years advance — e.g. "2026" in 2026,
-// "2026–2027" in 2027, etc.  Only this constant ever needs to change.
-const COPYRIGHT_START_YEAR = 2026;
 
 /** Return the translation for key in the current locale, falling back to en. */
 function t(key) {
@@ -323,18 +170,8 @@ function getRunningHTML() {
 }
 
 // ── Theme management ──────────────────────────────────────────────────────
-/**
- * All valid theme IDs. The CSS file drives the actual appearance; adding a
- * new theme only requires a new [data-theme="id"] block there — no JS change.
- */
-const THEMES = ['default', 'deep-blue', 'light-green', 'forest-green', 'dark'];
-
-/**
- * Fallback theme used when (a) no user preference is stored and (b) the HTML
- * data-default-theme attribute is absent or invalid.  Mirrors the value that
- * the server embeds in <html data-default-theme>.
- */
-const DEFAULT_THEME = 'default';
+// THEMES and DEFAULT_THEME are defined in config.js (PathProbe.Config) and
+// destructured into local scope at the top of this file.
 
 /** Apply themeId to <html data-theme> with a targeted fade transition.
  *  Only the .main content area fades out while the theme variables switch.
