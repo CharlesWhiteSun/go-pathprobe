@@ -90,74 +90,46 @@ const {
   DEFAULT_THEME = 'default',
 } = (window.PathProbe && window.PathProbe.Config) || {};
 
-// ── Locale management ─────────────────────────────────────────────────────
-let _locale = 'en';
+// ── Locale shims — delegate to PathProbe.Locale (locale.js) ─────────────
+// locale.js is loaded before app.js (see index.html) and registers all
+// locale logic under PathProbe.Locale.  The three thin shim functions below
+// keep all call sites in this file unchanged so no other code in app.js
+// needs to move.
 
 /** Return the translation for key in the current locale, falling back to en. */
 function t(key) {
-  const locs = window.LOCALES || {};
-  return (locs[_locale] || {})[key] || (locs.en || {})[key] || key;
+  return window.PathProbe && window.PathProbe.Locale
+    ? window.PathProbe.Locale.t(key)
+    : key;
 }
 
-/**
- * Re-write the copyright year after applyLocale() has set the raw i18n text.
- * Builds a range string: just the start year when it equals the current year,
- * otherwise "startYear–currentYear" (en-dash U+2013).  The regex targets the
- * first four-digit year sequence in the copyright text so the logic is locale-
- * independent and requires no changes to the i18n dictionary.
- */
-function updateCopyrightYear() {
-  const now = new Date().getFullYear();
-  const yearStr = now > COPYRIGHT_START_YEAR
-    ? COPYRIGHT_START_YEAR + '\u2013' + now
-    : String(COPYRIGHT_START_YEAR);
-  document.querySelectorAll('[data-i18n="footer-copyright"]').forEach(el => {
-    el.textContent = el.textContent.replace(/\d{4}/, yearStr);
-  });
-}
-
-/** Apply the current locale to all [data-i18n] elements and refresh dynamic UI. */
-function applyLocale() {
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
-  });
-  // Refresh host placeholder (depends on current target selection)
-  const target = val('target');
-  const hostEl = document.getElementById('host');
-  if (hostEl) hostEl.placeholder = t(TARGET_PLACEHOLDER_KEYS[target] || 'ph-host-default');
-  // Update run button (unless currently running)
-  const runBtn = document.getElementById('run-btn');
-  if (runBtn && !runBtn.disabled) runBtn.textContent = t('btn-run');
-  // Highlight the active language button
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.lang === _locale);
-  });
-  document.documentElement.lang = _locale;
-  // Update footer copyright year range after i18n strings have been applied.
-  updateCopyrightYear();
-  // Re-render the results section so all labels reflect the new locale.
-  // renderReport() uses t() for every label, so re-running it with the same
-  // report data is sufficient — no data-i18n attributes are needed in the
-  // dynamically generated HTML.
-  if (_lastReport) { renderReport(_lastReport); }
-  // Re-render history list so timestamps are formatted in the new locale.
-  if (_lastHistoryItems) { renderHistoryList(_lastHistoryItems); }
-}
-
-/** Persist and apply a new locale choice. */
+/** Persist and apply a new locale choice — delegates to locale.js. */
 function setLocale(lang) {
-  _locale = lang;
-  try { localStorage.setItem('lang', lang); } catch (_) {}
-  applyLocale();
+  if (window.PathProbe && window.PathProbe.Locale) {
+    window.PathProbe.Locale.setLocale(lang);
+  }
 }
 
-/** Initialise locale from localStorage (defaults to 'en'). */
+/** Initialise locale from localStorage — delegates to locale.js. */
 function initLocale() {
-  try { _locale = localStorage.getItem('lang') || 'en'; } catch (_) { _locale = 'en'; }
-  applyLocale();
+  if (window.PathProbe && window.PathProbe.Locale) {
+    window.PathProbe.Locale.initLocale();
+  }
+}
+
+// ── Renderer / History re-render callbacks (locale.js bridge) ─────────────
+// locale.js calls PathProbe.Renderer.rerenderLast() and
+// PathProbe.History.rerenderLast() after a locale change so the results
+// section and history list update to the new language.  Register these
+// callbacks here in app.js (where renderReport / renderHistoryList live)
+// until those functions are extracted to their own modules in later sub-tasks.
+{
+  const _ns = window.PathProbe || {};
+  _ns.Renderer = _ns.Renderer || {};
+  _ns.Renderer.rerenderLast = () => { if (_lastReport) renderReport(_lastReport); };
+  _ns.History = _ns.History || {};
+  _ns.History.rerenderLast  = () => { if (_lastHistoryItems) renderHistoryList(_lastHistoryItems); };
+  window.PathProbe = _ns;
 }
 
 // ── Run-button animation ───────────────────────────────────────────────────
@@ -1983,8 +1955,11 @@ function renderMap(pub, tgt) {
  */
 function formatHistoryTime(isoString) {
   if (!isoString) return '';
+  const locale = window.PathProbe && window.PathProbe.Locale
+    ? window.PathProbe.Locale.getLocale()
+    : 'en';
   try {
-    return new Date(isoString).toLocaleString(_locale);
+    return new Date(isoString).toLocaleString(locale);
   } catch (_) {
     return new Date(isoString).toLocaleString();
   }
