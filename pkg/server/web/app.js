@@ -141,63 +141,35 @@ function getRunningHTML() {
   return '<span class="anim-dots"><span></span><span></span><span></span></span>';
 }
 
-// ── Theme management ──────────────────────────────────────────────────────
-// THEMES and DEFAULT_THEME are defined in config.js (PathProbe.Config) and
-// destructured into local scope at the top of this file.
+// ── Theme shims — delegate to PathProbe.Theme (theme.js) ─────────────────
+// theme.js is loaded before app.js (see index.html) and registers all
+// theme logic under PathProbe.Theme.  The two thin shim functions below keep
+// all call sites in this file (initTheme / setTheme) unchanged.
 
-/** Apply themeId to <html data-theme> with a targeted fade transition.
- *  Only the .main content area fades out while the theme variables switch.
- *  Header and footer remain fully visible and cross-fade their own
- *  background / text colours via dedicated CSS transitions, so the chrome
- *  always stays on screen during a theme change.
- */
-function applyTheme(themeId) {
-  const id = THEMES.includes(themeId) ? themeId : DEFAULT_THEME;
-  const body = document.body;
-  const mainEl = document.querySelector('.main');
-  body.classList.add('theme-transitioning');
-  // Wait for .main's opacity fade-out to complete before swapping the theme.
-  // Using .main as the listener target means only the main-content opacity
-  // transition (not header/footer colour transitions) triggers the swap.
-  const listenTarget = mainEl || body;
-  const onFaded = (e) => {
-    if (e.target !== listenTarget || e.propertyName !== 'opacity') return;
-    listenTarget.removeEventListener('transitionend', onFaded);
-    document.documentElement.dataset.theme = id;
-    try { localStorage.setItem('pp-theme', id); } catch (_) {}
-    // Highlight the matching dot-button; clear all others.
-    document.querySelectorAll('.theme-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.theme === id);
-    });
-    // Silently swap map tiles while main content is invisible — no map fade needed.
-    syncMapTileVariantToTheme(id);
-    // Remove the class on the next frame so the fade-in transition fires.
-    requestAnimationFrame(() => body.classList.remove('theme-transitioning'));
-  };
-  listenTarget.addEventListener('transitionend', onFaded);
+/** Public entry point called by theme-button onclick handlers. */
+function setTheme(themeId) {
+  if (window.PathProbe && window.PathProbe.Theme) {
+    window.PathProbe.Theme.setTheme(themeId);
+  }
 }
 
-/** Public entry point called by the <select onchange> handler. */
-function setTheme(themeId) { applyTheme(themeId); }
-
-/** Restore saved theme from localStorage; fall back to the server-declared
- *  default (data-default-theme on <html>) so a service restart always starts
- *  on the intended theme when no user preference exists.
- *  Applies the theme without the fade animation (page is not yet visible). */
+/** Initialise theme from localStorage — delegates to theme.js. */
 function initTheme() {
-  // Server-declared default: read from HTML attribute set by the server.
-  const htmlDefault = (document.documentElement.dataset.defaultTheme || '').trim();
-  const serverDefault = THEMES.includes(htmlDefault) ? htmlDefault : DEFAULT_THEME;
-  let saved = serverDefault;
-  try { saved = localStorage.getItem('pp-theme') || serverDefault; } catch (_) {}
-  // Apply without animation: set theme vars immediately so there is no flash.
-  const id = THEMES.includes(saved) ? saved : DEFAULT_THEME;
-  document.documentElement.dataset.theme = id;
-  try { localStorage.setItem('pp-theme', id); } catch (_) {}
-  document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.theme === id);
-  });
-  syncMapTileVariantToTheme(id);
+  if (window.PathProbe && window.PathProbe.Theme) {
+    window.PathProbe.Theme.initTheme();
+  }
+}
+
+// ── Map tile variant callback (theme.js bridge) ───────────────────────────
+// theme.js calls PathProbe.Map.syncMapTileVariantToTheme(id) after a theme
+// change so map tiles switch to the correct variant.  Register the callback
+// here in app.js (where syncMapTileVariantToTheme lives) until the map module
+// is extracted to its own module in a later sub-task.
+{
+  const _ns = window.PathProbe || {};
+  _ns.Map = _ns.Map || {};
+  _ns.Map.syncMapTileVariantToTheme = (id) => syncMapTileVariantToTheme(id);
+  window.PathProbe = _ns;
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────

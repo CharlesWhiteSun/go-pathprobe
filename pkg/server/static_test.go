@@ -485,28 +485,33 @@ func TestStaticHTML_DefaultThemeAttribute(t *testing.T) {
 // fallback source rather than relying on a hard-coded string literal.
 func TestStaticJS_DefaultThemeConstant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
 
-	// DEFAULT_THEME must appear in app.js (destructured from PathProbe.Config).
+	// app.js must still reference DEFAULT_THEME (destructured from PathProbe.Config).
 	// The constant declaration lives in config.js; TestStaticJS_ConfigNamespace
 	// verifies the declaration there.
-	if !strings.Contains(body, "DEFAULT_THEME") {
+	appRec := httptest.NewRecorder()
+	h.ServeHTTP(appRec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if appRec.Code != http.StatusOK {
+		t.Fatalf("GET /app.js: want 200, got %d", appRec.Code)
+	}
+	if !strings.Contains(appRec.Body.String(), "DEFAULT_THEME") {
 		t.Error("app.js: DEFAULT_THEME must be referenced (expected via PathProbe.Config destructuring)")
 	}
 
-	// initTheme must read the HTML attribute for the server-declared default.
-	if !strings.Contains(body, "dataset.defaultTheme") {
-		t.Error("app.js: initTheme() must read document.documentElement.dataset.defaultTheme")
+	// theme.js owns initTheme(); verify it reads the HTML attribute for the
+	// server-declared default and validates against THEMES.
+	themeRec := httptest.NewRecorder()
+	h.ServeHTTP(themeRec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
+	if themeRec.Code != http.StatusOK {
+		t.Fatalf("GET /theme.js: want 200, got %d", themeRec.Code)
 	}
+	themeBody := themeRec.Body.String()
 
-	// The fallback chain must validate against THEMES before applying.
-	if !strings.Contains(body, "THEMES.includes(htmlDefault)") {
-		t.Error("app.js: initTheme() must validate htmlDefault against THEMES before use")
+	if !strings.Contains(themeBody, "dataset.defaultTheme") {
+		t.Error("theme.js: initTheme() must read document.documentElement.dataset.defaultTheme")
+	}
+	if !strings.Contains(themeBody, "themes.includes(htmlDefault)") {
+		t.Error("theme.js: initTheme() must validate htmlDefault against the themes list before use")
 	}
 }
 
@@ -3219,15 +3224,15 @@ func TestStaticJS_RefreshMapTiles(t *testing.T) {
 func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function applyTheme(")
 	if fnStart == -1 {
-		t.Fatal("app.js: applyTheme function not found")
+		t.Fatal("theme.js: applyTheme function not found")
 	}
 	// Find the closing brace of applyTheme by scanning for the next top-level function.
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
@@ -3235,7 +3240,7 @@ func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 	if nextFn != -1 {
 		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 800
+		end := fnStart + 2500
 		if end > len(body) {
 			end = len(body)
 		}
@@ -3244,7 +3249,7 @@ func TestStaticJS_ApplyThemeCallsRefreshMapTiles(t *testing.T) {
 
 	// applyTheme must trigger a tile refresh either directly or via syncMapTileVariantToTheme.
 	if !strings.Contains(fnBody, "refreshMapTiles()") && !strings.Contains(fnBody, "syncMapTileVariantToTheme(") {
-		t.Error("app.js: applyTheme must call refreshMapTiles() or syncMapTileVariantToTheme() so tile layer updates on theme change")
+		t.Error("theme.js: applyTheme must call refreshMapTiles() or syncMapTileVariantToTheme() so tile layer updates on theme change")
 	}
 }
 
@@ -3362,15 +3367,15 @@ func TestStaticCSS_RadiusTokenDefined(t *testing.T) {
 func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function applyTheme(")
 	if fnStart == -1 {
-		t.Fatal("app.js: applyTheme function not found")
+		t.Fatal("theme.js: applyTheme function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -3385,10 +3390,10 @@ func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
 	}
 
 	if !strings.Contains(fnBody, "propertyName") {
-		t.Error("app.js: applyTheme transitionend handler must check e.propertyName to filter the correct transition event")
+		t.Error("theme.js: applyTheme transitionend handler must check e.propertyName to filter the correct transition event")
 	}
 	if !strings.Contains(fnBody, "'opacity'") {
-		t.Error("app.js: applyTheme must guard transitionend with e.propertyName === 'opacity'")
+		t.Error("theme.js: applyTheme must guard transitionend with e.propertyName === 'opacity'")
 	}
 }
 
@@ -3629,33 +3634,33 @@ func TestStaticJS_SyncMapTileVariantToTheme(t *testing.T) {
 func TestStaticJS_ThemeTransitioning(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "theme-transitioning") {
-		t.Error("app.js: 'theme-transitioning' class not found — theme fade animation requires it")
+		t.Error("theme.js: 'theme-transitioning' class not found — theme fade animation requires it")
 	}
 	// The class must be both added and removed within applyTheme.
 	fnStart := strings.Index(body, "function applyTheme(")
 	if fnStart == -1 {
-		t.Fatal("app.js: applyTheme function not found")
+		t.Fatal("theme.js: applyTheme function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
 		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 1000
+		end := fnStart + 2500
 		if end > len(body) {
 			end = len(body)
 		}
 		fnBody = body[fnStart:end]
 	}
 	if !strings.Contains(fnBody, "theme-transitioning") {
-		t.Error("app.js: applyTheme must reference 'theme-transitioning' class")
+		t.Error("theme.js: applyTheme must reference 'theme-transitioning' class")
 	}
 }
 
@@ -4149,33 +4154,33 @@ func TestStaticCSS_ThemeTransitioningMainOpacity(t *testing.T) {
 func TestStaticJS_ApplyThemeUsesMainElement(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	themeJS := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function applyTheme(")
+	fnStart := strings.Index(themeJS, "function applyTheme(")
 	if fnStart == -1 {
-		t.Fatal("app.js: applyTheme function not found")
+		t.Fatal("theme.js: applyTheme function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(themeJS[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = themeJS[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 1500
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 2500
+		if end > len(themeJS) {
+			end = len(themeJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = themeJS[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, ".main") && !strings.Contains(fnBody, "querySelector('.main')") {
-		t.Error("app.js: applyTheme must use .main (querySelector('.main')) as the fade target, not body")
+		t.Error("theme.js: applyTheme must use .main (querySelector('.main')) as the fade target, not body")
 	}
 	if !strings.Contains(fnBody, "addEventListener('transitionend'") && !strings.Contains(fnBody, `addEventListener("transitionend"`) {
-		t.Error("app.js: applyTheme must attach a transitionend listener to the fade target")
+		t.Error("theme.js: applyTheme must attach a transitionend listener to the fade target")
 	}
 }
 
@@ -6432,5 +6437,83 @@ func TestStaticJS_LocaleRuntimeResolvedCrossModuleCalls(t *testing.T) {
 		t.Error("locale.js: must NOT call renderReport() or renderHistoryList() directly — " +
 			"use PathProbe.Renderer.rerenderLast() and PathProbe.History.rerenderLast() " +
 			"for runtime-resolved cross-module calls")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Subtask 3.3 — theme.js module registration tests
+// ---------------------------------------------------------------------------
+
+// TestStaticHandler_ServesThemeJS verifies that the embedded web filesystem
+// serves theme.js with a 200 OK and that the file registers the
+// PathProbe.Theme namespace, which all theme-aware tests depend on.
+func TestStaticHandler_ServesThemeJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "PathProbe.Theme") {
+		t.Error("theme.js: must register PathProbe.Theme namespace")
+	}
+}
+
+// TestStaticJS_SetThemeGlobal verifies that theme.js exposes setTheme as a
+// window-level global so that HTML onclick="setTheme(...)" attributes work
+// without requiring callers to reference the PathProbe namespace directly.
+func TestStaticJS_SetThemeGlobal(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "window.setTheme = setTheme") {
+		t.Error("theme.js: must assign window.setTheme = setTheme for HTML onclick compatibility")
+	}
+}
+
+// TestStaticJS_ThemeJSRuntimeResolvedMapSync verifies that theme.js guards
+// the syncMapTileVariantToTheme call with a runtime check for PathProbe.Map
+// so theme.js has no hard load-order dependency on the map module.
+func TestStaticJS_ThemeJSRuntimeResolvedMapSync(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "PathProbe.Map") {
+		t.Error("theme.js: syncMapTileVariantToTheme call must be guarded by a PathProbe.Map runtime check")
+	}
+	if !strings.Contains(body, "syncMapTileVariantToTheme") {
+		t.Error("theme.js: must call syncMapTileVariantToTheme to keep map tiles in sync with the active theme")
+	}
+}
+
+// TestStaticJS_InitThemeReadsDataDefaultTheme verifies that initTheme() reads
+// the server-declared fallback from dataset.defaultTheme rather than repeating
+// a hard-coded string, so a server-side theme preference takes effect without
+// modifying any JavaScript source.
+func TestStaticJS_InitThemeReadsDataDefaultTheme(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/theme.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /theme.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	fnStart := strings.Index(body, "function initTheme(")
+	if fnStart == -1 {
+		t.Fatal("theme.js: initTheme function not found")
+	}
+	end := fnStart + 600
+	if end > len(body) {
+		end = len(body)
+	}
+	if !strings.Contains(body[fnStart:end], "dataset.defaultTheme") {
+		t.Error("theme.js: initTheme() must read document.documentElement.dataset.defaultTheme as the server-declared default")
 	}
 }
