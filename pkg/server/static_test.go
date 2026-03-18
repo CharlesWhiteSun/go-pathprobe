@@ -2236,27 +2236,27 @@ func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
 func TestStaticJS_RenderRouteSection(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	// The render function must be defined.
 	if !strings.Contains(body, "renderRouteSection") {
-		t.Error("app.js: renderRouteSection function must be defined")
+		t.Error("renderer.js: renderRouteSection function must be defined")
 	}
 	// It must be invoked from renderReport with the Route field.
 	if !strings.Contains(body, "renderRouteSection(r.Route)") {
-		t.Error("app.js: renderReport must call renderRouteSection(r.Route)")
+		t.Error("renderer.js: renderReport must call renderRouteSection(r.Route)")
 	}
 	// The route section heading i18n key must be referenced.
 	if !strings.Contains(body, "'section-route'") {
-		t.Error("app.js: renderRouteSection must reference i18n key 'section-route'")
+		t.Error("renderer.js: renderRouteSection must reference i18n key 'section-route'")
 	}
 	// Timed-out hop indicator must be present.
 	if !strings.Contains(body, "hop-timedout") {
-		t.Error("app.js: renderRouteSection must apply 'hop-timedout' class to timed-out hops")
+		t.Error("renderer.js: renderRouteSection must apply 'hop-timedout' class to timed-out hops")
 	}
 }
 
@@ -5020,14 +5020,14 @@ func TestStaticI18n_MapLegendKeysInBothLocales(t *testing.T) {
 func TestStaticJS_LastReportStateVar(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	rendererJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "let _lastReport = null") {
-		t.Error("app.js: module-level variable '_lastReport' not found — required to cache the report for locale-switch re-render")
+	if !strings.Contains(rendererJS, "let _lastReport = null") {
+		t.Error("renderer.js: module-level variable '_lastReport' not found — required to cache the report for locale-switch re-render")
 	}
 }
 
@@ -5036,30 +5036,108 @@ func TestStaticJS_LastReportStateVar(t *testing.T) {
 func TestStaticJS_RenderReportStoresLastReport(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
+	}
+	rendererJS := rec.Body.String()
+
+	fnStart := strings.Index(rendererJS, "function renderReport(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: renderReport function not found")
+	}
+	nextFn := strings.Index(rendererJS[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = rendererJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 500
+		if end > len(rendererJS) {
+			end = len(rendererJS)
+		}
+		fnBody = rendererJS[fnStart:end]
+	}
+
+	if !strings.Contains(fnBody, "_lastReport = r") {
+		t.Error("renderer.js: renderReport must assign '_lastReport = r' so the report can be replayed when the locale changes")
+	}
+}
+
+// TestStaticHandler_ServesRendererJS verifies that the static file server
+// serves renderer.js with HTTP 200 and that the file exports
+// PathProbe.Renderer.
+func TestStaticHandler_ServesRendererJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "PathProbe.Renderer") {
+		t.Error("renderer.js: must export PathProbe.Renderer")
+	}
+	if !strings.Contains(body, "renderReport") {
+		t.Error("renderer.js: must define renderReport")
+	}
+	if !strings.Contains(body, "rerenderLast") {
+		t.Error("renderer.js: must define rerenderLast")
+	}
+}
+
+// TestStaticJS_RenderRouteSectionColumns verifies that renderer.js references
+// all six i18n column-header keys used in the route-trace hop table.
+func TestStaticJS_RenderRouteSectionColumns(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/renderer.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /renderer.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	keys := []string{"th-ttl", "th-ip-host", "th-asn", "th-country", "th-loss", "th-avg-rtt"}
+	for _, k := range keys {
+		if !strings.Contains(body, "'"+k+"'") {
+			t.Errorf("renderer.js: renderRouteSection must reference i18n key %q", k)
+		}
+	}
+}
+
+// TestStaticJS_AppendProgressNoInnerHTML verifies that appendProgress in
+// app.js builds its DOM nodes with textContent (not innerHTML) so that
+// untrusted progress-event strings cannot inject HTML/JS (XSS protection).
+func TestStaticJS_AppendProgressNoInnerHTML(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderReport(")
+	// Locate the function body.
+	fnStart := strings.Index(body, "function appendProgress(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderReport function not found")
+		t.Fatal("app.js: appendProgress function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 500
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 600
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "_lastReport = r") {
-		t.Error("app.js: renderReport must assign '_lastReport = r' so the report can be replayed when the locale changes")
+	if strings.Contains(fnBody, "innerHTML") {
+		t.Error("app.js: appendProgress must not use innerHTML — use textContent for XSS safety")
+	}
+	if !strings.Contains(fnBody, "textContent") {
+		t.Error("app.js: appendProgress must use textContent to set stage/message text")
 	}
 }
 
