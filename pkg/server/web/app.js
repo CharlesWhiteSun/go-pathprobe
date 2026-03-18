@@ -212,121 +212,19 @@ function getModeFor(target) {
     ? window.PathProbe.Form.getModeFor(target) : '';
 }
 
-// ── Request building ──────────────────────────────────────────────────────
+// ── Request building shim — delegates to PathProbe.ApiBuilder (api-builder.js)
+// api-builder.js is loaded before app.js (see index.html) and owns all request
+// construction logic.  The thin shim below keeps the runDiag() call site
+// unchanged — it still calls buildRequest() with no arguments.
 
 /**
- * Parse a Go duration string (e.g. "30s", "2m") into whole seconds.
- * Returns the defaultSec fallback when the string is empty or unparseable.
+ * Assemble the diagnostic request payload — delegates to api-builder.js.
+ * @returns {{ target: string, options: object }} Request payload.
  */
-function parseTimeoutSec(s, defaultSec) {
-  if (!s) return defaultSec;
-  const m = s.match(/^(\d+(?:\.\d+)?)(s|m)$/);
-  if (!m) return defaultSec;
-  const v = parseFloat(m[1]);
-  return m[2] === 'm' ? v * 60 : v;
-}
-
 function buildRequest() {
-  const target   = val('target');
-  const mtrCount = Math.max(1, parseInt(val('mtr-count'), 10) || 5);
-  let   timeout  = val('diag-timeout') || '30s';
-  const insecure = checked('insecure');
-  let   ports;
-  if (target === 'web') {
-    const mode = getModeFor('web');
-    if (WEB_MODES_WITH_PORTS.includes(mode)) {
-      ports = val('ports')
-        .split(',')
-        .map(s => parseInt(s.trim(), 10))
-        .filter(n => n > 0 && n <= 65535);
-    } else {
-      ports = []; // other web modes (public-ip/dns/http/traceroute) don't use ports
-    }
-  } else {
-    ports = val('ports')
-      .split(',')
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => n > 0 && n <= 65535);
-  }
-
-  const opts = {
-    mtr_count:   mtrCount,
-    timeout,
-    insecure,
-    disable_geo: !checked('geo-enabled'),
-    net: { host: val('host'), ports },
-  };
-
-  switch (target) {
-    case 'web':  Object.assign(opts, { web:  buildWebOpts()  }); break;
-    case 'smtp': Object.assign(opts, { smtp: buildSMTPOpts() }); break;
-    case 'ftp':  Object.assign(opts, { ftp:  buildFTPOpts()  }); break;
-    case 'sftp': Object.assign(opts, { sftp: buildSFTPOpts() }); break;
-    // imap / pop: no protocol-specific options beyond net
-  }
-
-  // For Route Trace, ensure the request timeout covers the worst-case probe
-  // time: maxHops × mtrCount × 2 s (backend hopTimeout) + 15 s buffer.
-  // This prevents spurious "context deadline exceeded" errors on slow paths.
-  if (target === 'web' && getModeFor('web') === 'traceroute') {
-    const maxHops = parseInt(val('traceroute-max-hops'), 10) || 30;
-    const minSec = maxHops * mtrCount * 2 + 15;
-    if (parseTimeoutSec(opts.timeout, 30) < minSec) {
-      opts.timeout = minSec + 's';
-    }
-  }
-
-  return { target, options: opts };
-}
-
-function buildWebOpts() {
-  const mode = getModeFor('web') || 'public-ip';
-  const opts = { mode };
-  if (mode === 'dns') {
-    opts.domains = val('dns-domains').split(',').map(s => s.trim()).filter(Boolean);
-    opts.types   = ['A', 'AAAA', 'MX'].filter(t => checked('dns-' + t));
-  } else if (mode === 'http') {
-    opts.url = val('http-url');
-  } else if (mode === 'traceroute') {
-    const maxHops = parseInt(val('traceroute-max-hops'), 10);
-    if (maxHops > 0) opts.max_hops = maxHops;
-  }
-  return opts;
-}
-
-function buildSMTPOpts() {
-  const mode = getModeFor('smtp') || 'handshake';
-  return {
-    mode,
-    domain:       val('smtp-domain'),
-    username:     val('smtp-user'),
-    password:     val('smtp-pass'),
-    from:         val('smtp-from'),
-    to:           val('smtp-to').split(',').map(s => s.trim()).filter(Boolean),
-    start_tls:    checked('smtp-starttls'),
-    use_tls:      checked('smtp-ssl'),
-    mx_probe_all: checked('smtp-mx-all'),
-  };
-}
-
-function buildFTPOpts() {
-  const mode = getModeFor('ftp') || 'login';
-  return {
-    mode,
-    username: val('ftp-user'),
-    password: val('ftp-pass'),
-    use_tls:  checked('ftp-ssl'),
-    auth_tls: checked('ftp-auth-tls'),
-  };
-}
-
-function buildSFTPOpts() {
-  const mode = getModeFor('sftp') || 'auth';
-  return {
-    mode,
-    username: val('sftp-user'),
-    password: val('sftp-pass'),
-  };
+  return (window.PathProbe && window.PathProbe.ApiBuilder)
+    ? window.PathProbe.ApiBuilder.buildRequest()
+    : { target: '', options: {} };
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────

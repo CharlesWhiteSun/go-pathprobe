@@ -2200,25 +2200,25 @@ func TestStaticI18n_WebModeTracerouteKeys(t *testing.T) {
 	}
 }
 
-// TestStaticJS_WebModeTracerouteBuildOpts verifies that the embedded app.js
+// TestStaticJS_WebModeTracerouteBuildOpts verifies that the embedded api-builder.js
 // handles the "traceroute" mode in buildWebOpts() and forwards max_hops into
 // the API request payload so the server's WebOptions.MaxHops is populated.
 func TestStaticJS_WebModeTracerouteBuildOpts(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	// The traceroute mode string constant must appear in buildWebOpts.
 	if !strings.Contains(body, `'traceroute'`) {
-		t.Error("app.js: 'traceroute' mode string must appear in buildWebOpts")
+		t.Error("api-builder.js: 'traceroute' mode string must appear in buildWebOpts")
 	}
 	// The max_hops JSON field must be written into the request opts.
 	if !strings.Contains(body, "max_hops") {
-		t.Error("app.js: buildWebOpts must include max_hops in the traceroute mode branch")
+		t.Error("api-builder.js: buildWebOpts must include max_hops in the traceroute mode branch")
 	}
 	// The traceroute sub-panel ID must exist in config.js TARGET_MODE_PANELS (data layer).
 	cfgRec := httptest.NewRecorder()
@@ -2430,18 +2430,23 @@ func TestStaticJS_ErrorClearsProgressLog(t *testing.T) {
 func TestStaticJS_TracerouteTimeoutAutoCompute(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	// The traceroute-specific timeout guard must be present.
 	if !strings.Contains(body, "traceroute") {
-		t.Error("app.js: must contain 'traceroute' reference for mode-specific timeout logic")
+		t.Error("api-builder.js: must contain 'traceroute' reference for mode-specific timeout logic")
 	}
+	// parseTimeoutSec must be defined to compare user timeout vs worst-case minimum.
 	if !strings.Contains(body, "parseTimeoutSec") {
-		t.Error("app.js: parseTimeoutSec helper must be defined for timeout comparison")
+		t.Error("api-builder.js: parseTimeoutSec helper must be defined for timeout comparison")
+	}
+	// The auto-compute formula (maxHops * mtrCount * 2 + 15) must be present.
+	if !strings.Contains(body, "maxHops * mtrCount * 2 + 15") {
+		t.Error("api-builder.js: traceroute timeout auto-compute must use formula maxHops * mtrCount * 2 + 15")
 	}
 }
 
@@ -2690,26 +2695,30 @@ func TestStaticHTML_PortGroupLabelHint(t *testing.T) {
 func TestStaticJS_WebPortModeReadsTextInput(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
-	// getWebPorts() has been removed; buildRequest reads val('ports') for web/port.
+	// getWebPorts() has been removed; buildRequest reads _val('ports') for web/port.
 	if strings.Contains(body, "function getWebPorts(") {
-		t.Error("app.js: getWebPorts() must be removed; web/port mode now uses the shared text input")
+		t.Error("api-builder.js: getWebPorts() must be removed; web/port mode now uses the shared text input")
 	}
-	// buildRequest must use WEB_MODES_WITH_PORTS to decide whether to read ports.
-	if !strings.Contains(body, "WEB_MODES_WITH_PORTS.includes(mode)") {
-		t.Error("app.js: buildRequest must guard web port reading with WEB_MODES_WITH_PORTS.includes(mode)")
+	// buildRequest must use _webModesWithPorts() (runtime-resolved) to decide whether to read ports.
+	if !strings.Contains(body, "_webModesWithPorts().includes(mode)") {
+		t.Error("api-builder.js: buildRequest must guard web port reading with _webModesWithPorts().includes(mode)")
+	}
+	// ports-text-group: the shared text input read path for web/port mode must be documented.
+	if !strings.Contains(body, "ports-text-group") {
+		t.Error("api-builder.js: comment must reference 'ports-text-group' to document the shared text input read path")
 	}
 	// The removed picker elements must not be referenced in JS logic.
 	if strings.Contains(body, "getElementById('port-other-cb')") {
-		t.Error("app.js: port-other-cb has been removed and must not be referenced")
+		t.Error("api-builder.js: port-other-cb has been removed and must not be referenced")
 	}
 	if strings.Contains(body, "getElementById('port-other-num')") {
-		t.Error("app.js: port-other-num has been removed and must not be referenced")
+		t.Error("api-builder.js: port-other-num has been removed and must not be referenced")
 	}
 }
 
@@ -6559,6 +6568,62 @@ func TestStaticJS_FormPublicAPIComplete(t *testing.T) {
 		exportBlock := body[exportStart : exportStart+exportEnd+2]
 		if !strings.Contains(exportBlock, sym) {
 			t.Errorf("form.js: PathProbe.Form must export %q", sym)
+		}
+	}
+}
+
+// TestStaticHandler_ServesApiBuilderJS verifies that GET /api-builder.js returns
+// HTTP 200 and that the response body registers the PathProbe.ApiBuilder namespace.
+func TestStaticHandler_ServesApiBuilderJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "PathProbe.ApiBuilder") {
+		t.Error("api-builder.js: must register PathProbe.ApiBuilder namespace")
+	}
+}
+
+// TestStaticJS_BuildRequestFunction verifies that api-builder.js defines
+// buildRequest() and assembles a payload with the expected { target, options }
+// top-level structure, and that it is the sole function exported via the public API.
+func TestStaticJS_BuildRequestFunction(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api-builder.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api-builder.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// buildRequest must be defined as the main entry point.
+	if !strings.Contains(body, "function buildRequest(") {
+		t.Error("api-builder.js: buildRequest() function must be defined")
+	}
+	// The returned payload must contain both top-level fields.
+	if !strings.Contains(body, "{ target, options: opts }") {
+		t.Error("api-builder.js: buildRequest must return { target, options: opts } payload")
+	}
+	// Only buildRequest is exported — internal helpers remain private to the IIFE.
+	needle := "PathProbe.ApiBuilder = {"
+	exportStart := strings.Index(body, needle)
+	if exportStart == -1 {
+		t.Fatalf("api-builder.js: PathProbe.ApiBuilder = { ... } export block not found")
+	}
+	exportEnd := strings.Index(body[exportStart:], "};")
+	if exportEnd == -1 {
+		t.Fatalf("api-builder.js: closing }; not found after PathProbe.ApiBuilder export block")
+	}
+	exportBlock := body[exportStart : exportStart+exportEnd+2]
+	if !strings.Contains(exportBlock, "buildRequest") {
+		t.Error("api-builder.js: PathProbe.ApiBuilder must export buildRequest")
+	}
+	// Internal helpers must NOT be exported.
+	for _, priv := range []string{"buildWebOpts", "buildSMTPOpts", "buildFTPOpts", "buildSFTPOpts", "parseTimeoutSec"} {
+		if strings.Contains(exportBlock, priv) {
+			t.Errorf("api-builder.js: %s must remain private (not exported in PathProbe.ApiBuilder)", priv)
 		}
 	}
 }
