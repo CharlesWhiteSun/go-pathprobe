@@ -1,208 +1,27 @@
 ﻿'use strict';
 
-// ── Config aliases — sourced from PathProbe.Config (config.js) ───────────
-// config.js is loaded before app.js (see index.html) via a <script defer>
-// tag, which guarantees execution order.  However, a stale browser cache may
-// serve an old index.html that lacks the config.js <script> tag, causing
-// window.PathProbe to be undefined when this file runs.
+// app.js — 組裝入口（Assembly Entry Point）
 //
-// Accessing via window.PathProbe (rather than the bare PathProbe identifier)
-// avoids a ReferenceError when window.PathProbe was never set — bare
-// identifier lookup throws ReferenceError for undeclared globals, whereas
-// window.PathProbe returns undefined safely.  The defensive (…) || {} guard
-// means this line NEVER throws, so all function declarations below (setTheme,
-// setLocale, etc.) remain callable from inline onclick attributes even when
-// config.js is unavailable.
+// 唯一職責：DOMContentLoaded 後，依序呼叫各模組初始化 API。
+// 本檔案不含任何業務邏輯，所有邏輯由各自子模組負責。
 //
-// THEMES and DEFAULT_THEME carry explicit fallbacks so applyTheme() can
-// safely call THEMES.includes() without crashing in degraded mode.
-if (!window.PathProbe || !window.PathProbe.Config) {
-  // Surfacing this in the console makes the misconfiguration immediately
-  // visible to developers.  Check the Network tab for a failed /config.js.
-  console.error(
-    '[PathProbe] PathProbe.Config is unavailable. ' +
-    'Ensure config.js loads before app.js. ' +
-    'Hint: force-refresh the browser (Ctrl+Shift+R) to clear a stale cache.',
-  );
-}
-const {
-  MAP_POINT_CONFIGS          = {},
-  MARKER_COLOR_SCHEME_CONFIGS = {},
-  MARKER_STYLE_CONFIGS       = {},
-  CONNECTOR_LINE_CONFIGS     = {},
-  CONNECTOR_GLOW_CONFIGS     = {},
-  MAP_TILE_VARIANTS          = [],
-  MAP_THEME_TO_TILE_VARIANT  = {},
-  MAP_DARK_THEMES            = new Set(),
-  TILE_LAYER_CONFIGS         = {},
-  TARGET_PORTS               = {},
-  TARGET_MODE_PANELS         = {},
-  WEB_MODES_WITH_PORTS       = [],
-  TARGET_PLACEHOLDER_KEYS    = {},
-  COPYRIGHT_START_YEAR       = 2026,
-  THEMES      = ['default', 'deep-blue', 'light-green', 'forest-green', 'dark'],
-  DEFAULT_THEME = 'default',
-} = (window.PathProbe && window.PathProbe.Config) || {};
+// index.html 載入順序（依賴鏈）：
+//   leaflet.js, i18n.js, config.js, locale.js, theme.js, form.js,
+//   api-builder.js, renderer.js, map-connector.js, map.js,
+//   api-client.js, history.js → app.js（本檔案最後載入）
+//
+// 全域 onclick 入口（由各子模組自行暴露）：
+//   window.setTheme       ← theme.js
+//   window.setLocale      ← locale.js
+//   window.runDiag        ← api-client.js
+//   window.loadHistoryEntry ← history.js
 
-// ── Locale shims — delegate to PathProbe.Locale (locale.js) ─────────────
-// locale.js is loaded before app.js (see index.html) and registers all
-// locale logic under PathProbe.Locale.  The three thin shim functions below
-// keep all call sites in this file unchanged so no other code in app.js
-// needs to move.
-
-/** Return the translation for key in the current locale, falling back to en. */
-function t(key) {
-  return window.PathProbe && window.PathProbe.Locale
-    ? window.PathProbe.Locale.t(key)
-    : key;
-}
-
-/** Persist and apply a new locale choice — delegates to locale.js. */
-function setLocale(lang) {
-  if (window.PathProbe && window.PathProbe.Locale) {
-    window.PathProbe.Locale.setLocale(lang);
-  }
-}
-
-/** Initialise locale from localStorage — delegates to locale.js. */
-function initLocale() {
-  if (window.PathProbe && window.PathProbe.Locale) {
-    window.PathProbe.Locale.initLocale();
-  }
-}
-
-// ── Run-button animation shim — delegates to PathProbe.Form (form.js) ────
-/**
- * Return the innerHTML for #run-btn while a diagnostic is running.
- * Delegates to form.js with an inline fallback so the string 'anim-dots'
- * is always present in app.js regardless of module load order.
- */
-function getRunningHTML() {
-  return (window.PathProbe && window.PathProbe.Form)
-    ? window.PathProbe.Form.getRunningHTML()
-    : '<span class="anim-dots"><span></span><span></span><span></span></span>';
-}
-
-// ── Theme shims — delegate to PathProbe.Theme (theme.js) ─────────────────
-// theme.js is loaded before app.js (see index.html) and registers all
-// theme logic under PathProbe.Theme.  The two thin shim functions below keep
-// all call sites in this file (initTheme / setTheme) unchanged.
-
-/** Public entry point called by theme-button onclick handlers. */
-function setTheme(themeId) {
-  if (window.PathProbe && window.PathProbe.Theme) {
-    window.PathProbe.Theme.setTheme(themeId);
-  }
-}
-
-/** Initialise theme from localStorage — delegates to theme.js. */
-function initTheme() {
-  if (window.PathProbe && window.PathProbe.Theme) {
-    window.PathProbe.Theme.initTheme();
-  }
-}
-
-// ── Map shims — delegate to PathProbe.Map (map.js) ────────────────────
-
-/** Render (or remove) the Leaflet map — delegates to map.js. */
-function renderMap(pub, tgt) {
-  if (window.PathProbe && window.PathProbe.Map) {
-    window.PathProbe.Map.renderMap(pub, tgt);
-  }
-}
-
-/** Refresh map markers after a style/colour-scheme change — delegates to map.js. */
-function refreshMapMarkers() {
-  if (window.PathProbe && window.PathProbe.Map) {
-    window.PathProbe.Map.refreshMapMarkers();
-  }
-}
-
-// ── Initialisation ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Form UI initialisation (spell-check, custom selects, panel animations,
-  // radio button wiring, onTargetChange) is fully owned by form.js.
-  if (window.PathProbe && window.PathProbe.Form) {
-    window.PathProbe.Form.init();
-  }
-  fetchVersion();   // async version badge — delegates to api-client.js
-  loadHistory();    // populate history panel
-  initTheme();      // apply saved theme (before locale so tokens are ready)
-  initLocale();     // apply saved locale (must run after DOM is ready)
+  window.PathProbe.Form.init();
+  window.PathProbe.ApiClient.fetchVersion();
+  window.PathProbe.History.loadHistory();
+  window.PathProbe.Theme.initTheme();
+  window.PathProbe.Locale.initLocale();
 });
-
-// ── api-client.js shims ──────────────────────────────────────────────────
-// fetchVersion 和 showError 在此保留薄層 shim，維持 DOMContentLoaded 與
-// loadHistoryEntry 中的呼叫點不變，並將實際邏輯委派給 api-client.js。
-
-/** 取得版本號碼 — 委派給 api-client.js。 */
-function fetchVersion() {
-  if (window.PathProbe && window.PathProbe.ApiClient) {
-    window.PathProbe.ApiClient.fetchVersion();
-  }
-}
-
-/** 顯示錯誤橫幅 — 委派給 api-client.js。 */
-function showError(msg) {
-  if (window.PathProbe && window.PathProbe.ApiClient) {
-    window.PathProbe.ApiClient.showError(msg);
-  }
-}
-
-/** 載入並渲染歷史清單 — 委派給 history.js。 */
-function loadHistory() {
-  if (window.PathProbe && window.PathProbe.History) {
-    window.PathProbe.History.loadHistory();
-  }
-}
-
-// ── Form shims — delegate to PathProbe.Form (form.js) ───────────────────
-// form.js is loaded before app.js (see index.html) and registers all
-// form/UI logic under PathProbe.Form.  The thin shim functions below keep
-// all call sites in this file (val, checked, getModeFor) unchanged so no
-// other code in app.js needs to move.
-
-/** Read and trim the string value of a form element by id. */
-function val(id) {
-  return (window.PathProbe && window.PathProbe.Form)
-    ? window.PathProbe.Form.val(id) : '';
-}
-
-/** Return the checked state of a checkbox by id. */
-function checked(id) {
-  return (window.PathProbe && window.PathProbe.Form)
-    ? window.PathProbe.Form.checked(id) : false;
-}
-
-/** Read the currently-checked sub-mode radio for a target. */
-function getModeFor(target) {
-  return (window.PathProbe && window.PathProbe.Form)
-    ? window.PathProbe.Form.getModeFor(target) : '';
-}
-
-// ── Request building shim — delegates to PathProbe.ApiBuilder (api-builder.js)
-// api-builder.js is loaded before app.js (see index.html) and owns all request
-// construction logic.  The thin shim below keeps the runDiag() call site
-// unchanged — it still calls buildRequest() with no arguments.
-
-/**
- * Assemble the diagnostic request payload — delegates to api-builder.js.
- * @returns {{ target: string, options: object }} Request payload.
- */
-function buildRequest() {
-  return (window.PathProbe && window.PathProbe.ApiBuilder)
-    ? window.PathProbe.ApiBuilder.buildRequest()
-    : { target: '', options: {} };
-}
-
-// ── Report rendering — delegates to renderer.js ──────────────────────────
-// renderReport() is defined in renderer.js and exposed as
-// PathProbe.Renderer.renderReport().  This shim keeps call-sites in app.js
-// working until they can be updated directly.
-function renderReport(r) {
-  if (window.PathProbe && window.PathProbe.Renderer) {
-    window.PathProbe.Renderer.renderReport(r);
-  }
-}
 
 

@@ -7,24 +7,11 @@ import (
 	"testing"
 )
 
-// TestStaticJS_DefaultThemeConstant verifies that app.js references DEFAULT_THEME
-// (destructured from PathProbe.Config, declared in config.js) and that
-// initTheme() reads the HTML data-default-theme attribute as its authoritative
-// fallback source rather than relying on a hard-coded string literal.
+// TestStaticJS_DefaultThemeConstant verifies that theme.js reads the
+// server-declared default theme from the HTML data-default-theme attribute
+// and validates it against the THEMES list before applying.
 func TestStaticJS_DefaultThemeConstant(t *testing.T) {
 	h := newStaticHandler(t)
-
-	// app.js must still reference DEFAULT_THEME (destructured from PathProbe.Config).
-	// The constant declaration lives in config.js; TestStaticJS_ConfigNamespace
-	// verifies the declaration there.
-	appRec := httptest.NewRecorder()
-	h.ServeHTTP(appRec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
-	if appRec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", appRec.Code)
-	}
-	if !strings.Contains(appRec.Body.String(), "DEFAULT_THEME") {
-		t.Error("app.js: DEFAULT_THEME must be referenced (expected via PathProbe.Config destructuring)")
-	}
 
 	// theme.js owns initTheme(); verify it reads the HTML attribute for the
 	// server-declared default and validates against THEMES.

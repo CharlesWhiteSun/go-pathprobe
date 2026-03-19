@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticHTML_ThemeSelector verifies that the embedded index.html contains
 // the theme-bar container with five circular dot-buttons, ordered left-to-right
 // as: forest-green, light-green, default, deep-blue, dark.
@@ -44,7 +43,6 @@ func TestStaticHTML_ThemeSelector(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_ThemeBarInHeaderInner verifies that the theme-bar sits inside
 // the same .header-inner flex row as the brand and the language switcher,
 // enabling the browser to vertically centre all three elements in one pass via
@@ -77,7 +75,6 @@ func TestStaticHTML_ThemeBarInHeaderInner(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_DefaultThemeAttribute verifies that the embedded index.html
 // declares a data-default-theme attribute on the <html> root element.
 // This attribute acts as the server-side declaration of the intended startup
@@ -94,7 +91,6 @@ func TestStaticHTML_DefaultThemeAttribute(t *testing.T) {
 		t.Errorf("index.html: <html> tag must declare %s so initTheme() can read the server-declared default", want)
 	}
 }
-
 
 // TestStaticHTML_BrandMarkup verifies that the embedded index.html renders
 // the "PathProbe" logotype as two separate spans so that CSS can apply
@@ -114,7 +110,6 @@ func TestStaticHTML_BrandMarkup(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_BrandNoPicker verifies that the embedded index.html no longer
 // contains the picker markup now that the logo style is fixed.
 func TestStaticHTML_BrandNoPicker(t *testing.T) {
@@ -131,7 +126,6 @@ func TestStaticHTML_BrandNoPicker(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_WebModeRadioButtons verifies the four radio buttons exist.
 func TestStaticHTML_WebModeRadioButtons(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/")
@@ -146,7 +140,6 @@ func TestStaticHTML_WebModeRadioButtons(t *testing.T) {
 		t.Error("index.html: radio buttons must carry name=\"web-mode\"")
 	}
 }
-
 
 // TestStaticHTML_WebModeDNSSubpanel verifies that the DNS sub-panel exists with
 // the placeholder attribute (no hard-coded value).
@@ -165,7 +158,6 @@ func TestStaticHTML_WebModeDNSSubpanel(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_WebModeRecordTypeLabels verifies i18n labels for A/AAAA/MX.
 func TestStaticHTML_WebModeRecordTypeLabels(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/")
@@ -176,7 +168,6 @@ func TestStaticHTML_WebModeRecordTypeLabels(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticHTML_SMTPModeSelector verifies SMTP mode-selector and sub-panels exist.
 func TestStaticHTML_SMTPModeSelector(t *testing.T) {
@@ -194,7 +185,6 @@ func TestStaticHTML_SMTPModeSelector(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_FTPModeSelector verifies FTP mode-selector exists and ftp-list checkbox is absent.
 func TestStaticHTML_FTPModeSelector(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/")
@@ -209,7 +199,6 @@ func TestStaticHTML_FTPModeSelector(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_SFTPModeSelector verifies SFTP mode-selector exists and sftp-ls checkbox is absent.
 func TestStaticHTML_SFTPModeSelector(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/")
@@ -223,7 +212,6 @@ func TestStaticHTML_SFTPModeSelector(t *testing.T) {
 		t.Error("index.html: sftp-ls checkbox must be removed (replaced by mode selector)")
 	}
 }
-
 
 // TestStaticHTML_ModeLabelFallbackText verifies that the fallback text for all
 // mode-selector labels in index.html is 'Detection Mode' (not 'Test Mode').
@@ -241,7 +229,6 @@ func TestStaticHTML_ModeLabelFallbackText(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticHTML_CustomSelectMarkup verifies that the target <select> in
 // index.html has been replaced with the custom .cs-wrap widget and that the
@@ -300,7 +287,6 @@ func TestStaticHTML_CustomSelectMarkup(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_FooterPresent verifies that the embedded index.html contains
 // a <footer class="site-footer"> element with the .footer-inner wrapper.
 // The footer must appear after </main> so the HTML document structure follows
@@ -329,7 +315,6 @@ func TestStaticHTML_FooterPresent(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_FooterCopyright verifies that the footer element contains the
 // copyright notice with the data-i18n key and the expected English fallback
 // text.  The copyright text must include the © symbol, the year, and the
@@ -347,7 +332,6 @@ func TestStaticHTML_FooterCopyright(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticHTML_VividAnimDefault verifies that index.html permanently sets
 // data-anim="vivid" on the <html> element so the vivid animation intensity is
@@ -367,7 +351,6 @@ func TestStaticHTML_VividAnimDefault(t *testing.T) {
 		t.Error(`index.html: cycleAnim() onclick must be removed along with the toggle button`)
 	}
 }
-
 
 // TestStaticHTML_ImapPopFieldsets verifies that index.html contains hidden
 // fieldsets for the imap and pop targets so onTargetChange() can always find
@@ -408,7 +391,6 @@ func TestStaticHTML_ImapPopFieldsets(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_AdvancedOptsStructure verifies that index.html wraps the
 // Advanced Options content inside .adv-body / .adv-inner elements so that
 // JS-driven height + fade animations work correctly.
@@ -429,7 +411,6 @@ func TestStaticHTML_AdvancedOptsStructure(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_WebModeTracerouteRadio verifies that the embedded index.html
 // includes a radio button for the "traceroute" web sub-mode so users can
 // initiate a route-trace diagnostic from the UI.
@@ -445,7 +426,6 @@ func TestStaticHTML_WebModeTracerouteRadio(t *testing.T) {
 		t.Error("index.html: traceroute radio must carry data-i18n=\"web-mode-traceroute\"")
 	}
 }
-
 
 // TestStaticHTML_WebModeTracerouteMaxHopsPanel verifies that the traceroute
 // sub-panel exists in index.html and exposes a max-hops number input so the
@@ -467,7 +447,6 @@ func TestStaticHTML_WebModeTracerouteMaxHopsPanel(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_ErrorBannerStructure verifies that index.html contains the
 // structured error banner with role="alert" and separate icon/text spans.
 func TestStaticHTML_ErrorBannerStructure(t *testing.T) {
@@ -487,7 +466,6 @@ func TestStaticHTML_ErrorBannerStructure(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_ErrorBannerHiddenByDefault verifies that the error banner in
 // index.html carries the `hidden` attribute so it is invisible on page load and
 // only becomes visible when JS calls showError().
@@ -499,7 +477,6 @@ func TestStaticHTML_ErrorBannerHiddenByDefault(t *testing.T) {
 		t.Error("index.html: #error-banner must carry the `hidden` attribute so it is invisible on load")
 	}
 }
-
 
 // TestStaticHTML_PortsFieldGroup verifies that the redesigned form layout places
 // target-type, host, and port-group in ONE unified form-grid row.  The port-group
@@ -528,7 +505,6 @@ func TestStaticHTML_PortsFieldGroup(t *testing.T) {
 		t.Error("index.html: #ports input must be present")
 	}
 }
-
 
 // TestStaticHTML_PortGroupLabelHint verifies that the #port-group label displays
 // the "Ports" text and "(comma-separated)" hint inline as a <small> element
@@ -560,7 +536,6 @@ func TestStaticHTML_PortGroupLabelHint(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_GeoDistanceElement verifies that index.html includes the
 // #geo-distance element, which renderMap() populates with the great-circle
 // distance between origin and target.
@@ -572,7 +547,6 @@ func TestStaticHTML_GeoDistanceElement(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_GeoMapBar verifies that index.html contains #geo-map-bar
 // inside a .geo-map-outer wrapper element.
 func TestStaticHTML_GeoMapBar(t *testing.T) {
@@ -582,7 +556,6 @@ func TestStaticHTML_GeoMapBar(t *testing.T) {
 		t.Error(`index.html: element with id="geo-map-bar" not found`)
 	}
 }
-
 
 // TestStaticHTML_GeoMapBarUniqueId verifies that index.html contains exactly
 // ONE element with id="geo-map-bar". Duplicate IDs break getElementById and
@@ -595,7 +568,6 @@ func TestStaticHTML_GeoMapBarUniqueId(t *testing.T) {
 		t.Errorf(`index.html: expected exactly 1 element with id="geo-map-bar", got %d — duplicate IDs break getElementById`, count)
 	}
 }
-
 
 // TestStaticHTML_GeoMapOuter verifies that index.html wraps #geo-map-bar and
 // #geo-map in a .geo-map-outer element which provides the overlay context.
@@ -610,7 +582,6 @@ func TestStaticHTML_GeoMapOuter(t *testing.T) {
 	}
 }
 
-
 // TestStaticHTML_GeoConnectorBarRemoved verifies that index.html no longer
 // contains #geo-connector-bar — the style picker was removed because only
 // one connector style exists and it is applied by default.
@@ -623,5 +594,46 @@ func TestStaticHTML_GeoConnectorBarRemoved(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `id="geo-connector-bar"`) {
 		t.Error(`index.html: #geo-connector-bar must be removed — style picker is no longer needed`)
+	}
+}
+
+// TestStaticHTML_ScriptLoadOrder verifies that all 13 JavaScript modules are
+// declared in index.html as <script defer> tags and appear in the correct
+// dependency order.  The order is critical because each module registers itself
+// on window.PathProbe before the next one reads it.
+func TestStaticHTML_ScriptLoadOrder(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	// Ordered list of script src paths as they must appear in index.html.
+	ordered := []string{
+		`src="/leaflet.js"`,
+		`src="/i18n.js"`,
+		`src="/config.js"`,
+		`src="/locale.js"`,
+		`src="/theme.js"`,
+		`src="/form.js"`,
+		`src="/api-builder.js"`,
+		`src="/renderer.js"`,
+		`src="/map-connector.js"`,
+		`src="/map.js"`,
+		`src="/api-client.js"`,
+		`src="/history.js"`,
+		`src="/app.js"`,
+	}
+
+	prev := 0
+	for _, src := range ordered {
+		idx := strings.Index(body[prev:], src)
+		if idx == -1 {
+			t.Errorf("index.html: script tag with %q not found (or out of order)", src)
+			continue
+		}
+		prev += idx + len(src)
+
+		// Each script must carry the defer attribute.
+		defer_ := strings.Index(body[prev-len(src)-50:prev+10], "defer")
+		if defer_ == -1 {
+			t.Errorf("index.html: script %q must carry the 'defer' attribute", src)
+		}
 	}
 }
