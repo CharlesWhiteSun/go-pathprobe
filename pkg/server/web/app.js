@@ -1,10 +1,5 @@
 ﻿'use strict';
 
-// Last fetched history item array; retained so applyLocale() can re-render
-// the history list with correct locale-aware timestamps whenever the user
-// switches language.
-let _lastHistoryItems = null;
-
 // ── Config aliases — sourced from PathProbe.Config (config.js) ───────────
 // config.js is loaded before app.js (see index.html) via a <script defer>
 // tag, which guarantees execution order.  However, a stale browser cache may
@@ -74,18 +69,6 @@ function initLocale() {
   if (window.PathProbe && window.PathProbe.Locale) {
     window.PathProbe.Locale.initLocale();
   }
-}
-
-// ── History namespace registration ──────────────────────────────────────────
-// locale.js 在語言切換後透過 PathProbe.History.rerenderLast() 重繪歷史清單。
-// api-client.js 在 SSE result 事件後透過 PathProbe.History.loadHistory() 刷新清單。
-// PathProbe.Renderer.rerenderLast() 由 renderer.js 直接注冊。
-{
-  const _ns = window.PathProbe || {};
-  _ns.History = _ns.History || {};
-  _ns.History.rerenderLast = () => { if (_lastHistoryItems) renderHistoryList(_lastHistoryItems); };
-  _ns.History.loadHistory  = () => loadHistory();
-  window.PathProbe = _ns;
 }
 
 // ── Run-button animation shim — delegates to PathProbe.Form (form.js) ────
@@ -166,6 +149,13 @@ function showError(msg) {
   }
 }
 
+/** 載入並渲染歷史清單 — 委派給 history.js。 */
+function loadHistory() {
+  if (window.PathProbe && window.PathProbe.History) {
+    window.PathProbe.History.loadHistory();
+  }
+}
+
 // ── Form shims — delegate to PathProbe.Form (form.js) ───────────────────
 // form.js is loaded before app.js (see index.html) and registers all
 // form/UI logic under PathProbe.Form.  The thin shim functions below keep
@@ -215,96 +205,4 @@ function renderReport(r) {
   }
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────
 
-/**
- * Escape a value for safe insertion into HTML innerHTML.
- * Used by map/geo and history sections still residing in app.js.
- * renderer.js carries its own private copy for the report-render path.
- */
-function esc(s) {
-  return String(s)
-    .replace(/&/g,  '&amp;')
-    .replace(/</g,  '&lt;')
-    .replace(/>/g,  '&gt;')
-    .replace(/"/g,  '&quot;')
-    .replace(/'/g,  '&#39;');
-}
-
-// -- History ------------------------------------------------------------------
-
-/** Format a UTC ISO timestamp string for display using the active locale.
- *  The locale code stored in _locale (e.g. 'en', 'zh-TW') is a valid BCP-47
- *  tag and can be passed directly to toLocaleString().
- */
-function formatHistoryTime(isoString) {
-  if (!isoString) return '';
-  const locale = window.PathProbe && window.PathProbe.Locale
-    ? window.PathProbe.Locale.getLocale()
-    : 'en';
-  try {
-    return new Date(isoString).toLocaleString(locale);
-  } catch (_) {
-    return new Date(isoString).toLocaleString();
-  }
-}
-
-/** Fetch the history list from the server and re-render the panel. */
-async function loadHistory() {
-  try {
-    const r = await fetch('/api/history');
-    if (!r.ok) return;
-    const items = await r.json();
-    renderHistoryList(Array.isArray(items) ? items : []);
-  } catch (_) { /* non-fatal - panel stays in its current state */ }
-}
-
-/** Render the history list items into #history-list. */
-function renderHistoryList(items) {
-  // Cache for locale-switch re-renders triggered by applyLocale().
-  _lastHistoryItems = items;
-
-  const emptyEl = document.getElementById('history-empty');
-  const listEl  = document.getElementById('history-list');
-  if (!listEl || !emptyEl) return;
-
-  if (items.length === 0) {
-    emptyEl.hidden = false;
-    listEl.hidden  = true;
-    return;
-  }
-
-  emptyEl.hidden = true;
-  listEl.hidden  = false;
-  listEl.innerHTML = items.map(item => {
-    const ts = formatHistoryTime(item.created_at);
-    const id = JSON.stringify(String(item.id));
-    return '<li class="history-item" onclick="loadHistoryEntry(' + id + ')">' +
-      '<span class="hi-badge">' + esc(item.target      || '\u2014') + '</span>' +
-      '<span class="hi-host">'  + esc(item.host        || '\u2014') + '</span>' +
-      '<span class="hi-time">'  + esc(ts)                           + '</span>' +
-    '</li>';
-  }).join('');
-}
-
-/** Fetch a single history entry and display it as the current results. */
-async function loadHistoryEntry(id) {
-  const resultEl = document.getElementById('results');
-  try {
-    const r = await fetch('/api/history/' + encodeURIComponent(id));
-    if (!r.ok) {
-      showError('History entry not found: ' + id);
-      return;
-    }
-    const report = await r.json();
-    renderReport(report);
-    // Reveal #results BEFORE renderMap for the same reason as in handleSSEMessage.
-    if (resultEl) resultEl.hidden = false;
-    renderMap(report.PublicGeo, report.TargetGeo);
-    if (resultEl) {
-      resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  } catch (err) {
-    showError('Failed to load history entry: ' + err.message);
-  }
-}
