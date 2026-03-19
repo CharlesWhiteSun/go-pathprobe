@@ -21,8 +21,8 @@ const PathProbe = window.PathProbe || {};
 // renderMap(), buildMarkerIcon(), buildPopupHtml(), and buildMapLegend() all
 // read this object so no other code needs to change.
 const MAP_POINT_CONFIGS = {
-  origin: { cssClass: 'geo-marker--origin', i18nKey: 'map-origin', shortLabel: 'A' },
-  target: { cssClass: 'geo-marker--target', i18nKey: 'map-target', shortLabel: 'B' },
+  'origin': { cssClass: 'geo-marker--origin', i18nKey: 'map-origin', shortLabel: 'A' },
+  'target': { cssClass: 'geo-marker--target', i18nKey: 'map-target', shortLabel: 'B' },
 };
 
 // ── Marker colour scheme configurations ───────────────────────────────────────

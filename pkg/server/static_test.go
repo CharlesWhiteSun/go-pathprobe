@@ -1,4 +1,4 @@
-package server_test
+﻿package server_test
 
 import (
 	"net/http"
@@ -2839,20 +2839,20 @@ func TestStaticJS_UpdatePortGroup(t *testing.T) {
 func TestStaticJS_RenderMapInvalidateSize(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	// renderMap must call invalidateSize to correct blank-tile regression.
 	if !strings.Contains(body, "invalidateSize") {
-		t.Error("app.js: renderMap must call _map.invalidateSize() to fix blank tile regression when container was hidden")
+		t.Error("map.js: renderMap must call _map.invalidateSize() to fix blank tile regression when container was hidden")
 	}
 	// The call must be deferred via requestAnimationFrame so it runs after the
 	// browser has re-laid-out the newly visible container.
 	if !strings.Contains(body, "requestAnimationFrame") {
-		t.Error("app.js: invalidateSize must be deferred via requestAnimationFrame so layout is complete before tiles repaint")
+		t.Error("map.js: invalidateSize must be deferred via requestAnimationFrame so layout is complete before tiles repaint")
 	}
 }
 
@@ -2949,20 +2949,20 @@ func TestStaticJS_HistoryEntryRevealOrder(t *testing.T) {
 func TestStaticJS_MapPointConfigs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/config.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /config.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "MAP_POINT_CONFIGS") {
-		t.Error("app.js: MAP_POINT_CONFIGS constant not found — map marker config must be data-driven")
+		t.Error("config.js: MAP_POINT_CONFIGS constant not found — map marker config must be data-driven")
 	}
 	if !strings.Contains(body, "'origin'") {
-		t.Error("app.js: MAP_POINT_CONFIGS must include an 'origin' key for the public-IP marker")
+		t.Error("config.js: MAP_POINT_CONFIGS must include an 'origin' key for the public-IP marker")
 	}
 	if !strings.Contains(body, "'target'") {
-		t.Error("app.js: MAP_POINT_CONFIGS must include a 'target' key for the destination marker")
+		t.Error("config.js: MAP_POINT_CONFIGS must include a 'target' key for the destination marker")
 	}
 }
 
@@ -2972,18 +2972,18 @@ func TestStaticJS_MapPointConfigs(t *testing.T) {
 func TestStaticJS_HaversineKm(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function haversineKm(") {
-		t.Error("app.js: haversineKm function not found — distance calculation must be a named helper")
+		t.Error("map.js: haversineKm function not found — distance calculation must be a named helper")
 	}
 	// Earth radius constant must appear to confirm correct formula.
 	if !strings.Contains(body, "6371") {
-		t.Error("app.js: haversineKm must use Earth radius constant 6371 km")
+		t.Error("map.js: haversineKm must use Earth radius constant 6371 km")
 	}
 }
 
@@ -2993,17 +2993,17 @@ func TestStaticJS_HaversineKm(t *testing.T) {
 func TestStaticJS_BuildMarkerIcon(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function buildMarkerIcon(") {
-		t.Error("app.js: buildMarkerIcon function not found — marker icon creation must be a named helper")
+		t.Error("map.js: buildMarkerIcon function not found — marker icon creation must be a named helper")
 	}
 	if !strings.Contains(body, "L.divIcon(") {
-		t.Error("app.js: buildMarkerIcon must use L.divIcon for custom marker styling")
+		t.Error("map.js: buildMarkerIcon must use L.divIcon for custom marker styling")
 	}
 }
 
@@ -3013,20 +3013,20 @@ func TestStaticJS_BuildMarkerIcon(t *testing.T) {
 func TestStaticJS_BuildPopupHtml(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function buildPopupHtml(") {
-		t.Error("app.js: buildPopupHtml function not found")
+		t.Error("map.js: buildPopupHtml function not found")
 	}
 	if !strings.Contains(body, "geo-popup__role") {
-		t.Error("app.js: buildPopupHtml must emit .geo-popup__role element for visual role identification")
+		t.Error("map.js: buildPopupHtml must emit .geo-popup__role element for visual role identification")
 	}
 	if !strings.Contains(body, "geo-popup__ip") {
-		t.Error("app.js: buildPopupHtml must emit .geo-popup__ip element for the IP address")
+		t.Error("map.js: buildPopupHtml must emit .geo-popup__ip element for the IP address")
 	}
 }
 
@@ -3038,12 +3038,12 @@ func TestStaticJS_BuildPopupHtml(t *testing.T) {
 func TestStaticJS_RenderMapPolyline(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), "buildConnectorLayer(") {
-		t.Error("app.js: renderMap must call buildConnectorLayer() to connect origin and target markers")
+		t.Error("map.js: renderMap must call buildConnectorLayer() to connect origin and target markers")
 	}
 	// dashArray configuration lives in config.js (CONNECTOR_LINE_CONFIGS presets).
 	rec2 := httptest.NewRecorder()
@@ -3200,18 +3200,18 @@ func TestStaticJS_MapDarkThemes(t *testing.T) {
 func TestStaticJS_GetMapTileVariant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function getMapTileVariant(") {
-		t.Error("app.js: getMapTileVariant function not found")
+		t.Error("map.js: getMapTileVariant function not found")
 	}
 }
 
-// TestStaticJS_RefreshMapTiles verifies that app.js exposes a named
+// TestStaticJS_RefreshMapTiles verifies that map.js exposes a named
 // refreshMapTiles() function that swaps the tile layer on the live map
 // with a fade-out/fade-in animation.  It is called only from
 // setMapTileVariant() (user-driven tile changes).  Theme-triggered tile swaps
@@ -3219,14 +3219,14 @@ func TestStaticJS_GetMapTileVariant(t *testing.T) {
 func TestStaticJS_RefreshMapTiles(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function refreshMapTiles(") {
-		t.Error("app.js: refreshMapTiles function not found")
+		t.Error("map.js: refreshMapTiles function not found")
 	}
 }
 
@@ -3417,37 +3417,37 @@ func TestStaticJS_ApplyThemeFiltersOpacityEvent(t *testing.T) {
 func TestStaticJS_MapBarHiddenToggled(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderMap(")
+	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMap function not found")
+		t.Fatal("map.js: renderMap function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 3000
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	// Both show and hide paths must reference the outer wrapper element and toggle hidden.
 	if !strings.Contains(fnBody, "geo-map-outer") {
-		t.Error("app.js: renderMap must reference geo-map-outer to toggle its visibility")
+		t.Error("map.js: renderMap must reference geo-map-outer to toggle its visibility")
 	}
 	if !strings.Contains(fnBody, "hidden = false") && !strings.Contains(fnBody, "removeAttribute('hidden')") {
-		t.Error("app.js: renderMap must reveal #geo-map-outer (hidden = false) when map is shown")
+		t.Error("map.js: renderMap must reveal #geo-map-outer (hidden = false) when map is shown")
 	}
 	if !strings.Contains(fnBody, "hidden = true") && !strings.Contains(fnBody, "setAttribute('hidden'") {
-		t.Error("app.js: renderMap must hide #geo-map-outer (hidden = true) when map is hidden")
+		t.Error("map.js: renderMap must hide #geo-map-outer (hidden = true) when map is hidden")
 	}
 }
 
@@ -3458,33 +3458,33 @@ func TestStaticJS_MapBarHiddenToggled(t *testing.T) {
 func TestStaticJS_RefreshMapTilesRequestAnimationFrame(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function refreshMapTiles(")
+	fnStart := strings.Index(body, "function refreshMapTiles(")
 	if fnStart == -1 {
-		t.Fatal("app.js: refreshMapTiles function not found")
+		t.Fatal("map.js: refreshMapTiles function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 1500
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "requestAnimationFrame") {
-		t.Error("app.js: refreshMapTiles must use requestAnimationFrame to remove geo-map--fading after tile swap")
+		t.Error("map.js: refreshMapTiles must use requestAnimationFrame to remove geo-map--fading after tile swap")
 	}
 	if !strings.Contains(fnBody, "propertyName") {
-		t.Error("app.js: refreshMapTiles transitionend handler must filter by e.propertyName to avoid acting on bubbling child events")
+		t.Error("map.js: refreshMapTiles transitionend handler must filter by e.propertyName to avoid acting on bubbling child events")
 	}
 }
 
@@ -3497,31 +3497,31 @@ func TestStaticJS_RefreshMapTilesRequestAnimationFrame(t *testing.T) {
 func TestStaticJS_SyncMapTileVariantNoFadeAnimation(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function syncMapTileVariantToTheme(")
+	fnStart := strings.Index(body, "function syncMapTileVariantToTheme(")
 	if fnStart == -1 {
-		t.Fatal("app.js: syncMapTileVariantToTheme function not found")
+		t.Fatal("map.js: syncMapTileVariantToTheme function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 600
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	// Must NOT delegate to animated refreshMapTiles — silent swap only.
 	if strings.Contains(fnBody, "refreshMapTiles()") {
-		t.Error("app.js: syncMapTileVariantToTheme must NOT call refreshMapTiles() — tile swap must be silent during theme transitions")
+		t.Error("map.js: syncMapTileVariantToTheme must NOT call refreshMapTiles() — tile swap must be silent during theme transitions")
 	}
 }
 
@@ -3598,14 +3598,14 @@ func TestStaticJS_OsmTileInConfigs(t *testing.T) {
 func TestStaticJS_SetMapTileVariant(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function setMapTileVariant(") {
-		t.Error("app.js: setMapTileVariant function not found")
+		t.Error("map.js: setMapTileVariant function not found")
 	}
 }
 
@@ -3614,31 +3614,31 @@ func TestStaticJS_SetMapTileVariant(t *testing.T) {
 func TestStaticJS_RenderMapBar(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function renderMapBar(") {
-		t.Error("app.js: renderMapBar function not found")
+		t.Error("map.js: renderMapBar function not found")
 	}
 }
 
-// TestStaticJS_SyncMapTileVariantToTheme verifies that app.js exposes a named
-// syncMapTileVariantToTheme() function which is called by applyTheme() and
-// initTheme() to align the tile variant with the active colour theme.
+// TestStaticJS_SyncMapTileVariantToTheme verifies that map.js exposes a named
+// syncMapTileVariantToTheme() function which is called via PathProbe.Map by
+// theme.js to align the tile variant with the active colour theme.
 func TestStaticJS_SyncMapTileVariantToTheme(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function syncMapTileVariantToTheme(") {
-		t.Error("app.js: syncMapTileVariantToTheme function not found")
+		t.Error("map.js: syncMapTileVariantToTheme function not found")
 	}
 }
 
@@ -3946,30 +3946,30 @@ func TestStaticHTML_GeoMapOuter(t *testing.T) {
 func TestStaticJS_RenderMapUsesOuterWrapper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderMap(")
+	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMap function not found")
+		t.Fatal("map.js: renderMap function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 3000
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "geo-map-outer") {
-		t.Error("app.js: renderMap must reference geo-map-outer to toggle map area visibility")
+		t.Error("map.js: renderMap must reference geo-map-outer to toggle map area visibility")
 	}
 }
 
@@ -3978,40 +3978,40 @@ func TestStaticJS_RenderMapUsesOuterWrapper(t *testing.T) {
 func TestStaticJS_RenderMapBarNoTextContent(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderMapBar(")
+	fnStart := strings.Index(body, "function renderMapBar(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMapBar function not found")
+		t.Fatal("map.js: renderMapBar function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 800
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	// Must have aria-label for accessibility.
 	if !strings.Contains(fnBody, "aria-label") {
-		t.Error("app.js: renderMapBar buttons must include aria-label for accessibility")
+		t.Error("map.js: renderMapBar buttons must include aria-label for accessibility")
 	}
 	// Must have title for native tooltip.
 	if !strings.Contains(fnBody, "title=") {
-		t.Error("app.js: renderMapBar buttons should include title attribute for tooltip")
+		t.Error("map.js: renderMapBar buttons should include title attribute for tooltip")
 	}
 	// The button closing tag must immediately follow the opening tag (no text node).
 	// Check that the inner text is NOT rendered (no i18nKey value as text content).
 	if strings.Contains(fnBody, ">'"+"\n") || strings.Contains(fnBody, "> +\n      esc(t(") {
-		t.Error("app.js: renderMapBar must not render i18n text inside the button element")
+		t.Error("map.js: renderMapBar must not render i18n text inside the button element")
 	}
 }
 
@@ -4380,33 +4380,33 @@ func TestStaticJS_TileLayerConfigsBgColor(t *testing.T) {
 func TestStaticJS_ApplyMapBgColorFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function applyMapBgColor(")
+	fnStart := strings.Index(body, "function applyMapBgColor(")
 	if fnStart == -1 {
-		t.Fatal("app.js: applyMapBgColor function not found")
+		t.Fatal("map.js: applyMapBgColor function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 400
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "bgColor") {
-		t.Error("app.js: applyMapBgColor must read bgColor from TILE_LAYER_CONFIGS")
+		t.Error("map.js: applyMapBgColor must read bgColor from TILE_LAYER_CONFIGS")
 	}
 	if !strings.Contains(fnBody, "background") {
-		t.Error("app.js: applyMapBgColor must set container.style.background")
+		t.Error("map.js: applyMapBgColor must set container.style.background")
 	}
 }
 
@@ -4417,30 +4417,31 @@ func TestStaticJS_ApplyMapBgColorFunction(t *testing.T) {
 func TestStaticJS_RefreshMapTilesCallsApplyMapBgColor(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function refreshMapTiles(")
+	fnStart := strings.Index(body, "function refreshMapTiles(")
 	if fnStart == -1 {
-		t.Fatal("app.js: refreshMapTiles function not found")
+		t.Fatal("map.js: refreshMapTiles function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	// Functions inside the IIFE are indented, so look for the next indented function.
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 1000
-		if end > len(appJS) {
-			end = len(appJS)
+		end := fnStart + 1500
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "applyMapBgColor") {
-		t.Error("app.js: refreshMapTiles must call applyMapBgColor() after swapping tiles to prevent white-flash on dark tile load")
+		t.Error("map.js: refreshMapTiles must call applyMapBgColor() after swapping tiles to prevent white-flash on dark tile load")
 	}
 }
 
@@ -4505,15 +4506,15 @@ func TestStaticJS_MapPointConfigsShortLabel(t *testing.T) {
 func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMarkerIcon(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildMarkerIcon function not found")
+		t.Fatal("map.js: buildMarkerIcon function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -4528,13 +4529,13 @@ func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
 	}
 
 	if !strings.Contains(fnBody, "MARKER_STYLE_CONFIGS") {
-		t.Error("app.js: buildMarkerIcon must read MARKER_STYLE_CONFIGS for the shape/size data")
+		t.Error("map.js: buildMarkerIcon must read MARKER_STYLE_CONFIGS for the shape/size data")
 	}
 	if !strings.Contains(fnBody, "buildHtml") {
-		t.Error("app.js: buildMarkerIcon must call styleCfg.buildHtml to produce the inner HTML")
+		t.Error("map.js: buildMarkerIcon must call styleCfg.buildHtml to produce the inner HTML")
 	}
 	if !strings.Contains(fnBody, "_markerStyleId") {
-		t.Error("app.js: buildMarkerIcon must use _markerStyleId to select the active style config")
+		t.Error("map.js: buildMarkerIcon must use _markerStyleId to select the active style config")
 	}
 }
 
@@ -4544,14 +4545,14 @@ func TestStaticJS_BuildMarkerIconUsesStyleConfig(t *testing.T) {
 func TestStaticJS_RefreshMapMarkersFunction(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function refreshMapMarkers(") {
-		t.Fatal("app.js: refreshMapMarkers function not found")
+		t.Fatal("map.js: refreshMapMarkers function not found")
 	}
 	fnStart := strings.Index(body, "function refreshMapMarkers(")
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
@@ -4567,13 +4568,13 @@ func TestStaticJS_RefreshMapMarkersFunction(t *testing.T) {
 	}
 	// Must iterate layers and remove Marker instances only.
 	if !strings.Contains(fnBody, "eachLayer") {
-		t.Error("app.js: refreshMapMarkers must use _map.eachLayer to locate existing markers")
+		t.Error("map.js: refreshMapMarkers must use _map.eachLayer to locate existing markers")
 	}
 	if !strings.Contains(fnBody, "L.Marker") {
-		t.Error("app.js: refreshMapMarkers must guard removal with 'instanceof L.Marker'")
+		t.Error("map.js: refreshMapMarkers must guard removal with 'instanceof L.Marker'")
 	}
 	if !strings.Contains(fnBody, "_lastPub") && !strings.Contains(fnBody, "_lastTgt") {
-		t.Error("app.js: refreshMapMarkers must use _lastPub/_lastTgt to recreate markers")
+		t.Error("map.js: refreshMapMarkers must use _lastPub/_lastTgt to recreate markers")
 	}
 }
 
@@ -4650,15 +4651,15 @@ func TestStaticI18n_MarkerStyleKeys(t *testing.T) {
 func TestStaticJS_RenderMapStoresLastGeo(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMap function not found")
+		t.Fatal("map.js: renderMap function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -4673,13 +4674,13 @@ func TestStaticJS_RenderMapStoresLastGeo(t *testing.T) {
 	}
 
 	if !strings.Contains(fnBody, "_lastPub") {
-		t.Error("app.js: renderMap must store the pub argument into _lastPub")
+		t.Error("map.js: renderMap must store the pub argument into _lastPub")
 	}
 	if !strings.Contains(fnBody, "_lastTgt") {
-		t.Error("app.js: renderMap must store the tgt argument into _lastTgt")
+		t.Error("map.js: renderMap must store the tgt argument into _lastTgt")
 	}
 	if !strings.Contains(fnBody, "applyMarkerColorScheme()") {
-		t.Error("app.js: renderMap must call applyMarkerColorScheme() to apply the initial colour scheme")
+		t.Error("map.js: renderMap must call applyMarkerColorScheme() to apply the initial colour scheme")
 	}
 }
 
@@ -4799,17 +4800,17 @@ func TestStaticJS_MarkerColorSchemeConfigsDefined(t *testing.T) {
 func TestStaticJS_MarkerColorSchemeStateVars(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "_markerColorSchemeId") {
-		t.Error("app.js: _markerColorSchemeId state variable not declared")
+		t.Error("map.js: _markerColorSchemeId state variable not declared")
 	}
 	if !strings.Contains(body, "_legendControl") {
-		t.Error("app.js: _legendControl state variable not declared")
+		t.Error("map.js: _legendControl state variable not declared")
 	}
 }
 
@@ -4818,14 +4819,14 @@ func TestStaticJS_MarkerColorSchemeStateVars(t *testing.T) {
 func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "function applyMarkerColorScheme") {
-		t.Error("app.js: function applyMarkerColorScheme not found")
+		t.Error("map.js: function applyMarkerColorScheme not found")
 	}
 
 	// applyMarkerColorScheme must set --mc-origin and --mc-target on the root element.
@@ -4843,10 +4844,10 @@ func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
 			fnBody = body[fnStart:end]
 		}
 		if !strings.Contains(fnBody, "--mc-origin") {
-			t.Error("app.js: applyMarkerColorScheme must set the --mc-origin CSS custom property")
+			t.Error("map.js: applyMarkerColorScheme must set the --mc-origin CSS custom property")
 		}
 		if !strings.Contains(fnBody, "--mc-target") {
-			t.Error("app.js: applyMarkerColorScheme must set the --mc-target CSS custom property")
+			t.Error("map.js: applyMarkerColorScheme must set the --mc-target CSS custom property")
 		}
 	}
 }
@@ -4857,15 +4858,15 @@ func TestStaticJS_ColorSchemeFunctions(t *testing.T) {
 func TestStaticJS_BuildMapLegendUsesBuildHtml(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMapLegend(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildMapLegend function not found")
+		t.Fatal("map.js: buildMapLegend function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -4880,13 +4881,13 @@ func TestStaticJS_BuildMapLegendUsesBuildHtml(t *testing.T) {
 	}
 
 	if !strings.Contains(fnBody, "MARKER_STYLE_CONFIGS") {
-		t.Error("app.js: buildMapLegend must use MARKER_STYLE_CONFIGS to look up the active style")
+		t.Error("map.js: buildMapLegend must use MARKER_STYLE_CONFIGS to look up the active style")
 	}
 	if !strings.Contains(fnBody, "buildHtml") {
-		t.Error("app.js: buildMapLegend must call buildHtml() to produce the legend icon (legend sync)")
+		t.Error("map.js: buildMapLegend must call buildHtml() to produce the legend icon (legend sync)")
 	}
 	if !strings.Contains(fnBody, "geo-legend__marker") {
-		t.Error("app.js: buildMapLegend must apply the .geo-legend__marker CSS class to the icon wrapper")
+		t.Error("map.js: buildMapLegend must apply the .geo-legend__marker CSS class to the icon wrapper")
 	}
 }
 
@@ -4963,15 +4964,15 @@ func TestStaticCSS_McColorTokensInMarkerRules(t *testing.T) {
 func TestStaticJS_BuildMapLegendDataI18nAttribute(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
 
 	fnStart := strings.Index(body, "function buildMapLegend(")
 	if fnStart == -1 {
-		t.Fatal("app.js: buildMapLegend function not found")
+		t.Fatal("map.js: buildMapLegend function not found")
 	}
 	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
@@ -4986,7 +4987,7 @@ func TestStaticJS_BuildMapLegendDataI18nAttribute(t *testing.T) {
 	}
 
 	if !strings.Contains(fnBody, "data-i18n") {
-		t.Error("app.js: buildMapLegend must add a data-i18n attribute to the legend label span so applyLocale() can update it on language change")
+		t.Error("map.js: buildMapLegend must add a data-i18n attribute to the legend label span so applyLocale() can update it on language change")
 	}
 }
 
@@ -5324,15 +5325,15 @@ func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
 func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
 	for _, decl := range []string{"let _connectorStyleId", "let _connectorLayer"} {
-		if !strings.Contains(appJS, decl) {
-			t.Errorf("app.js: module-level declaration %q not found — required by the connector arc system", decl)
+		if !strings.Contains(body, decl) {
+			t.Errorf("map.js: module-level declaration %q not found — required by the connector arc system", decl)
 		}
 	}
 }
@@ -5342,20 +5343,20 @@ func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
 func TestStaticJS_ConnectorLineConfigsDefined(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/config.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /config.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	if !strings.Contains(appJS, "CONNECTOR_LINE_CONFIGS") {
-		t.Fatal("app.js: CONNECTOR_LINE_CONFIGS not found")
+	if !strings.Contains(body, "CONNECTOR_LINE_CONFIGS") {
+		t.Fatal("config.js: CONNECTOR_LINE_CONFIGS not found")
 	}
 	for _, id := range []string{
 		"'tick-xs'",
 	} {
-		if !strings.Contains(appJS, id) {
-			t.Errorf("app.js: CONNECTOR_LINE_CONFIGS is missing entry %s", id)
+		if !strings.Contains(body, id) {
+			t.Errorf("config.js: CONNECTOR_LINE_CONFIGS is missing entry %s", id)
 		}
 	}
 }
@@ -5383,14 +5384,14 @@ func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
 		}
 	}
 
-	// app.js must retain refreshConnectorLayer (thin orchestrator injecting _map).
+	// map.js contains refreshConnectorLayer (private, injecting _map).
 	rec2 := httptest.NewRecorder()
-	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec2.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec2.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec2.Code)
 	}
 	if !strings.Contains(rec2.Body.String(), "function refreshConnectorLayer(") {
-		t.Error("app.js: function refreshConnectorLayer not found — must remain in app.js")
+		t.Error("map.js: function refreshConnectorLayer not found — required by the connector arc system")
 	}
 }
 
@@ -5399,33 +5400,33 @@ func TestStaticJS_ConnectorLineFunctions(t *testing.T) {
 func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderMap(")
+	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMap function not found")
+		t.Fatal("map.js: renderMap function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 4000
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	if !strings.Contains(fnBody, "buildConnectorLayer(") {
-		t.Error("app.js: renderMap must call buildConnectorLayer() to draw the gradient arc connector")
+		t.Error("map.js: renderMap must call buildConnectorLayer() to draw the gradient arc connector")
 	}
 	if strings.Contains(fnBody, "color: '#5b8dee'") {
-		t.Error("app.js: renderMap must not use the hardcoded '#5b8dee' polyline — use buildConnectorLayer() instead")
+		t.Error("map.js: renderMap must not use the hardcoded '#5b8dee' polyline — use buildConnectorLayer() instead")
 	}
 }
 
@@ -5434,12 +5435,12 @@ func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 func TestStaticJS_ConnectorDefaultIsTickXs(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), "_connectorStyleId = 'tick-xs'") {
-		t.Error("app.js: _connectorStyleId must default to 'tick-xs'")
+		t.Error("map.js: _connectorStyleId must default to 'tick-xs'")
 	}
 }
 
@@ -5835,31 +5836,31 @@ func TestStaticJS_ConnectorArcLayerDefined(t *testing.T) {
 func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 
-	// ── app.js must still expose the isMapLoaded() shim ─────────────────────
+	// ── map.js contains the private isMapLoaded() helper ────────────────────
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	mapJS := rec.Body.String()
 
-	if !strings.Contains(appJS, "function isMapLoaded()") {
-		t.Fatal("app.js: isMapLoaded() shim not found")
+	if !strings.Contains(mapJS, "function isMapLoaded()") {
+		t.Fatal("map.js: isMapLoaded() helper not found")
 	}
-	fnStart := strings.Index(appJS, "function isMapLoaded()")
-	fnEnd := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	fnStart := strings.Index(mapJS, "function isMapLoaded()")
+	fnEnd := strings.Index(mapJS[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if fnEnd != -1 {
-		fnBody = appJS[fnStart : fnStart+1+fnEnd]
+		fnBody = mapJS[fnStart : fnStart+1+fnEnd]
 	} else {
 		end := fnStart + 200
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(mapJS) {
+			end = len(mapJS)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = mapJS[fnStart:end]
 	}
 	if !strings.Contains(fnBody, "_map._loaded") {
-		t.Error("app.js: isMapLoaded() shim must check _map._loaded")
+		t.Error("map.js: isMapLoaded() must check _map._loaded")
 	}
 
 	// ── map-connector.js: buildArrowConnectorLayer must guard with isMapLoaded() ──
@@ -5889,24 +5890,24 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 		t.Error("map-connector.js: buildArrowConnectorLayer must guard with isMapLoaded() before calling latLngToLayerPoint()")
 	}
 
-	// ── app.js: refreshConnectorLayer must guard with isMapLoaded() ──────────
-	if !strings.Contains(appJS, "function refreshConnectorLayer(") {
-		t.Fatal("app.js: refreshConnectorLayer not found")
+	// ── map.js: refreshConnectorLayer must guard with isMapLoaded() ──────────
+	if !strings.Contains(mapJS, "function refreshConnectorLayer(") {
+		t.Fatal("map.js: refreshConnectorLayer not found")
 	}
-	rlStart := strings.Index(appJS, "function refreshConnectorLayer(")
-	rlEnd := strings.Index(appJS[rlStart+1:], "\nfunction ")
+	rlStart := strings.Index(mapJS, "function refreshConnectorLayer(")
+	rlEnd := strings.Index(mapJS[rlStart+1:], "\nfunction ")
 	var rlBody string
 	if rlEnd != -1 {
-		rlBody = appJS[rlStart : rlStart+1+rlEnd]
+		rlBody = mapJS[rlStart : rlStart+1+rlEnd]
 	} else {
 		end := rlStart + 400
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(mapJS) {
+			end = len(mapJS)
 		}
-		rlBody = appJS[rlStart:end]
+		rlBody = mapJS[rlStart:end]
 	}
 	if !strings.Contains(rlBody, "isMapLoaded()") {
-		t.Error("app.js: refreshConnectorLayer must guard with isMapLoaded() to prevent premature map operations")
+		t.Error("map.js: refreshConnectorLayer must guard with isMapLoaded() to prevent premature map operations")
 	}
 }
 
@@ -5916,26 +5917,26 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 	h := newHandler(t, diag.NewDispatcher(nil))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /app.js: want 200, got %d", rec.Code)
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
 	}
-	appJS := rec.Body.String()
+	body := rec.Body.String()
 
-	fnStart := strings.Index(appJS, "function renderMap(")
+	fnStart := strings.Index(body, "function renderMap(")
 	if fnStart == -1 {
-		t.Fatal("app.js: renderMap function not found")
+		t.Fatal("map.js: renderMap function not found")
 	}
-	nextFn := strings.Index(appJS[fnStart+1:], "\nfunction ")
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
 	var fnBody string
 	if nextFn != -1 {
-		fnBody = appJS[fnStart : fnStart+1+nextFn]
+		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
 		end := fnStart + 4000
-		if end > len(appJS) {
-			end = len(appJS)
+		if end > len(body) {
+			end = len(body)
 		}
-		fnBody = appJS[fnStart:end]
+		fnBody = body[fnStart:end]
 	}
 
 	// Find relative positions: setView/fitBounds must appear before buildConnectorLayer.
@@ -5944,10 +5945,10 @@ func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 	connectorIdx := strings.Index(fnBody, "buildConnectorLayer(")
 
 	if setViewIdx == -1 && fitBoundsIdx == -1 {
-		t.Fatal("app.js: renderMap must call setView() or fitBounds() to initialise the map")
+		t.Fatal("map.js: renderMap must call setView() or fitBounds() to initialise the map")
 	}
 	if connectorIdx == -1 {
-		t.Fatal("app.js: renderMap must call buildConnectorLayer()")
+		t.Fatal("map.js: renderMap must call buildConnectorLayer()")
 	}
 
 	// At least one viewport-setting call must precede buildConnectorLayer.
@@ -5956,7 +5957,7 @@ func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 		viewportIdx = fitBoundsIdx
 	}
 	if viewportIdx >= connectorIdx {
-		t.Error("app.js: renderMap must call setView/fitBounds BEFORE buildConnectorLayer() " +
+		t.Error("map.js: renderMap must call setView/fitBounds BEFORE buildConnectorLayer() " +
 			"so the Leaflet map is loaded before latLngToLayerPoint() is invoked")
 	}
 }
@@ -6740,6 +6741,26 @@ func TestStaticJS_BuildRequestFunction(t *testing.T) {
 	for _, priv := range []string{"buildWebOpts", "buildSMTPOpts", "buildFTPOpts", "buildSFTPOpts", "parseTimeoutSec"} {
 		if strings.Contains(exportBlock, priv) {
 			t.Errorf("api-builder.js: %s must remain private (not exported in PathProbe.ApiBuilder)", priv)
+		}
+	}
+}
+
+// TestStaticHandler_ServesMapJS verifies that the static file server handles
+// GET /map.js with HTTP 200 and returns the module that exposes PathProbe.Map.
+func TestStaticHandler_ServesMapJS(t *testing.T) {
+	h := newHandler(t, diag.NewDispatcher(nil))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/map.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /map.js: want 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "PathProbe.Map") {
+		t.Error("/map.js: response must export PathProbe.Map")
+	}
+	for _, fn := range []string{"renderMap", "syncMapTileVariantToTheme", "setMapTileVariant", "refreshMapMarkers"} {
+		if !strings.Contains(body, fn) {
+			t.Errorf("/map.js: PathProbe.Map must expose %q", fn)
 		}
 	}
 }
