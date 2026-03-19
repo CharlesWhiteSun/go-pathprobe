@@ -44,6 +44,25 @@ func diagBody(t *testing.T, req server.DiagRequest) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
+// fetchBody sends GET path to h, asserts HTTP 200, and returns the body string.
+// It calls t.Fatal on any failure so callers can focus on assertions only.
+func fetchBody(t *testing.T, h http.Handler, path string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s: want 200, got %d", path, rec.Code)
+	}
+	return rec.Body.String()
+}
+
+// newStaticHandler is a convenience wrapper: creates a handler wired with an
+// empty dispatcher, for use in static-asset tests only.
+func newStaticHandler(t *testing.T) http.Handler {
+	t.Helper()
+	return newHandler(t, diag.NewDispatcher(nil))
+}
+
 // ---- GET /api/health ----------------------------------------------------
 
 func TestHealthEndpoint_ReturnsOKWithVersion(t *testing.T) {
