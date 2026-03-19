@@ -76,14 +76,15 @@ function initLocale() {
   }
 }
 
-// ── History re-render callback (locale.js bridge) ───────────────────────────
-// locale.js calls PathProbe.History.rerenderLast() after a locale change so
-// the history list updates to the new language.
-// PathProbe.Renderer.rerenderLast() is registered by renderer.js directly.
+// ── History namespace registration ──────────────────────────────────────────
+// locale.js 在語言切換後透過 PathProbe.History.rerenderLast() 重繪歷史清單。
+// api-client.js 在 SSE result 事件後透過 PathProbe.History.loadHistory() 刷新清單。
+// PathProbe.Renderer.rerenderLast() 由 renderer.js 直接注冊。
 {
   const _ns = window.PathProbe || {};
   _ns.History = _ns.History || {};
   _ns.History.rerenderLast = () => { if (_lastHistoryItems) renderHistoryList(_lastHistoryItems); };
+  _ns.History.loadHistory  = () => loadHistory();
   window.PathProbe = _ns;
 }
 
@@ -141,11 +142,29 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.PathProbe && window.PathProbe.Form) {
     window.PathProbe.Form.init();
   }
-  fetchVersion();   // async version badge
+  fetchVersion();   // async version badge — delegates to api-client.js
   loadHistory();    // populate history panel
   initTheme();      // apply saved theme (before locale so tokens are ready)
   initLocale();     // apply saved locale (must run after DOM is ready)
 });
+
+// ── api-client.js shims ──────────────────────────────────────────────────
+// fetchVersion 和 showError 在此保留薄層 shim，維持 DOMContentLoaded 與
+// loadHistoryEntry 中的呼叫點不變，並將實際邏輯委派給 api-client.js。
+
+/** 取得版本號碼 — 委派給 api-client.js。 */
+function fetchVersion() {
+  if (window.PathProbe && window.PathProbe.ApiClient) {
+    window.PathProbe.ApiClient.fetchVersion();
+  }
+}
+
+/** 顯示錯誤橫幅 — 委派給 api-client.js。 */
+function showError(msg) {
+  if (window.PathProbe && window.PathProbe.ApiClient) {
+    window.PathProbe.ApiClient.showError(msg);
+  }
+}
 
 // ── Form shims — delegate to PathProbe.Form (form.js) ───────────────────
 // form.js is loaded before app.js (see index.html) and registers all
@@ -184,163 +203,6 @@ function buildRequest() {
   return (window.PathProbe && window.PathProbe.ApiBuilder)
     ? window.PathProbe.ApiBuilder.buildRequest()
     : { target: '', options: {} };
-}
-
-// ── API calls ─────────────────────────────────────────────────────────────
-async function runDiag() {
-  const btn        = document.getElementById('run-btn');
-  const errorEl    = document.getElementById('error-banner');
-  const resultEl   = document.getElementById('results');
-  const progressEl = document.getElementById('progress-log');
-
-  btn.disabled   = true;
-  btn.innerHTML  = getRunningHTML();
-  errorEl.hidden = true;
-  resultEl.hidden = true;
-  if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
-
-  try {
-    const req  = buildRequest();
-    if (req === null) {
-      // Validation failed inside buildRequest; error already surfaced via showError.
-      if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
-      return;
-    }
-    const resp = await fetch('/api/diag/stream', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(req),
-    });
-
-    // Non-2xx before SSE headers could be a plain JSON error (e.g. during
-    // reverse-proxy validation). Fall back to reading JSON body.
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({ error: 'HTTP ' + resp.status }));
-      showError(data.error || 'Server returned HTTP ' + resp.status);
-      return;
-    }
-
-    // Parse the SSE stream via ReadableStream — no EventSource because the
-    // browser's EventSource API does not support POST requests.
-    const reader  = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let   buffer  = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE messages are separated by blank lines (\n\n).
-      let boundary;
-      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-        const raw = buffer.slice(0, boundary);
-        buffer    = buffer.slice(boundary + 2);
-        handleSSEMessage(raw, progressEl, resultEl);
-      }
-    }
-    // Flush any remaining content in the buffer.
-    if (buffer.trim()) handleSSEMessage(buffer, progressEl, resultEl);
-
-  } catch (err) {
-    // Hide and clear the progress log so stale partial output does not linger
-    // below the error banner after a network-level failure.
-    if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
-    showError('Request failed: ' + err.message);
-  } finally {
-    btn.disabled  = false;
-    btn.textContent = t('btn-run');
-  }
-}
-
-/** Parse a single SSE message block and dispatch to the appropriate handler. */
-function handleSSEMessage(raw, progressEl, resultEl) {
-  let evtName = '', dataStr = '';
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('event: '))     evtName = line.slice(7).trim();
-    else if (line.startsWith('data: ')) dataStr = line.slice(6);
-  }
-  if (!dataStr) return;
-
-  let payload;
-  try { payload = JSON.parse(dataStr); } catch { return; }
-
-  if (evtName === 'progress') {
-    appendProgress(progressEl, payload);
-  } else if (evtName === 'result') {
-    if (progressEl) progressEl.hidden = true;
-    renderReport(payload);
-    // Reveal #results BEFORE renderMap so the #geo-map container has a
-    // non-zero layout when Leaflet initialises (prevents blank tile areas).
-    resultEl.hidden = false;
-    renderMap(payload.PublicGeo, payload.TargetGeo);
-    loadHistory();
-    resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else if (evtName === 'error') {
-    // Clear and hide the progress log so no partial output remains visible.
-    if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
-    showError(payload.error || 'diagnostic error');
-  }
-}
-
-/** Append a single progress event entry to the progress log. */
-function appendProgress(el, ev) {
-  if (!el) return;
-  const entry = document.createElement('div');
-  entry.className = 'progress-entry';
-  const stageSpan = document.createElement('span');
-  stageSpan.className = 'stage';
-  stageSpan.textContent = ev.stage || '';
-  const msgSpan = document.createElement('span');
-  msgSpan.className = 'msg';
-  msgSpan.textContent = ev.message || '';
-  entry.appendChild(stageSpan);
-  entry.appendChild(msgSpan);
-  el.appendChild(entry);
-  el.scrollTop = el.scrollHeight;
-}
-
-async function fetchVersion() {
-  try {
-    const r = await fetch('/api/health');
-    if (!r.ok) return;
-    const { version } = await r.json();
-    const el = document.getElementById('version-badge');
-    if (el && version) el.textContent = version;
-  } catch (_) { /* non-fatal — version badge stays empty */ }
-}
-
-function showError(msg) {
-  const banner = document.getElementById('error-banner');
-  const textEl = document.getElementById('error-text');
-  const friendly = localizeError(msg);
-  if (textEl) {
-    textEl.textContent = friendly;
-  } else {
-    // Fallback for layouts where error-text span is absent.
-    banner.textContent = '\u26a0  ' + friendly;
-  }
-  banner.hidden = false;
-}
-
-/**
- * Map a raw server error string (possibly English Go internals) to a
- * localised, user-friendly description using i18n keys.
- * Preserves the diagnostic-error prefix for unrecognised messages.
- */
-function localizeError(msg) {
-  if (!msg) return t('err-unknown');
-  const lower = msg.toLowerCase();
-  if (lower.includes('timed out') || lower.includes('deadline exceeded')) {
-    return t('err-timeout');
-  }
-  if (lower.includes('no runner registered') || lower.includes('no handler registered')) {
-    return t('err-no-runner');
-  }
-  // Strip the "diagnostic error: " prefix for cleaner display when no
-  // specific i18n key matches.
-  return msg.replace(/^diagnostic error:\s*/i, '');
 }
 
 // ── Report rendering — delegates to renderer.js ──────────────────────────
