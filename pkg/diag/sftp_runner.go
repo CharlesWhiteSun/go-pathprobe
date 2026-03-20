@@ -92,12 +92,14 @@ func (r *SFTPRunner) Run(ctx context.Context, req Request) error {
 	if res.Algorithms.HostKey != "" {
 		summary += " (" + res.Algorithms.HostKey + ")"
 	}
-	req.Report.AddProto(ProtoResult{
-		Protocol: "sftp",
-		Host:     host,
-		Port:     port,
-		OK:       true,
-		Summary:  summary,
-	})
+	if req.Report != nil {
+		req.Report.AddProto(ProtoResult{
+			Protocol: "sftp",
+			Host:     host,
+			Port:     port,
+			OK:       true,
+			Summary:  summary,
+		})
+	}
 	return nil
 }

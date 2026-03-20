@@ -57,11 +57,13 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	}
 
 	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
-	req.Report.AddProto(ProtoResult{
-		Protocol: "http",
-		Host:     req.Options.Net.Host,
-		OK:       res.StatusCode >= 200 && res.StatusCode < 400,
-		Summary:  summary,
-	})
+	if req.Report != nil {
+		req.Report.AddProto(ProtoResult{
+			Protocol: "http",
+			Host:     req.Options.Net.Host,
+			OK:       res.StatusCode >= 200 && res.StatusCode < 400,
+			Summary:  summary,
+		})
+	}
 	return nil
 }

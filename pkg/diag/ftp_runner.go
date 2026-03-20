@@ -95,12 +95,14 @@ func (r *FTPRunner) Run(ctx context.Context, req Request) error {
 	} else if res.UsedImplicitTLS {
 		summary += " [Implicit TLS]"
 	}
-	req.Report.AddProto(ProtoResult{
-		Protocol: "ftp",
-		Host:     host,
-		Port:     port,
-		OK:       res.LoginAccepted || res.Banner != "",
-		Summary:  summary,
-	})
+	if req.Report != nil {
+		req.Report.AddProto(ProtoResult{
+			Protocol: "ftp",
+			Host:     host,
+			Port:     port,
+			OK:       res.LoginAccepted || res.Banner != "",
+			Summary:  summary,
+		})
+	}
 	return nil
 }

@@ -110,13 +110,15 @@ func (r *SMTPRunner) Run(ctx context.Context, req Request) error {
 		if res.UsedStartTLS {
 			summary += " [STARTTLS]"
 		}
-		req.Report.AddProto(ProtoResult{
-			Protocol: "smtp",
-			Host:     host,
-			Port:     port,
-			OK:       true,
-			Summary:  summary,
-		})
+		if req.Report != nil {
+			req.Report.AddProto(ProtoResult{
+				Protocol: "smtp",
+				Host:     host,
+				Port:     port,
+				OK:       true,
+				Summary:  summary,
+			})
+		}
 	}
 	return nil
 }

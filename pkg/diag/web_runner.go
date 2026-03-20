@@ -83,7 +83,9 @@ func (r *WebRunner) Run(ctx context.Context, req Request) error {
 		}
 		req.Emitf("web", "Public IP: %s (source: %s)", ipRes.IP, ipRes.Source)
 		r.logger.Info("public ip fetched", "ip", ipRes.IP, "source", ipRes.Source, "rtt", ipRes.RTT)
-		req.Report.SetPublicIP(ipRes.IP)
+		if req.Report != nil {
+			req.Report.SetPublicIP(ipRes.IP)
+		}
 	}
 
 	if runDNS {

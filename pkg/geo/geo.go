@@ -26,6 +26,16 @@ type GeoInfo struct {
 	HasLocation bool
 }
 
+// IPLocator is the minimal read-only interface required by consumers that only
+// need to resolve geographic information for IP addresses.
+// *GeoLite2Locator, *CountryLocator, and NoopLocator all satisfy this interface.
+type IPLocator interface {
+	// LocateIP returns GeoInfo for the given IP string.
+	// Implementations return empty GeoInfo (not an error) when the IP is not
+	// found in the database.
+	LocateIP(ip string) (GeoInfo, error)
+}
+
 // Locator resolves geographic information for IP addresses.
 type Locator interface {
 	// LocateIP returns GeoInfo for the given IP string.

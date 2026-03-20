@@ -55,3 +55,24 @@ func TestOpenInvalidASNPath(t *testing.T) {
 		t.Fatal("expected error for non-existent ASN DB path")
 	}
 }
+
+// Compile-time assertions: concrete types satisfy the narrow IPLocator
+// interface without requiring the full Locator (which includes Close).
+var (
+	_ geo.IPLocator = geo.NoopLocator{}
+	_ geo.IPLocator = (*geo.GeoLite2Locator)(nil)
+	_ geo.IPLocator = (*geo.CountryLocator)(nil)
+)
+
+// TestIPLocatorContract verifies that NoopLocator satisfies IPLocator at
+// runtime and returns the expected zero-value GeoInfo.
+func TestIPLocatorContract(t *testing.T) {
+	var loc geo.IPLocator = geo.NoopLocator{}
+	info, err := loc.LocateIP("8.8.8.8")
+	if err != nil {
+		t.Fatalf("unexpected error from NoopLocator.LocateIP: %v", err)
+	}
+	if info != (geo.GeoInfo{}) {
+		t.Errorf("expected zero GeoInfo, got %+v", info)
+	}
+}

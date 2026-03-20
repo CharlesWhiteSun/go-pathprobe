@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/geo"
 	"go-pathprobe/pkg/store"
 )
@@ -44,7 +43,7 @@ type Server struct {
 // The caller owns locator's lifecycle and must close it after Shutdown returns.
 // st may be nil, in which case the history endpoints return empty results and
 // diagnostic results are not persisted.
-func New(cfg Config, dispatcher *diag.Dispatcher, locator geo.Locator, st store.Store, logger *slog.Logger) *Server {
+func New(cfg Config, dispatcher Dispatcher, locator geo.IPLocator, st store.Store, logger *slog.Logger) *Server {
 	if st == nil {
 		st = store.NewMemoryStore(0)
 	}

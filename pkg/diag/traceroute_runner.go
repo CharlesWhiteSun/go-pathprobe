@@ -90,6 +90,8 @@ func (r *TracerouteRunner) Run(ctx context.Context, req Request) error {
 		)
 	}
 
-	req.Report.SetRoute(&result)
+	if req.Report != nil {
+		req.Report.SetRoute(&result)
+	}
 	return nil
 }

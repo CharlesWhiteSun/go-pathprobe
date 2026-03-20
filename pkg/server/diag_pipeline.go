@@ -26,8 +26,8 @@ func (e *pipelineError) Error() string { return e.msg }
 // pipeline.  Both DiagHandler and StreamDiagHandler embed this struct to avoid
 // duplicating request validation, dispatch, and report-build logic.
 type diagPipeline struct {
-	dispatcher *diag.Dispatcher
-	locator    geo.Locator
+	dispatcher Dispatcher
+	locator    geo.IPLocator
 	store      store.Store
 	logger     *slog.Logger
 }
@@ -92,7 +92,7 @@ func (p *diagPipeline) runDiag(parentCtx context.Context, req DiagRequest, hook 
 
 // resolveLocator returns the pipeline's configured locator, or a NoopLocator
 // when the caller has opted out of geo annotation for this request.
-func (p *diagPipeline) resolveLocator(disableGeo bool) geo.Locator {
+func (p *diagPipeline) resolveLocator(disableGeo bool) geo.IPLocator {
 	if disableGeo {
 		return geo.NoopLocator{}
 	}

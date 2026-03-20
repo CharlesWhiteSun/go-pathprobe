@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"go-pathprobe/pkg/netprobe"
 )
 
 var (
@@ -16,13 +18,23 @@ type Runner interface {
 	Run(ctx context.Context, req Request) error
 }
 
+// ReportWriter is the minimal write-only interface for accumulating structured
+// diagnostic results.  *DiagReport satisfies this interface.
+// Runners accept a ReportWriter so they can be tested with any implementation.
+type ReportWriter interface {
+	AddProto(ProtoResult)
+	AddPorts([]netprobe.PortProbeResult)
+	SetRoute(*netprobe.RouteResult)
+	SetPublicIP(string)
+}
+
 // Request encapsulates the diagnostic target and options.
 type Request struct {
 	Target  Target
 	Options Options
 	// Report is an optional accumulator for structured results.
-	// Runners write to it when non-nil; a nil pointer disables reporting.
-	Report *DiagReport
+	// Runners write to it when non-nil; a nil interface disables reporting.
+	Report ReportWriter
 	// Hook is an optional callback for real-time progress updates.
 	// A nil Hook silently disables all progress emissions.
 	Hook ProgressHook

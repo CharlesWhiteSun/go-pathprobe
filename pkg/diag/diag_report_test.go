@@ -93,3 +93,22 @@ func TestSetRouteOverwrite(t *testing.T) {
 		t.Fatalf("expected 2 hops after overwrite, got %d", len(r.Route.Hops))
 	}
 }
+
+// Compile-time assertion: *DiagReport satisfies ReportWriter.
+var _ ReportWriter = (*DiagReport)(nil)
+
+// TestReportWriter_NilInterfaceGuard verifies that runners guarding
+// "if req.Report != nil" correctly skip calls when Report is a nil interface
+// (not a nil *DiagReport wrapped in an interface).
+func TestReportWriter_NilInterfaceGuard(t *testing.T) {
+	var rw ReportWriter // nil interface — simulates an unset Report field
+
+	if rw != nil {
+		t.Fatal("expected nil interface")
+	}
+
+	// Guard pattern used by all runners — must not panic.
+	if rw != nil {
+		rw.AddProto(ProtoResult{Protocol: "test"})
+	}
+}

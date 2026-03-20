@@ -1,6 +1,6 @@
 // Package report converts DiagReport data into table, JSON, and HTML outputs.
 // Geo annotation is performed by the AnnotatedReport layer which wraps a
-// *diag.DiagReport with geo.Locator results.
+// *diag.DiagReport with geo.IPLocator results.
 package report
 
 import (
@@ -122,7 +122,7 @@ func toGeoAnnotation(info geo.GeoInfo) GeoAnnotation {
 
 // toHopEntry converts a single netprobe.HopResult into a geo-annotated HopEntry.
 // If loc is nil or hop.IP is empty (timed-out hop), geo fields are left at zero values.
-func toHopEntry(hop netprobe.HopResult, loc geo.Locator) HopEntry {
+func toHopEntry(hop netprobe.HopResult, loc geo.IPLocator) HopEntry {
 	entry := HopEntry{
 		TTL:      hop.TTL,
 		IP:       hop.IP,
@@ -157,9 +157,9 @@ func resolveTargetIP(host string) string {
 }
 
 // Build converts a DiagReport into an AnnotatedReport using the provided
-// geo.Locator for IP annotation.  A nil locator or NoopLocator leaves geo
+// geo.IPLocator for IP annotation.  A nil locator or NoopLocator leaves geo
 // fields empty.
-func Build(ctx context.Context, dr *diag.DiagReport, loc geo.Locator) (*AnnotatedReport, error) {
+func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*AnnotatedReport, error) {
 	ar := &AnnotatedReport{
 		Target:      string(dr.Target),
 		Host:        dr.Host,
