@@ -39,14 +39,42 @@ type Server struct {
 	logger  *slog.Logger
 }
 
+// serverOptions holds optional configuration applied to a Server before the
+// first HTTP request is handled.
+type serverOptions struct {
+	buildOpts OptionsBuilder
+}
+
+// ServerOption is a functional option for configuring a Server.
+// Apply it via New's variadic opts parameter.
+type ServerOption func(*serverOptions)
+
+// WithOptionsBuilder sets a custom OptionsBuilder on the diagnostic pipeline.
+// When not provided, the built-in buildOptions function is used as the default.
+// Protocol plugins supply an OptionsBuilder via pkg/app.BuildOptionsFunc so
+// that adding a new protocol requires no changes to this package.
+func WithOptionsBuilder(b OptionsBuilder) ServerOption {
+	return func(so *serverOptions) {
+		so.buildOpts = b
+	}
+}
+
 // New builds a Server with all API routes registered.
 // The caller owns locator's lifecycle and must close it after Shutdown returns.
 // st may be nil, in which case the history endpoints return empty results and
 // diagnostic results are not persisted.
-func New(cfg Config, dispatcher Dispatcher, locator geo.IPLocator, st store.Store, logger *slog.Logger) *Server {
+// Optional ServerOptions (e.g. WithOptionsBuilder) may be passed to customise
+// pipeline behaviour without changing the call sites of existing tests.
+func New(cfg Config, dispatcher Dispatcher, locator geo.IPLocator, st store.Store, logger *slog.Logger, opts ...ServerOption) *Server {
 	if st == nil {
 		st = store.NewMemoryStore(0)
 	}
+
+	so := &serverOptions{}
+	for _, opt := range opts {
+		opt(so)
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/health", &HealthHandler{logger: logger})
 	pipeline := diagPipeline{
@@ -54,6 +82,7 @@ func New(cfg Config, dispatcher Dispatcher, locator geo.IPLocator, st store.Stor
 		locator:    locator,
 		store:      st,
 		logger:     logger,
+		buildOpts:  so.buildOpts,
 	}
 	mux.Handle("POST /api/diag", &DiagHandler{pipeline: pipeline})
 	mux.Handle("POST /api/diag/stream", &StreamDiagHandler{pipeline: pipeline})

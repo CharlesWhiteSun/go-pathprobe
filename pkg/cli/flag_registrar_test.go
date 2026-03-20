@@ -19,8 +19,9 @@ func dummyCmd() *cobra.Command {
 }
 
 // TestTargetFlagRegistrars_ContainsExpectedTargets verifies that the four
-// protocol targets that carry extra CLI flags are all present in the map.
+// protocol targets that carry extra CLI flags are all present in DefaultRegistrars.
 func TestTargetFlagRegistrars_ContainsExpectedTargets(t *testing.T) {
+	registrars := DefaultRegistrars()
 	withRegistrar := []diag.Target{
 		diag.TargetWeb,
 		diag.TargetSMTP,
@@ -28,32 +29,33 @@ func TestTargetFlagRegistrars_ContainsExpectedTargets(t *testing.T) {
 		diag.TargetSFTP,
 	}
 	for _, target := range withRegistrar {
-		if _, ok := targetFlagRegistrars[target]; !ok {
-			t.Errorf("targetFlagRegistrars missing entry for %s", target)
+		if _, ok := registrars[target]; !ok {
+			t.Errorf("DefaultRegistrars() missing entry for %s", target)
 		}
 	}
 }
 
 // TestIMAPAndPOPHaveNoRegistrar verifies that IMAP and POP are intentionally
-// absent from the registrar map (they use only shared network flags).
+// absent from DefaultRegistrars (they use only shared network flags).
 func TestIMAPAndPOPHaveNoRegistrar(t *testing.T) {
+	registrars := DefaultRegistrars()
 	for _, target := range []diag.Target{diag.TargetIMAP, diag.TargetPOP} {
-		if _, ok := targetFlagRegistrars[target]; ok {
+		if _, ok := registrars[target]; ok {
 			t.Errorf("unexpected registrar for %s; only shared network flags should apply", target)
 		}
 	}
 }
 
-// TestRegisterWebFlags_RegistersExpectedFlags verifies that registerWebFlags
+// TestRegisterWebFlags_RegistersExpectedFlags verifies that RegisterWebFlags
 // attaches the three web-specific flags to the command.
 func TestRegisterWebFlags_RegistersExpectedFlags(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	registerWebFlags(cmd, opts)
+	RegisterWebFlags(cmd, opts)
 
 	for _, name := range []string{"dns-domain", "dns-type", "http-url"} {
 		if cmd.Flags().Lookup(name) == nil {
-			t.Errorf("registerWebFlags did not register flag --%s", name)
+			t.Errorf("RegisterWebFlags did not register flag --%s", name)
 		}
 	}
 }
@@ -63,10 +65,10 @@ func TestRegisterWebFlags_RegistersExpectedFlags(t *testing.T) {
 func TestRegisterWebFlags_SetsDefaultDomains(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	registerWebFlags(cmd, opts)
+	RegisterWebFlags(cmd, opts)
 
 	if len(opts.Web.Domains) == 0 {
-		t.Error("registerWebFlags must set a default domain before flag registration")
+		t.Error("RegisterWebFlags must set a default domain before flag registration")
 	}
 }
 
@@ -75,10 +77,10 @@ func TestRegisterWebFlags_SetsDefaultDomains(t *testing.T) {
 func TestRegisterWebFlags_PreparerParsesRecordTypes(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	preparer := registerWebFlags(cmd, opts)
+	preparer := RegisterWebFlags(cmd, opts)
 
 	if preparer == nil {
-		t.Fatal("registerWebFlags must return a non-nil OptionsPreparer")
+		t.Fatal("RegisterWebFlags must return a non-nil OptionsPreparer")
 	}
 	if err := preparer(opts); err != nil {
 		t.Fatalf("preparer returned unexpected error: %v", err)
@@ -93,7 +95,7 @@ func TestRegisterWebFlags_PreparerParsesRecordTypes(t *testing.T) {
 func TestRegisterWebFlags_PreparerRejectsInvalidType(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	preparer := registerWebFlags(cmd, opts)
+	preparer := RegisterWebFlags(cmd, opts)
 
 	// Simulate user passing --dns-type=INVALID by overwriting the flag value.
 	if err := cmd.Flags().Set("dns-type", "NOTATYPE"); err != nil {
@@ -108,10 +110,10 @@ func TestRegisterWebFlags_PreparerRejectsInvalidType(t *testing.T) {
 func TestRegisterSMTPFlags_RegistersExpectedFlags(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	preparer := registerSMTPFlags(cmd, opts)
+	preparer := RegisterSMTPFlags(cmd, opts)
 
 	if preparer != nil {
-		t.Error("registerSMTPFlags should return nil preparer (flags bind directly)")
+		t.Error("RegisterSMTPFlags should return nil preparer (flags bind directly)")
 	}
 	for _, name := range []string{
 		"smtp-domain", "smtp-user", "smtp-pass", "smtp-from", "smtp-to",
@@ -127,10 +129,10 @@ func TestRegisterSMTPFlags_RegistersExpectedFlags(t *testing.T) {
 func TestRegisterFTPFlags_RegistersExpectedFlags(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	preparer := registerFTPFlags(cmd, opts)
+	preparer := RegisterFTPFlags(cmd, opts)
 
 	if preparer != nil {
-		t.Error("registerFTPFlags should return nil preparer")
+		t.Error("RegisterFTPFlags should return nil preparer")
 	}
 	for _, name := range []string{"ftp-user", "ftp-pass", "ftp-ssl", "ftp-auth-tls", "ftp-list"} {
 		if cmd.Flags().Lookup(name) == nil {
@@ -143,10 +145,10 @@ func TestRegisterFTPFlags_RegistersExpectedFlags(t *testing.T) {
 func TestRegisterSFTPFlags_RegistersExpectedFlags(t *testing.T) {
 	cmd := dummyCmd()
 	opts := &diag.Options{}
-	preparer := registerSFTPFlags(cmd, opts)
+	preparer := RegisterSFTPFlags(cmd, opts)
 
 	if preparer != nil {
-		t.Error("registerSFTPFlags should return nil preparer")
+		t.Error("RegisterSFTPFlags should return nil preparer")
 	}
 	for _, name := range []string{"sftp-user", "sftp-pass", "sftp-ls"} {
 		if cmd.Flags().Lookup(name) == nil {
@@ -166,7 +168,7 @@ func TestNewTargetCommand_NoRegistrarTargetsHaveOnlyNetFlags(t *testing.T) {
 	globalOpts := diag.GlobalOptions{MTRCount: diag.DefaultMTRCount, Timeout: 5e9}
 	for _, target := range []diag.Target{diag.TargetIMAP, diag.TargetPOP} {
 		silentLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-		cmd := newTargetCommand(target, &globalOpts, dispatcher, silentLogger)
+		cmd := newTargetCommand(target, &globalOpts, dispatcher, DefaultRegistrars(), silentLogger)
 		if cmd.Flags().Lookup("target-host") == nil {
 			t.Errorf("%s command missing --target-host flag", target)
 		}

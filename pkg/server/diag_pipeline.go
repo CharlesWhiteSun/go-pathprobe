@@ -30,6 +30,10 @@ type diagPipeline struct {
 	locator    geo.IPLocator
 	store      store.Store
 	logger     *slog.Logger
+	// buildOpts overrides the default buildOptions function when set by a
+	// protocol plugin via server.WithOptionsBuilder.  nil falls back to the
+	// package-local buildOptions implementation.
+	buildOpts OptionsBuilder
 }
 
 // runDiag validates the request, dispatches the diagnostic, builds and stores
@@ -51,7 +55,13 @@ func (p *diagPipeline) runDiag(parentCtx context.Context, req DiagRequest, hook 
 	}
 
 	// 2. Options parsing and global validation.
-	opts, err := buildOptions(req.Options)
+	var opts diag.Options
+	var err error
+	if p.buildOpts != nil {
+		opts, err = p.buildOpts(target, req.Options)
+	} else {
+		opts, err = buildOptions(req.Options)
+	}
 	if err != nil {
 		return nil, &pipelineError{code: http.StatusBadRequest, msg: "invalid options: " + err.Error()}
 	}

@@ -8,10 +8,18 @@ import (
 
 	"go-pathprobe/pkg/diag"
 	"go-pathprobe/pkg/logging"
+	"go-pathprobe/pkg/server"
 )
 
 // NewRootCommand constructs the CLI root with subcommands for diagnostics.
-func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *slog.LevelVar) *cobra.Command {
+//
+// registrars maps each diagnostic target to its protocol-specific FlagRegistrar.
+// Pass DefaultRegistrars() for the built-in defaults, or use
+// app.BuildRegistrars(plugins) when protocol plugins are in use.
+//
+// optBuilder is an optional OptionsBuilder forwarded to the HTTP serve command.
+// Pass nil to use the server's built-in option mapping.
+func NewRootCommand(dispatcher *diag.Dispatcher, registrars map[diag.Target]FlagRegistrar, optBuilder server.OptionsBuilder, logger *slog.Logger, levelVar *slog.LevelVar) *cobra.Command {
 	opts := diag.GlobalOptions{MTRCount: diag.DefaultMTRCount, Timeout: 5 * time.Second, LogLevel: slog.LevelInfo}
 	var logLevelFlag string
 
@@ -39,8 +47,8 @@ func NewRootCommand(dispatcher *diag.Dispatcher, logger *slog.Logger, levelVar *
 	rootCmd.PersistentFlags().StringVar(&opts.GeoDBCity, "geo-db-city", "", "path to GeoLite2-City.mmdb for location annotation")
 	rootCmd.PersistentFlags().StringVar(&opts.GeoDBASN, "geo-db-asn", "", "path to GeoLite2-ASN.mmdb for ASN annotation")
 
-	serveCmd := newServeCommand(dispatcher, &opts, logger, platformOpen)
-	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, logger))
+	serveCmd := newServeCommand(dispatcher, &opts, optBuilder, logger, platformOpen)
+	rootCmd.AddCommand(newDiagCommand(&opts, dispatcher, registrars, logger))
 	rootCmd.AddCommand(newVersionCommand())
 	rootCmd.AddCommand(serveCmd)
 

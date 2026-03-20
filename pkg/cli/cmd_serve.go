@@ -21,10 +21,13 @@ import (
 // HTTP REST API server. It reuses the persistent --geo-db-city / --geo-db-asn
 // flags already defined on the root command via opts.
 //
+// optBuilder is an optional server.OptionsBuilder derived from protocol plugins.
+// When nil, the server uses its built-in option mapping (pkg/server.buildOptions).
+//
 // opener is called with the server URL just before srv.Start() so the browser
 // opens while the server is warming up. Pass platformOpen for production;
 // tests may inject a no-op or recording function.
-func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, logger *slog.Logger, opener func(string) error) *cobra.Command {
+func newServeCommand(dispatcher *diag.Dispatcher, opts *diag.GlobalOptions, optBuilder server.OptionsBuilder, logger *slog.Logger, opener func(string) error) *cobra.Command {
 	cfg := server.DefaultConfig()
 	var openBrowser bool
 
@@ -49,7 +52,11 @@ The server shuts down gracefully on SIGINT (Ctrl-C).`,
 			defer locator.Close()
 
 			st := store.NewMemoryStore(store.DefaultMaxHistory)
-			srv := server.New(cfg, dispatcher, locator, st, logger)
+			var srvOpts []server.ServerOption
+			if optBuilder != nil {
+				srvOpts = append(srvOpts, server.WithOptionsBuilder(optBuilder))
+			}
+			srv := server.New(cfg, dispatcher, locator, st, logger, srvOpts...)
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer stop()
 

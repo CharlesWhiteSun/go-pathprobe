@@ -40,7 +40,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: runner})
 
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	if _, err := executeCommand(cmd, "diag", "web", "--json", "--mtr-count", "3", "--log-level", "debug", "--timeout", "750ms", "--insecure", "--target-host", "example.com", "--port", "443", "--dns-domain", "example.com", "--dns-type", "A,MX", "--http-url", "https://example.com"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -82,7 +82,7 @@ func TestDiagWebRunsRegisteredRunner(t *testing.T) {
 func TestInvalidMTRCountFailsValidation(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSMTP: &recordingRunner{}})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	if _, err := executeCommand(cmd, "diag", "smtp", "--mtr-count", "0"); err == nil {
 		t.Fatalf("expected validation error for mtr-count=0")
@@ -93,7 +93,7 @@ func TestInvalidMTRCountFailsValidation(t *testing.T) {
 func TestInvalidTimeoutFailsValidation(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetFTP: &recordingRunner{}})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	if _, err := executeCommand(cmd, "diag", "ftp", "--timeout", "0"); err == nil {
 		t.Fatalf("expected validation error for timeout=0")
@@ -103,7 +103,7 @@ func TestInvalidTimeoutFailsValidation(t *testing.T) {
 func TestAllTargetsHaveSubcommands(t *testing.T) {
 	dispatcher := diag.NewDispatcher(nil)
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	diagCmd, _, err := cmd.Find([]string{"diag"})
 	if err != nil {
@@ -122,7 +122,7 @@ func TestSMTPFlagPropagation(t *testing.T) {
 	runner := &recordingRunner{}
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSMTP: runner})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	args := []string{"diag", "smtp", "--smtp-domain", "example.com", "--smtp-user", "user", "--smtp-pass", "pass", "--smtp-from", "from@test", "--smtp-to", "rcpt@test", "--smtp-starttls", "--smtp-ssl", "--port", "587", "--target-host", "mx.test"}
 	if _, err := executeCommand(cmd, args...); err != nil {
@@ -147,7 +147,7 @@ func TestTargetHostDefault(t *testing.T) {
 	runner := &recordingRunner{}
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetSFTP: runner})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	if _, err := executeCommand(cmd, "diag", "sftp"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -170,7 +170,7 @@ func TestReportFlagPropagates(t *testing.T) {
 	runner := &recordingRunner{}
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: runner})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	reportPath := filepath.Join(t.TempDir(), "report.html")
 	if _, err := executeCommand(cmd, "diag", "web", "--report", reportPath); err != nil {
@@ -185,7 +185,7 @@ func TestReportFlagPropagates(t *testing.T) {
 func TestDispatcherRunnerNotFoundReturnsError(t *testing.T) {
 	dispatcher := diag.NewDispatcher(nil) // no runners registered
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	_, err := executeCommand(cmd, "diag", "imap")
 	if err == nil {
@@ -197,7 +197,7 @@ func TestDispatcherRunnerNotFoundReturnsError(t *testing.T) {
 func TestInvalidLogLevelReturnsError(t *testing.T) {
 	dispatcher := diag.NewDispatcher(map[diag.Target]diag.Runner{diag.TargetWeb: &recordingRunner{}})
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	_, err := executeCommand(cmd, "--log-level", "verbose", "diag", "web")
 	if err == nil {
@@ -205,7 +205,7 @@ func TestInvalidLogLevelReturnsError(t *testing.T) {
 	}
 }
 
-// ── Default-serve / browser-open tests ───────────────────────────────────
+// ---- Default-serve / browser-open tests ---------------------------------
 
 // TestRootCommandHasDefaultServe verifies that the root command has a RunE
 // set so that running the binary without a subcommand starts the server
@@ -213,7 +213,7 @@ func TestInvalidLogLevelReturnsError(t *testing.T) {
 func TestRootCommandHasDefaultServe(t *testing.T) {
 	dispatcher := diag.NewDispatcher(nil)
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	cmd := NewRootCommand(dispatcher, logger, levelVar)
+	cmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	if cmd.RunE == nil {
 		t.Fatal("root command must have RunE set so that bare invocation starts the server")
@@ -225,7 +225,7 @@ func TestRootCommandHasDefaultServe(t *testing.T) {
 func TestServeCommandFlags(t *testing.T) {
 	dispatcher := diag.NewDispatcher(nil)
 	logger, levelVar := logging.NewLogger(slog.LevelInfo)
-	rootCmd := NewRootCommand(dispatcher, logger, levelVar)
+	rootCmd := NewRootCommand(dispatcher, DefaultRegistrars(), nil, logger, levelVar)
 
 	serveCmd, _, err := rootCmd.Find([]string{"serve"})
 	if err != nil || serveCmd == nil {
@@ -285,14 +285,14 @@ func TestServeOpenerCalledOnStart(t *testing.T) {
 
 	dispatcher := diag.NewDispatcher(nil)
 	logger, _ := logging.NewLogger(slog.LevelInfo)
-	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, logger, recorder)
+	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, nil, logger, recorder)
 
 	// Cancel the context immediately so the server exits without binding.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cmd.SetContext(ctx)
 	cmd.SetArgs([]string{"--open=true"})
-	// srv.Start() returns ErrServerClosed for a cancelled context – that is fine.
+	// srv.Start() returns ErrServerClosed for a cancelled context ??that is fine.
 	_ = cmd.Execute()
 
 	// Allow the browser goroutine (300 ms sleep) to fire.
@@ -317,7 +317,7 @@ func TestServeOpenerSkippedWhenOpenFalse(t *testing.T) {
 
 	dispatcher := diag.NewDispatcher(nil)
 	logger, _ := logging.NewLogger(slog.LevelInfo)
-	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, logger, recorder)
+	cmd := newServeCommand(dispatcher, &diag.GlobalOptions{MTRCount: 5, Timeout: 5 * 1e9}, nil, logger, recorder)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

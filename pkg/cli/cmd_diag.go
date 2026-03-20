@@ -11,22 +11,22 @@ import (
 
 // newDiagCommand builds the 'diag' subcommand container. Each supported
 // diagnostic target is registered as a child command via newTargetCommand.
-func newDiagCommand(opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logger *slog.Logger) *cobra.Command {
+func newDiagCommand(opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, registrars map[diag.Target]FlagRegistrar, logger *slog.Logger) *cobra.Command {
 	diagCmd := &cobra.Command{
 		Use:   "diag",
 		Short: "Run diagnostics for web, mail, or file-transfer protocols",
 	}
 	for _, target := range diag.AllTargets {
-		diagCmd.AddCommand(newTargetCommand(target, opts, dispatcher, logger))
+		diagCmd.AddCommand(newTargetCommand(target, opts, dispatcher, registrars, logger))
 	}
 	return diagCmd
 }
 
 // newTargetCommand builds a subcommand for a single diagnostic target.
 // Shared network flags (--target-host, --port) are registered for all targets.
-// Protocol-specific flags are injected via the targetFlagRegistrars map so
-// that adding a new target never requires modifying this function.
-func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, logger *slog.Logger) *cobra.Command {
+// Protocol-specific flags are injected via the registrars map so that adding a
+// new target requires only a new ProtocolPlugin — this function stays closed.
+func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *diag.Dispatcher, registrars map[diag.Target]FlagRegistrar, logger *slog.Logger) *cobra.Command {
 	options := diag.Options{
 		Net: diag.NetworkOptions{
 			Host:  "example.com",
@@ -70,7 +70,7 @@ func newTargetCommand(target diag.Target, opts *diag.GlobalOptions, dispatcher *
 	cmd.Flags().IntSliceVar(&options.Net.Ports, "port", options.Net.Ports, "ports to probe for reachability")
 
 	// Delegate protocol-specific flags to the registrar, if one is registered.
-	if registrar, ok := targetFlagRegistrars[target]; ok {
+	if registrar, ok := registrars[target]; ok {
 		preparer = registrar(cmd, &options)
 	}
 

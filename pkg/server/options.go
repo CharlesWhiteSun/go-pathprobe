@@ -31,21 +31,28 @@ func parseDiagTimeout(s string) time.Duration {
 	return d
 }
 
-// buildOptions converts the API request model to diag.Options.
-// Unset fields receive sensible defaults (e.g. MTRCount → DefaultMTRCount).
-func buildOptions(r ReqOptions) (diag.Options, error) {
+// BuildGlobalOptions builds diag.Options with only the shared global fields
+// (MTRCount, Timeout, Insecure) populated.  Protocol-specific sections are
+// left at zero values.  Protocol plugins call this as the first step of their
+// own BuildOptions implementation.
+func BuildGlobalOptions(r ReqOptions) diag.Options {
 	mtrCount := r.MTRCount
 	if mtrCount <= 0 {
 		mtrCount = diag.DefaultMTRCount
 	}
-
-	opts := diag.Options{
+	return diag.Options{
 		Global: diag.GlobalOptions{
 			MTRCount: mtrCount,
 			Timeout:  parseDiagTimeout(r.Timeout),
 			Insecure: r.Insecure,
 		},
 	}
+}
+
+// buildOptions converts the API request model to diag.Options.
+// Unset fields receive sensible defaults (e.g. MTRCount → DefaultMTRCount).
+func buildOptions(r ReqOptions) (diag.Options, error) {
+	opts := BuildGlobalOptions(r)
 
 	if w := r.Web; w != nil {
 		webMode := diag.WebMode(w.Mode)
