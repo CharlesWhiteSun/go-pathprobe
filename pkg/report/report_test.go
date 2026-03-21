@@ -650,6 +650,61 @@ func TestBuildDNSLookupErrorPassThrough(t *testing.T) {
 	}
 }
 
+// TestBuildDNSAllEmptyPassThrough verifies that when all resolvers return empty records
+// (no values, no errors), DNSEntry.AllEmpty is set to true so the UI can distinguish
+// "no records found" from "resolvers agree on non-empty results".
+func TestBuildDNSAllEmptyPassThrough(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		// All resolvers return empty — AllEmpty should be true.
+		{
+			Name: "mx-less.example",
+			Type: netprobe.RecordTypeMX,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", Values: nil},
+				{Source: "cf", Values: []string{}},
+			},
+		},
+		// One resolver has values — AllEmpty must be false.
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", Values: []string{"1.2.3.4"}},
+				{Source: "cf", Values: []string{"1.2.3.4"}},
+			},
+		},
+		// One resolver has LookupError — AllEmpty must be false (it's a failure, not empty).
+		{
+			Name: "broken.example",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "no such host"},
+				{Source: "cf", Values: []string{}},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 3 {
+		t.Fatalf("expected 3 DNS entries, got %d", len(ar.DNS))
+	}
+	// Entry 0: mx-less.example — all empty, no errors.
+	if !ar.DNS[0].AllEmpty {
+		t.Error("DNS[0] (all empty values, no errors): expected AllEmpty=true")
+	}
+	if ar.DNS[0].HasDivergence {
+		t.Error("DNS[0]: all-empty must not be marked divergent")
+	}
+	// Entry 1: example.com — has values.
+	if ar.DNS[1].AllEmpty {
+		t.Error("DNS[1] (has values): expected AllEmpty=false")
+	}
+	// Entry 2: broken.example — LookupError present, not truly empty.
+	if ar.DNS[2].AllEmpty {
+		t.Error("DNS[2] (LookupError present): expected AllEmpty=false")
+	}
+}
+
 // geoStubLocator returns a fixed non-zero GeoInfo for any IP so that
 // HasLocation=true, allowing tests to exercise the geo branches in templates
 // without requiring a real MaxMind database.

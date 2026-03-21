@@ -312,6 +312,64 @@ func TestDNSComparisonSingleResolver(t *testing.T) {
 	}
 }
 
+// TestDNSComparisonAllEmpty verifies that AllEmpty returns true when every
+// resolver successfully responded with no records (e.g. a domain has no MX).
+func TestDNSComparisonAllEmpty(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeMX,
+		Results: []DNSAnswer{
+			{Source: "sys", Values: nil},
+			{Source: "cf", Values: []string{}},
+		},
+	}
+	if !comp.AllEmpty() {
+		t.Fatal("expected AllEmpty=true when all resolvers return no records")
+	}
+	if comp.HasDivergence() {
+		t.Fatal("all-empty results must not be flagged as divergent")
+	}
+}
+
+// TestDNSComparisonAllEmptyFalseWhenHasValues verifies AllEmpty is false
+// when at least one resolver returned records.
+func TestDNSComparisonAllEmptyFalseWhenHasValues(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", Values: []string{"1.2.3.4"}},
+			{Source: "cf", Values: []string{}},
+		},
+	}
+	if comp.AllEmpty() {
+		t.Fatal("expected AllEmpty=false when at least one resolver has values")
+	}
+}
+
+// TestDNSComparisonAllEmptyFalseWhenHasLookupError verifies that AllEmpty
+// returns false when any result carries a LookupError, distinguishing
+// "resolver failure" from "no records found".
+func TestDNSComparisonAllEmptyFalseWhenHasLookupError(t *testing.T) {
+	comp := DNSComparison{
+		Name: "notexist.example", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", LookupError: "lookup notexist.example: no such host"},
+			{Source: "cf", Values: []string{}},
+		},
+	}
+	if comp.AllEmpty() {
+		t.Fatal("expected AllEmpty=false when a resolver has a LookupError")
+	}
+}
+
+// TestDNSComparisonAllEmptyFalseWhenNoResults verifies AllEmpty is false
+// for an empty Results slice (no resolvers configured).
+func TestDNSComparisonAllEmptyFalseWhenNoResults(t *testing.T) {
+	comp := DNSComparison{Name: "example.com", Type: RecordTypeA}
+	if comp.AllEmpty() {
+		t.Fatal("expected AllEmpty=false when Results slice is empty")
+	}
+}
+
 type spyResolver struct {
 	name    string
 	answers map[string][]string

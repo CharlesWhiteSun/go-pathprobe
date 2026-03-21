@@ -55,6 +55,25 @@ func (c DNSComparison) HasDivergence() bool {
 	return false
 }
 
+// AllEmpty reports whether every resolver successfully responded with no records.
+// This distinguishes "domain has no records of this type" from "results are consistent".
+// A result with a LookupError is considered a failure, not an empty response,
+// so any LookupError causes AllEmpty to return false.
+func (c DNSComparison) AllEmpty() bool {
+	if len(c.Results) == 0 {
+		return false
+	}
+	for _, r := range c.Results {
+		if r.LookupError != "" {
+			return false
+		}
+		if len(r.Values) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func sortedStringSlice(vs []string) []string {
 	out := make([]string, len(vs))
 	copy(out, vs)

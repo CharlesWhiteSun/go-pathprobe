@@ -80,10 +80,17 @@ type DNSAnswerEntry struct {
 
 // DNSEntry represents the cross-resolver comparison result for one
 // domain + record-type pair.
+//
+// Status semantics (mutually exclusive, checked in order):
+//
+//	HasDivergence == true  → resolvers disagree (badge-fail)
+//	AllEmpty      == true  → all resolvers found no records (badge-warn)
+//	otherwise             → resolvers agree on a non-empty result (badge-ok)
 type DNSEntry struct {
 	Domain        string
 	Type          string
 	HasDivergence bool
+	AllEmpty      bool
 	Answers       []DNSAnswerEntry
 }
 
@@ -225,6 +232,7 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*Annota
 			Domain:        comp.Name,
 			Type:          dnsTypeDisplayName(comp.Type),
 			HasDivergence: comp.HasDivergence(),
+			AllEmpty:      comp.AllEmpty(),
 		}
 		for _, ans := range comp.Results {
 			entry.Answers = append(entry.Answers, DNSAnswerEntry{

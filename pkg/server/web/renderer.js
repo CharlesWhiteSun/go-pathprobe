@@ -148,9 +148,15 @@
   function renderDNSSection(dnsEntries) {
     if (!dnsEntries || dnsEntries.length === 0) return '';
     const rows = dnsEntries.map(entry => {
-      const badge = entry.HasDivergence
-        ? '<span class="badge badge-fail">' + esc(_t('dns-divergent'))  + '</span>'
-        : '<span class="badge badge-ok">'   + esc(_t('dns-consistent')) + '</span>';
+      // Three-state badge: Divergent → AllEmpty → Consistent.
+      let badge;
+      if (entry.HasDivergence) {
+        badge = '<span class="badge badge-fail">' + esc(_t('dns-divergent'))  + '</span>';
+      } else if (entry.AllEmpty) {
+        badge = '<span class="badge badge-warn">' + esc(_t('dns-no-records')) + '</span>';
+      } else {
+        badge = '<span class="badge badge-ok">'   + esc(_t('dns-consistent')) + '</span>';
+      }
 
       // Build a sub-row for each resolver answer.
       const answerRows = (entry.Answers || []).map(ans => {

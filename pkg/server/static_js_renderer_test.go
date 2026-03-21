@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // ── Phase 5: traceroute result rendering assertions ───────────────────────
 
 // TestStaticJS_RenderRouteSection verifies that app.js defines a
@@ -97,5 +96,45 @@ func TestStaticJS_RenderRouteSectionColumns(t *testing.T) {
 		if !strings.Contains(body, "'"+k+"'") {
 			t.Errorf("renderer.js: renderRouteSection must reference i18n key %q", k)
 		}
+	}
+}
+
+// TestStaticJS_RenderDNSSectionThreeStateBadge verifies that renderDNSSection
+// in renderer.js implements the three-state badge logic:
+//
+//	HasDivergence   → badge-fail  + dns-divergent
+//	AllEmpty        → badge-warn  + dns-no-records
+//	consistent+data → badge-ok    + dns-consistent
+func TestStaticJS_RenderDNSSectionThreeStateBadge(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	// The function must exist.
+	if !strings.Contains(body, "renderDNSSection") {
+		t.Fatal("renderer.js: renderDNSSection function must be defined")
+	}
+	// All three i18n keys must be referenced.
+	for _, key := range []string{"dns-divergent", "dns-no-records", "dns-consistent"} {
+		if !strings.Contains(body, "'"+key+"'") {
+			t.Errorf("renderer.js: renderDNSSection must reference i18n key %q", key)
+		}
+	}
+	// The AllEmpty branch must guard with badge-warn.
+	if !strings.Contains(body, "entry.AllEmpty") {
+		t.Error("renderer.js: renderDNSSection must check entry.AllEmpty for the no-records badge")
+	}
+	if !strings.Contains(body, "badge-warn") {
+		t.Error("renderer.js: renderDNSSection must use badge-warn class for AllEmpty entries")
+	}
+	// The divergent branch must use badge-fail.
+	if !strings.Contains(body, "badge-fail") {
+		t.Error("renderer.js: renderDNSSection must use badge-fail class for divergent entries")
+	}
+	// The consistent branch must use badge-ok.
+	if !strings.Contains(body, "badge-ok") {
+		t.Error("renderer.js: renderDNSSection must use badge-ok class for consistent entries")
+	}
+	// renderDNSSection must be wired into renderReport.
+	if !strings.Contains(body, "renderDNSSection(r.DNS)") {
+		t.Error("renderer.js: renderReport must call renderDNSSection(r.DNS)")
 	}
 }

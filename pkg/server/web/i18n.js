@@ -133,6 +133,7 @@ window.LOCALES = {
     'th-dns-rtt':            'RTT',
     'dns-divergent':         'Divergent',
     'dns-consistent':        'Consistent',
+    'dns-no-records':        'No Records',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
@@ -315,6 +316,7 @@ window.LOCALES = {
     'th-dns-rtt':            'RTT',
     'dns-divergent':         '有差異',
     'dns-consistent':        '一致',
+    'dns-no-records':        '無記錄',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',
