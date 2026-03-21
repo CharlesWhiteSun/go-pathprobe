@@ -532,3 +532,25 @@ func TestStaticI18n_DNSRecordsCollapseKeys(t *testing.T) {
 		t.Error("i18n.js zh-TW: dns-records-less must contain '收合'")
 	}
 }
+
+// TestStaticI18n_TracerouteProgressKeys 驗證路由追蹤即時進度所需的 i18n 鍵
+// 在 EN 及 zh-TW 兩個語系中均存在於 i18n.js 中。
+// 這些鍵由前端 api-client.js 和 renderer.js 呼叫 _t() 存取。
+func TestStaticI18n_TracerouteProgressKeys(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	// 每個鍵必須在兩個語系中各出現一次（共 ≥ 2 次）。
+	requiredKeys := []string{
+		"'btn-cancel'",
+		"'traceroute-progress-title'",
+		"'traceroute-hop-count'",
+		"'traceroute-max-wait'",
+		"'traceroute-complete'",
+	}
+
+	for _, key := range requiredKeys {
+		if count := strings.Count(body, key); count < 2 {
+			t.Errorf("i18n.js: key %s found %d time(s) — must appear in both en and zh-TW locales", key, count)
+		}
+	}
+}

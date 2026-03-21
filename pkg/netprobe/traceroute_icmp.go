@@ -48,7 +48,7 @@ func (p *ICMPTracerouteProber) reverseLookupEnabled() bool {
 }
 
 // Trace implements TracerouteProber using raw ICMP Echo packets.
-func (p *ICMPTracerouteProber) Trace(ctx context.Context, host string, maxHops, attemptsPerHop int) (RouteResult, error) {
+func (p *ICMPTracerouteProber) Trace(ctx context.Context, host string, maxHops, attemptsPerHop int, onHop HopEmitter) (RouteResult, error) {
 	if maxHops <= 0 {
 		return RouteResult{}, fmt.Errorf("maxHops must be > 0, got %d", maxHops)
 	}
@@ -100,6 +100,10 @@ func (p *ICMPTracerouteProber) Trace(ctx context.Context, host string, maxHops, 
 		if hop.IP != "" && p.reverseLookupEnabled() {
 			hop.Hostname = reverseLookup(hop.IP)
 			result.Hops[len(result.Hops)-1].Hostname = hop.Hostname
+		}
+
+		if onHop != nil {
+			onHop(result.Hops[len(result.Hops)-1])
 		}
 
 		if reached {

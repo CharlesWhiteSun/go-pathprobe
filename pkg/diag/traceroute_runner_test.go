@@ -23,10 +23,15 @@ type stubTracerouteProber struct {
 	calledAttempts int
 }
 
-func (s *stubTracerouteProber) Trace(_ context.Context, host string, maxHops, attemptsPerHop int) (netprobe.RouteResult, error) {
+func (s *stubTracerouteProber) Trace(_ context.Context, host string, maxHops, attemptsPerHop int, onHop netprobe.HopEmitter) (netprobe.RouteResult, error) {
 	s.calledHost = host
 	s.calledMaxHops = maxHops
 	s.calledAttempts = attemptsPerHop
+	if onHop != nil {
+		for _, hop := range s.result.Hops {
+			onHop(hop)
+		}
+	}
 	return s.result, s.err
 }
 
@@ -224,43 +229,52 @@ func TestTracerouteRunner_EmitsProgress(t *testing.T) {
 		t.Fatalf("expected 4 progress events (header + 3 hops), got %d", len(events))
 	}
 
-	// All events must have stage "traceroute".
-	for i, e := range events {
-		if e.Stage != "traceroute" {
-			t.Errorf("event %d: expected stage 'traceroute', got %q", i, e.Stage)
+	// First event must be the header with stage "traceroute".
+	if events[0].Stage != "traceroute" {
+		t.Errorf("event 0: expected stage 'traceroute', got %q", events[0].Stage)
+	}
+
+	// Remaining 3 events must have stage "traceroute-hop" with non-nil Hop.
+	for i, e := range events[1:] {
+		if e.Stage != "traceroute-hop" {
+			t.Errorf("event %d: expected stage 'traceroute-hop', got %q", i+1, e.Stage)
+		}
+		if e.Hop == nil {
+			t.Errorf("event %d: expected non-nil Hop field for traceroute-hop event", i+1)
 		}
 	}
 }
 
-// TestTracerouteRunner_TimedOutHopEmitsMark verifies "???" appears in emitted message.
+// TestTracerouteRunner_TimedOutHopEmitsMark verifies that a timed-out hop emits
+// a "traceroute-hop" event with an empty IP field.
 func TestTracerouteRunner_TimedOutHopEmitsMark(t *testing.T) {
 	prober := &stubTracerouteProber{result: build3HopResult()}
 	runner := NewTracerouteRunner(prober, newTRTestLogger())
 
-	var messages []string
+	var events []ProgressEvent
 	req := Request{
 		Target:  TargetWeb,
 		Options: Options{Global: GlobalOptions{MTRCount: 1, Timeout: time.Second}},
 		Hook: func(e ProgressEvent) {
-			messages = append(messages, e.Message)
+			events = append(events, e)
 		},
 	}
 	_ = runner.Run(context.Background(), req)
 
-	// The second hop (TTL=2) is timed-out.  Its message must contain "???".
+	// The second hop (TTL=2) is timed-out.  Its traceroute-hop event must have
+	// an empty IP and the message must still contain "???".
 	found := false
-	for _, msg := range messages {
-		for _, ch := range msg {
-			_ = ch
-		}
-		// Simple substring scan.
-		if containsStr(msg, "???") {
+	for _, ev := range events {
+		if ev.Stage == "traceroute-hop" && ev.Hop != nil && ev.Hop.IP == "" {
+			if !containsStr(ev.Message, "???") {
+				t.Errorf("timed-out hop message should contain '???', got: %q", ev.Message)
+			}
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected at least one emitted message to contain '???', got: %v", messages)
+		t.Fatalf("expected a traceroute-hop event with empty IP (timed-out hop), got events: %+v", events)
 	}
 }
 

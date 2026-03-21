@@ -280,6 +280,7 @@
 
     <div class="form-actions">
       <button id="run-btn" onclick="runDiag()">&#9654;</button>
+      <button id="cancel-btn" class="btn-cancel" hidden onclick="cancelDiag()">&#10005; <span data-i18n="btn-cancel">Cancel</span></button>
     </div>
   </section>
 
@@ -291,7 +292,27 @@
 
   <!-- ── Progress Log (visible during streaming run) ──────────────────── -->
   <div class="progress-log" id="progress-log" hidden></div>
-
+  <!-- ── Traceroute live progress (traceroute mode only) ──────────────── -->
+  <div id="traceroute-progress" class="traceroute-progress" hidden>
+    <div class="tr-header">
+      <span class="spinner tr-spin" aria-hidden="true"></span>
+      <span id="tr-title" class="tr-title"></span>
+      <span id="tr-hop-count" class="tr-hop-count"></span>
+    </div>
+    <div class="tr-bar-wrap"><div id="tr-bar" class="tr-bar"></div></div>
+    <p id="tr-eta" class="tr-eta"></p>
+    <div id="tr-live-section" hidden>
+      <table class="result-table route-table tr-live-table">
+        <thead><tr>
+          <th data-i18n="th-ttl">TTL</th>
+          <th data-i18n="th-ip-host">IP / Host</th>
+          <th data-i18n="th-loss">Loss%</th>
+          <th data-i18n="th-avg-rtt">Avg RTT</th>
+        </tr></thead>
+        <tbody id="tr-live-body"></tbody>
+      </table>
+    </div>
+  </div>
   <!-- ── Results ──────────────────────────────────────────────────────── -->
   <section class="card" id="results" hidden>
     <h2 class="card-title" data-i18n="results-title">Results</h2>

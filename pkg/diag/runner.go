@@ -57,6 +57,15 @@ func (r Request) Emitf(stage, format string, args ...any) {
 	}
 }
 
+// EmitEvent calls the progress hook (if non-nil) with the given ProgressEvent
+// directly. Use this when the event requires additional fields beyond Stage and
+// Message (e.g. structured Hop data for traceroute progress).
+func (r Request) EmitEvent(ev ProgressEvent) {
+	if r.Hook != nil {
+		r.Hook(ev)
+	}
+}
+
 // Dispatcher keeps target-to-runner mappings and delegates execution.
 type Dispatcher struct {
 	mu      sync.RWMutex

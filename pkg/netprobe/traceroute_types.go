@@ -34,18 +34,26 @@ type RouteResult struct {
 	Hops []HopResult
 }
 
+// HopEmitter is an optional callback invoked by TracerouteProber.Trace after
+// each TTL hop is fully probed (including any PTR lookup).  Implementations
+// call it in-order, incrementally, so callers can stream per-hop results
+// without waiting for the full traceroute to finish.
+// Pass nil when incremental updates are not needed.
+type HopEmitter func(hop HopResult)
+
 // TracerouteProber executes a path-discovery traceroute to a host.
 // Implementations must:
 //   - increment TTL from 1 to maxHops (inclusive);
 //   - send attemptsPerHop probes per TTL to compute per-hop statistics;
 //   - stop early when the destination host responds;
-//   - honour context cancellation / deadline.
+//   - honour context cancellation / deadline;
+//   - call onHop (when non-nil) once per completed hop, in TTL order.
 //
 // Two concrete implementations are provided:
 //   - ICMPTracerouteProber: uses raw ICMP Echo; requires elevated privileges.
 //   - TCPTracerouteProber:  uses TCP SYN + IP_TTL socket option; works without root.
 type TracerouteProber interface {
-	Trace(ctx context.Context, host string, maxHops, attemptsPerHop int) (RouteResult, error)
+	Trace(ctx context.Context, host string, maxHops, attemptsPerHop int, onHop HopEmitter) (RouteResult, error)
 }
 
 // hopTimeout is the per-hop deadline applied when waiting for an ICMP or RST response.

@@ -145,15 +145,21 @@ type stubTracerouteProberForWeb struct {
 	called        bool
 }
 
-func (s *stubTracerouteProberForWeb) Trace(_ context.Context, _ string, maxHops, _ int) (netprobe.RouteResult, error) {
+func (s *stubTracerouteProberForWeb) Trace(_ context.Context, _ string, maxHops, _ int, onHop netprobe.HopEmitter) (netprobe.RouteResult, error) {
 	s.called = true
 	s.calledMaxHops = maxHops
-	return netprobe.RouteResult{
+	result := netprobe.RouteResult{
 		Hops: []netprobe.HopResult{
 			{TTL: 1, IP: "192.168.1.1", Stats: netprobe.ProbeStats{Sent: 1, Received: 1}},
 			{TTL: 2, IP: "93.184.216.34", Stats: netprobe.ProbeStats{Sent: 1, Received: 1}},
 		},
-	}, nil
+	}
+	if onHop != nil {
+		for _, hop := range result.Hops {
+			onHop(hop)
+		}
+	}
+	return result, nil
 }
 
 // TestWebTracerouteRunner_SetsRouteOnReport verifies the full chain:
@@ -187,8 +193,7 @@ func TestWebTracerouteRunner_SetsRouteOnReport(t *testing.T) {
 }
 
 // TestWebTracerouteRunner_EmitCountEqualsHopCount verifies that the number of
-// hop-level "traceroute" Emit events equals the number of hops returned.
-// (1 header emit + N hop emits total = N+1, but we assert on the hop emits only.)
+// hop-level "traceroute-hop" Emit events equals the number of hops returned.
 func TestWebTracerouteRunner_EmitCountEqualsHopCount(t *testing.T) {
 	prober := &stubTracerouteProberForWeb{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -204,7 +209,7 @@ func TestWebTracerouteRunner_EmitCountEqualsHopCount(t *testing.T) {
 			Net:    NetworkOptions{Host: "example.com"},
 		},
 		Hook: func(e ProgressEvent) {
-			if e.Stage == "traceroute" {
+			if e.Stage == "traceroute-hop" {
 				hopEmits++
 			}
 		},
@@ -214,10 +219,10 @@ func TestWebTracerouteRunner_EmitCountEqualsHopCount(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 1 header emit + 2 hop emits = 3 total.
-	const wantTotal = 3
+	// stub returns 2 hops → expect exactly 2 traceroute-hop events.
+	const wantTotal = 2
 	if hopEmits != wantTotal {
-		t.Fatalf("expected %d traceroute emits (header+hops), got %d", wantTotal, hopEmits)
+		t.Fatalf("expected %d traceroute-hop emits (one per hop), got %d", wantTotal, hopEmits)
 	}
 }
 

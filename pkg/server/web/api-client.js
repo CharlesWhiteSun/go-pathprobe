@@ -22,6 +22,11 @@
 
 (() => {
 
+  // ── 模組狀態 ─────────────────────────────────────────────────────────
+
+  /** 目前進行中請求的 AbortController，由 cancelDiag() 用來中斷請求。 */
+  let _currentAbortController = null;
+
   // ── 執行期相依注入（runtime shims）────────────────────────────────────
 
   function _t(key) {
@@ -116,11 +121,16 @@
     try { payload = JSON.parse(dataStr); } catch { return; }
 
     if (evtName === 'progress') {
-      appendProgress(progressEl, payload);
+      if (payload.stage === 'traceroute-hop' && payload.hop &&
+          window.PathProbe && window.PathProbe.Renderer) {
+        window.PathProbe.Renderer.appendLiveHop(payload.hop);
+      } else {
+        appendProgress(progressEl, payload);
+      }
     } else if (evtName === 'result') {
       if (progressEl) progressEl.hidden = true;
-      // renderReport — 執行期解析，透過 PathProbe.Renderer
       if (window.PathProbe && window.PathProbe.Renderer) {
+        window.PathProbe.Renderer.hideTracerouteProgress();
         window.PathProbe.Renderer.renderReport(payload);
       }
       // 先顯示 #results，再初始化地圖（確保 Leaflet 容器有版面尺寸）
@@ -137,6 +147,9 @@
     } else if (evtName === 'error') {
       // 清除並隱藏進度記錄，避免部分輸出殘留在錯誤橫幅下方。
       if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
+      if (window.PathProbe && window.PathProbe.Renderer) {
+        window.PathProbe.Renderer.hideTracerouteProgress();
+      }
       showError(payload.error || 'diagnostic error');
     }
   }
@@ -146,15 +159,18 @@
   /** 執行診斷流程：POST /api/diag/stream，以 ReadableStream 接收 SSE。 */
   async function runDiag() {
     const btn        = document.getElementById('run-btn');
+    const cancelBtn  = document.getElementById('cancel-btn');
     const errorEl    = document.getElementById('error-banner');
     const resultEl   = document.getElementById('results');
     const progressEl = document.getElementById('progress-log');
+
+    _currentAbortController = new AbortController();
 
     btn.disabled    = true;
     btn.innerHTML   = _getRunningHTML();
     errorEl.hidden  = true;
     resultEl.hidden = true;
-    if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
+    if (cancelBtn) cancelBtn.hidden = false;
 
     try {
       const req = _buildRequest();
@@ -163,10 +179,29 @@
         if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
         return;
       }
+
+      // 判斷是否為路由追蹤模式——展示即時躍點進度面板而非文字記錄。
+      const isTraceroute = req.target === 'web' &&
+                           req.options && req.options.web &&
+                           req.options.web.mode === 'traceroute';
+
+      if (isTraceroute) {
+        if (progressEl) progressEl.hidden = true;
+        const host     = (req.options.net && req.options.net.host) || '';
+        const maxHops  = (req.options.web && req.options.web.max_hops) || 30;
+        const mtrCount = req.options.mtr_count || 5;
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.initTracerouteProgress(host, maxHops, mtrCount);
+        }
+      } else {
+        if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
+      }
+
       const resp = await fetch('/api/diag/stream', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(req),
+        signal:  _currentAbortController.signal,
       });
 
       // 非 2xx（反向代理驗證錯誤等），嘗試解析 JSON body。
@@ -199,12 +234,18 @@
       if (buffer.trim()) handleSSEMessage(buffer, progressEl, resultEl);
 
     } catch (err) {
+      if (err.name === 'AbortError') return; // 使用者主動取消 — 不顯示錯誤橫幅
       // 網路層失敗：隱藏並清除進度記錄，避免殘留部分輸出。
       if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
+      if (window.PathProbe && window.PathProbe.Renderer) {
+        window.PathProbe.Renderer.hideTracerouteProgress();
+      }
       showError('Request failed: ' + err.message);
     } finally {
       btn.disabled    = false;
       btn.textContent = _t('btn-run');
+      if (cancelBtn) cancelBtn.hidden = true;
+      _currentAbortController = null;
     }
   }
 
@@ -223,12 +264,21 @@
 
   // ── 公開 API ─────────────────────────────────────────────────────────
 
-  // 全域暴露 runDiag，供 index.html #run-btn onclick 屬性呼叫。
+  /** 中斷正在進行中的診斷請求（如果有）。由 #cancel-btn onclick 呼叫。 */
+  function cancelDiag() {
+    if (_currentAbortController) {
+      _currentAbortController.abort();
+    }
+  }
+
+  // 全域暴露 runDiag / cancelDiag，供 index.html 按鈕 onclick 屬性呼叫。
   window.runDiag = runDiag;
+  window.cancelDiag = cancelDiag;
 
   const _ns = window.PathProbe || {};
   _ns.ApiClient = {
     runDiag,
+    cancelDiag,
     handleSSEMessage,
     appendProgress,
     fetchVersion,

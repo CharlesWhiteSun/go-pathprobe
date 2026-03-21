@@ -2,6 +2,7 @@ package diag
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"go-pathprobe/pkg/netprobe"
@@ -60,25 +61,30 @@ func (r *TracerouteRunner) Run(ctx context.Context, req Request) error {
 
 	req.Emitf("traceroute", "Tracing route to %s (max %d hops, %d probe(s)/hop) …", host, maxHops, attemptsPerHop)
 
-	result, err := r.Prober.Trace(ctx, host, maxHops, attemptsPerHop)
-	if err != nil {
-		return err
-	}
-
-	for _, hop := range result.Hops {
+	result, err := r.Prober.Trace(ctx, host, maxHops, attemptsPerHop, func(hop netprobe.HopResult) {
 		ip := hop.IP
 		if ip == "" {
 			ip = "???"
 		}
-
 		name := hop.Hostname
 		if name == "" {
 			name = ip
 		}
 
-		req.Emitf("traceroute", "  %2d  %-15s  %-40s  avg=%-10s  loss=%.1f%%",
-			hop.TTL, ip, name, hop.Stats.AvgRTT, hop.Stats.LossPct)
-
+		req.EmitEvent(ProgressEvent{
+			Stage:   "traceroute-hop",
+			Message: fmt.Sprintf("  %2d  %-15s  %-40s  avg=%-10s  loss=%.1f%%", hop.TTL, ip, name, hop.Stats.AvgRTT, hop.Stats.LossPct),
+			Hop: &HopProgressData{
+				TTL:      hop.TTL,
+				MaxHops:  maxHops,
+				IP:       hop.IP,
+				Hostname: hop.Hostname,
+				AvgRTT:   hop.Stats.AvgRTT.String(),
+				LossPct:  hop.Stats.LossPct,
+				Sent:     hop.Stats.Sent,
+				Received: hop.Stats.Received,
+			},
+		})
 		r.Logger.Info("traceroute hop",
 			"ttl", hop.TTL,
 			"ip", ip,
@@ -88,6 +94,9 @@ func (r *TracerouteRunner) Run(ctx context.Context, req Request) error {
 			"sent", hop.Stats.Sent,
 			"received", hop.Stats.Received,
 		)
+	})
+	if err != nil {
+		return err
 	}
 
 	if req.Report != nil {

@@ -59,7 +59,7 @@ func (p *TCPTracerouteProber) remotePort() int {
 }
 
 // Trace implements TracerouteProber using TTL-limited TCP connections.
-func (p *TCPTracerouteProber) Trace(ctx context.Context, host string, maxHops, attemptsPerHop int) (RouteResult, error) {
+func (p *TCPTracerouteProber) Trace(ctx context.Context, host string, maxHops, attemptsPerHop int, onHop HopEmitter) (RouteResult, error) {
 	if maxHops <= 0 {
 		return RouteResult{}, fmt.Errorf("maxHops must be > 0, got %d", maxHops)
 	}
@@ -97,6 +97,10 @@ func (p *TCPTracerouteProber) Trace(ctx context.Context, host string, maxHops, a
 		if hop.IP != "" && p.reverseLookupEnabled() {
 			hop.Hostname = reverseLookup(hop.IP)
 			result.Hops[len(result.Hops)-1].Hostname = hop.Hostname
+		}
+
+		if onHop != nil {
+			onHop(result.Hops[len(result.Hops)-1])
 		}
 
 		if reached {

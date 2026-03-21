@@ -326,6 +326,97 @@
     '</div>';
   }
 
+  // ── Traceroute live progress helpers ───────────────────────────────────
+
+  let _trStartTime = 0;
+  let _trMaxHops   = 30;
+  let _trHopCount  = 0;
+
+  /**
+   * Show the traceroute progress panel and initialise its fields.
+   * @param {string} host       - destination host being traced
+   * @param {number} maxHops    - configured max TTL
+   * @param {number} mtrCount   - probes per hop (used for ETA estimate)
+   */
+  function initTracerouteProgress(host, maxHops, mtrCount) {
+    _trStartTime = Date.now();
+    _trMaxHops   = maxHops || 30;
+    _trHopCount  = 0;
+
+    const el = document.getElementById('traceroute-progress');
+    if (!el) return;
+
+    const title = _t('traceroute-progress-title');
+    const trTitle = document.getElementById('tr-title');
+    if (trTitle) trTitle.textContent = host ? title + ' ' + host : title;
+
+    const trHopCount = document.getElementById('tr-hop-count');
+    if (trHopCount) trHopCount.textContent = '';
+
+    const trBar = document.getElementById('tr-bar');
+    if (trBar) trBar.style.width = '0%';
+
+    const estMin = Math.ceil((_trMaxHops * (mtrCount || 5) * 2 + 15) / 60);
+    const trEta = document.getElementById('tr-eta');
+    if (trEta) trEta.textContent = _t('traceroute-max-wait').replace('{n}', estMin);
+
+    const trBody = document.getElementById('tr-live-body');
+    if (trBody) trBody.innerHTML = '';
+
+    const trLiveSection = document.getElementById('tr-live-section');
+    if (trLiveSection) trLiveSection.hidden = true;
+
+    el.hidden = false;
+  }
+
+  /**
+   * Append a single hop row to the live progress table and advance the bar.
+   * @param {Object} hopData - HopProgressData JSON from the backend
+   */
+  function appendLiveHop(hopData) {
+    if (!hopData) return;
+    _trHopCount++;
+
+    const pct = Math.min(100, Math.round(_trHopCount / (_trMaxHops || 30) * 100));
+    const trBar = document.getElementById('tr-bar');
+    if (trBar) trBar.style.width = pct + '%';
+
+    const counter = document.getElementById('tr-hop-count');
+    if (counter) counter.textContent = _t('traceroute-hop-count').replace('{n}', _trHopCount);
+
+    const tbody = document.getElementById('tr-live-body');
+    if (!tbody) return;
+
+    const timedout = !hopData.ip;
+    const row = document.createElement('tr');
+    if (timedout) row.className = 'hop-timedout';
+
+    let ipCell;
+    if (timedout) {
+      ipCell = '<em>???</em>';
+    } else if (hopData.hostname && hopData.hostname !== hopData.ip) {
+      ipCell = esc(hopData.ip) + ' <span class="hop-host">(' + esc(hopData.hostname) + ')</span>';
+    } else {
+      ipCell = esc(hopData.ip);
+    }
+    const loss = timedout ? '\u2014' : (hopData.loss_pct || 0).toFixed(1) + '%';
+    const rtt  = timedout ? '\u2014' : esc(hopData.avg_rtt || '\u2014');
+    row.innerHTML = '<td>' + esc(String(hopData.ttl)) + '</td><td>' + ipCell + '</td><td>' + loss + '</td><td>' + rtt + '</td>';
+    tbody.appendChild(row);
+
+    const liveSection = document.getElementById('tr-live-section');
+    if (liveSection) liveSection.hidden = false;
+    tbody.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /**
+   * Hide the traceroute progress panel (called when result arrives or on error).
+   */
+  function hideTracerouteProgress() {
+    const el = document.getElementById('traceroute-progress');
+    if (el) el.hidden = true;
+  }
+
   // ── Public: main render entry point ────────────────────────────────────
 
   function renderReport(r) {
@@ -348,6 +439,6 @@
 
   // ── Export ─────────────────────────────────────────────────────────────
   const _ns = window.PathProbe || {};
-  _ns.Renderer = { renderReport, rerenderLast };
+  _ns.Renderer = { renderReport, rerenderLast, initTracerouteProgress, appendLiveHop, hideTracerouteProgress };
   window.PathProbe = _ns;
 })();

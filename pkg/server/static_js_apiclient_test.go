@@ -154,3 +154,28 @@ func TestStaticJS_AppendProgressNoInnerHTML(t *testing.T) {
 		t.Error("api-client.js: appendProgress must use textContent to set stage/message text")
 	}
 }
+
+// TestStaticJS_CancelDiagGlobal 驗證 api-client.js 將 cancelDiag 暴露為
+// window.cancelDiag，供 index.html #cancel-btn onclick 屬性呼叫。
+func TestStaticJS_CancelDiagGlobal(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	if !strings.Contains(body, "window.cancelDiag = cancelDiag") {
+		t.Error("api-client.js: must assign window.cancelDiag = cancelDiag for HTML onclick compatibility")
+	}
+}
+
+// TestStaticJS_TracerouteHopHandling 驗證 api-client.js 的 progress 事件分支
+// 中存在針對 'traceroute-hop' stage 的特殊處理邏輯：當 payload.stage 為
+// 'traceroute-hop' 且 payload.hop 非空時，應呼叫 Renderer.appendLiveHop()
+// 而非 appendProgress()，以顯示即時路由表而非文字記錄。
+func TestStaticJS_TracerouteHopHandling(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	if !strings.Contains(body, "'traceroute-hop'") {
+		t.Error("api-client.js: must handle 'traceroute-hop' stage in SSE progress handler")
+	}
+	if !strings.Contains(body, "appendLiveHop") {
+		t.Error("api-client.js: must call appendLiveHop for traceroute-hop progress events")
+	}
+}

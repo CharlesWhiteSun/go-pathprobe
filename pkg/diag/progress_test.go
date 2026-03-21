@@ -178,3 +178,83 @@ func TestConnectivityRunner_NoHookStillWorks(t *testing.T) {
 		t.Fatalf("Run without hook failed: %v", err)
 	}
 }
+
+// ── HopProgressData fields ───────────────────────────────────────────────
+
+// TestHopProgressData_ZeroValue verifies that a zero-value HopProgressData
+// has empty/zero fields and does not panic when accessed.
+func TestHopProgressData_ZeroValue(t *testing.T) {
+	var h HopProgressData
+	if h.TTL != 0 {
+		t.Errorf("zero TTL: want 0, got %d", h.TTL)
+	}
+	if h.IP != "" {
+		t.Errorf("zero IP: want empty string, got %q", h.IP)
+	}
+	if h.Hostname != "" {
+		t.Errorf("zero Hostname: want empty string, got %q", h.Hostname)
+	}
+	if h.LossPct != 0 {
+		t.Errorf("zero LossPct: want 0, got %f", h.LossPct)
+	}
+}
+
+// TestHopProgressData_RoundTrip verifies that HopProgressData fields survive
+// being embedded in a ProgressEvent and retrieved again.
+func TestHopProgressData_RoundTrip(t *testing.T) {
+	hop := &HopProgressData{
+		TTL:      7,
+		MaxHops:  30,
+		IP:       "10.0.0.1",
+		Hostname: "router.example.com",
+		AvgRTT:   "5.20ms",
+		LossPct:  0.0,
+		Sent:     5,
+		Received: 5,
+	}
+	ev := ProgressEvent{Stage: "traceroute-hop", Message: "hop info", Hop: hop}
+
+	if ev.Hop == nil {
+		t.Fatal("expected non-nil Hop after assignment")
+	}
+	if ev.Hop.TTL != 7 {
+		t.Errorf("TTL = %d, want 7", ev.Hop.TTL)
+	}
+	if ev.Hop.IP != "10.0.0.1" {
+		t.Errorf("IP = %q, want 10.0.0.1", ev.Hop.IP)
+	}
+}
+
+// ── EmitEvent ─────────────────────────────────────────────────────────────
+
+// TestEmitEvent_WithHopData verifies that EmitEvent passes a ProgressEvent
+// with a non-nil Hop field through the hook unchanged.
+func TestEmitEvent_WithHopData(t *testing.T) {
+	var got []ProgressEvent
+	req := Request{
+		Hook: func(ev ProgressEvent) { got = append(got, ev) },
+	}
+
+	hop := &HopProgressData{TTL: 3, IP: "192.168.0.1", LossPct: 50.0}
+	req.EmitEvent(ProgressEvent{Stage: "traceroute-hop", Message: "hop 3", Hop: hop})
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(got))
+	}
+	if got[0].Hop == nil {
+		t.Fatal("expected non-nil Hop in received event")
+	}
+	if got[0].Hop.TTL != 3 {
+		t.Errorf("Hop.TTL = %d, want 3", got[0].Hop.TTL)
+	}
+	if got[0].Hop.LossPct != 50.0 {
+		t.Errorf("Hop.LossPct = %f, want 50.0", got[0].Hop.LossPct)
+	}
+}
+
+// TestEmitEvent_NilHookDoesNotPanic verifies EmitEvent is no-op with nil hook.
+func TestEmitEvent_NilHookDoesNotPanic(t *testing.T) {
+	req := Request{} // Hook is nil
+	hop := &HopProgressData{TTL: 1}
+	req.EmitEvent(ProgressEvent{Stage: "traceroute-hop", Hop: hop})
+}

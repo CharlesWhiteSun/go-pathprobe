@@ -769,6 +769,59 @@ fieldset.target-fields legend {
 }
 .progress-entry .msg { color: var(--muted); }
 
+/* ── Traceroute live progress ─────────────────────────────────────────── */
+.traceroute-progress {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: .85rem 1rem;
+  margin-bottom: 1.25rem;
+}
+.tr-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .6rem;
+}
+.tr-spin   { flex-shrink: 0; }
+.tr-title  { font-weight: 600; font-size: .9rem; flex: 1; }
+.tr-hop-count { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+.tr-bar-wrap {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: .4rem;
+}
+.tr-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width .4s ease;
+  width: 0%;
+}
+.tr-eta { font-size: .78rem; color: var(--muted); margin-bottom: .75rem; }
+.tr-live-table { margin-top: .5rem; }
+.hop-timedout td { color: var(--muted); font-style: italic; }
+.hop-host { color: var(--muted); font-size: .85em; }
+
+/* ── Cancel button ────────────────────────────────────────────────────── */
+.btn-cancel {
+  padding: .45rem .85rem;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: .85rem;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn-cancel:hover {
+  background: var(--error-bg);
+  color: var(--fail);
+  border-color: var(--error-border);
+}
+
 /*  History Panel  */
 .history-empty {
   color: var(--muted);

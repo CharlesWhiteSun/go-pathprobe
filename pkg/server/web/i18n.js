@@ -82,8 +82,13 @@ window.LOCALES = {
     /* ── Run button ───────────────────────────────────────────────────── */
     'btn-run':               '▶',
     'btn-running':           '',
+    'btn-cancel':            'Cancel',
 
-
+    /* ── Traceroute live progress ────────────────────────────────────── */
+    'traceroute-progress-title': 'Tracing route…',
+    'traceroute-hop-count':      '{n} hop(s) found',
+    'traceroute-max-wait':       'Max ~{n} min',
+    'traceroute-complete':       'Trace complete — {n} hops found',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           'Diagnostic timed out — the operation exceeded the configured timeout. For Route Trace, try increasing Timeout in Advanced Options or reducing Max Hops.',
     'err-no-runner':         'No handler registered for this diagnostic target.',
@@ -279,8 +284,13 @@ window.LOCALES = {
     /* ── Run button ───────────────────────────────────────────────────── */
     'btn-run':               '▶',
     'btn-running':           '',
+    'btn-cancel':            '取消',
 
-
+    /* ── Traceroute live progress ────────────────────────────────────── */
+    'traceroute-progress-title': '路由追蹤中…',
+    'traceroute-hop-count':      '已發現 {n} 個躍點',
+    'traceroute-max-wait':       '最長等候約 {n} 分鐘',
+    'traceroute-complete':       '路由追蹤完成，共 {n} 個躍點',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           '診斷逾時 — 操作超過設定的等待時間。若使用路由追蹤，請嘗試在進階選項中增加逾時時間，或縮短最大躍點數。',
     'err-no-runner':         '找不到此診斷目標所對應的處理器。',

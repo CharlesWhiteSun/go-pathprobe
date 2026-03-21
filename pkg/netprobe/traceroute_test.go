@@ -17,7 +17,7 @@ type stubProber struct {
 	err    error
 }
 
-func (s *stubProber) Trace(_ context.Context, _ string, _, _ int) (RouteResult, error) {
+func (s *stubProber) Trace(_ context.Context, _ string, _, _ int, _ HopEmitter) (RouteResult, error) {
 	return s.result, s.err
 }
 
@@ -122,7 +122,7 @@ func TestStubProber_ReturnsError(t *testing.T) {
 	want := errors.New("network unreachable")
 	p := &stubProber{err: want}
 
-	_, err := p.Trace(context.Background(), "example.com", 10, 3)
+	_, err := p.Trace(context.Background(), "example.com", 10, 3, nil)
 	if !errors.Is(err, want) {
 		t.Fatalf("expected %v, got %v", want, err)
 	}
@@ -136,7 +136,7 @@ func TestStubProber_ReturnsResult(t *testing.T) {
 	}
 	p := &stubProber{result: RouteResult{Hops: hops}}
 
-	result, err := p.Trace(context.Background(), "example.com", 30, 3)
+	result, err := p.Trace(context.Background(), "example.com", 30, 3, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestStubProber_ContextCancelled(t *testing.T) {
 	cancel() // cancel immediately
 
 	p := &stubProber{result: RouteResult{}, err: ctx.Err()}
-	_, err := p.Trace(ctx, "example.com", 30, 3)
+	_, err := p.Trace(ctx, "example.com", 30, 3, nil)
 	if err == nil {
 		t.Fatal("expected error from cancelled context, got nil")
 	}
@@ -222,7 +222,7 @@ func TestTCPProber_InvalidPortFallback(t *testing.T) {
 
 func TestICMPProber_InvalidMaxHops(t *testing.T) {
 	p := &ICMPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "127.0.0.1", 0, 1)
+	_, err := p.Trace(context.Background(), "127.0.0.1", 0, 1, nil)
 	if err == nil {
 		t.Fatal("expected error for maxHops=0")
 	}
@@ -230,7 +230,7 @@ func TestICMPProber_InvalidMaxHops(t *testing.T) {
 
 func TestICMPProber_InvalidAttempts(t *testing.T) {
 	p := &ICMPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 0)
+	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 0, nil)
 	if err == nil {
 		t.Fatal("expected error for attemptsPerHop=0")
 	}
@@ -238,7 +238,7 @@ func TestICMPProber_InvalidAttempts(t *testing.T) {
 
 func TestTCPProber_InvalidMaxHops(t *testing.T) {
 	p := &TCPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "127.0.0.1", 0, 1)
+	_, err := p.Trace(context.Background(), "127.0.0.1", 0, 1, nil)
 	if err == nil {
 		t.Fatal("expected error for maxHops=0")
 	}
@@ -246,7 +246,7 @@ func TestTCPProber_InvalidMaxHops(t *testing.T) {
 
 func TestTCPProber_InvalidAttempts(t *testing.T) {
 	p := &TCPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 0)
+	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 0, nil)
 	if err == nil {
 		t.Fatal("expected error for attemptsPerHop=0")
 	}
@@ -299,7 +299,7 @@ func assertDuration(t *testing.T, name string, got, want time.Duration) {
 // clear hint about the underlying limitation.
 func TestICMPProber_IPv6OnlyAddressErrors(t *testing.T) {
 	p := &ICMPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "::1", 1, 1)
+	_, err := p.Trace(context.Background(), "::1", 1, 1, nil)
 	if err == nil {
 		t.Fatal("expected error for IPv6-only host, got nil")
 	}
@@ -316,7 +316,7 @@ func TestICMPProber_IPv6OnlyAddressErrors(t *testing.T) {
 // This guards against the fix accidentally rejecting valid IPv4 addresses.
 func TestICMPProber_IPv4AddressProceedsToSocket(t *testing.T) {
 	p := &ICMPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 1)
+	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 1, nil)
 	// On CI / non-root environments the raw socket open will fail, which is
 	// expected and acceptable.  What we must NOT see is the IPv4 resolution error.
 	if err != nil && strings.Contains(err.Error(), "IPv4") {
@@ -332,7 +332,7 @@ func TestICMPProber_IPv4AddressProceedsToSocket(t *testing.T) {
 // refused / no privilege) but the error must not reference IPv4 resolution.
 func TestTCPProber_IPv6OnlyFallsBackToFirstAddr(t *testing.T) {
 	p := &TCPTracerouteProber{}
-	_, err := p.Trace(context.Background(), "::1", 1, 1)
+	_, err := p.Trace(context.Background(), "::1", 1, 1, nil)
 	// An error is expected on most machines (raw TTL sockets need privilege or
 	// the loopback may not respond).  The test only verifies the fallback logic
 	// does not introduce an IPv4-resolution error.
