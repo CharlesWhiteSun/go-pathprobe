@@ -243,6 +243,16 @@ func resolveTargetIP(host string) string {
 	return addrs[0]
 }
 
+// wantsIPGeoAnnotation reports whether the web mode warrants PublicGeo and
+// TargetGeo annotation.  Only WebModeAll (the legacy "all-in-one" empty mode)
+// and WebModePublicIP perform a public-IP fetch, making IP-level geo sidebar
+// decoration meaningful.  All other focused modes (dns, http, port, traceroute)
+// suppress the IP-level geo sidebar to avoid misleading geographic context for
+// operations that are not inherently IP-discovery oriented.
+func wantsIPGeoAnnotation(mode diag.WebMode) bool {
+	return mode == diag.WebModeAll || mode == diag.WebModePublicIP
+}
+
 // Build converts a DiagReport into an AnnotatedReport using the provided
 // geo.IPLocator for IP annotation.  A nil locator or NoopLocator leaves geo
 // fields empty.
@@ -301,23 +311,26 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*Annota
 		return ar, nil
 	}
 
-	// Annotate public IP.
-	if dr.PublicIP != "" {
-		info, err := loc.LocateIP(dr.PublicIP)
-		if err == nil {
-			info.IP = dr.PublicIP
-			ar.PublicGeo = toGeoAnnotation(info)
-		}
-	}
-
-	// Annotate target host.
-	if dr.Host != "" {
-		targetIP := resolveTargetIP(dr.Host)
-		if targetIP != "" {
-			info, err := loc.LocateIP(targetIP)
+	// PublicGeo and TargetGeo only for IP-aware modes; route hop geo is unconditional.
+	if wantsIPGeoAnnotation(dr.WebMode) {
+		// Annotate public IP.
+		if dr.PublicIP != "" {
+			info, err := loc.LocateIP(dr.PublicIP)
 			if err == nil {
-				info.IP = targetIP
-				ar.TargetGeo = toGeoAnnotation(info)
+				info.IP = dr.PublicIP
+				ar.PublicGeo = toGeoAnnotation(info)
+			}
+		}
+
+		// Annotate target host.
+		if dr.Host != "" {
+			targetIP := resolveTargetIP(dr.Host)
+			if targetIP != "" {
+				info, err := loc.LocateIP(targetIP)
+				if err == nil {
+					info.IP = targetIP
+					ar.TargetGeo = toGeoAnnotation(info)
+				}
 			}
 		}
 	}

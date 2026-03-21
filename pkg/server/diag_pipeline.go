@@ -70,7 +70,7 @@ func (p *diagPipeline) runDiag(parentCtx context.Context, req DiagRequest, hook 
 	}
 
 	// 3. Dispatch with timeout-adjusted context.
-	diagReport := &diag.DiagReport{Target: target, Host: opts.Net.Host}
+	diagReport := &diag.DiagReport{Target: target, Host: opts.Net.Host, WebMode: opts.Web.Mode}
 	timeout := ensureTracerouteTimeout(parseDiagTimeout(req.Options.Timeout), opts)
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()

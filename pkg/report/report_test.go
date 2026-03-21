@@ -955,3 +955,79 @@ func (geoStubLocator) LocateIP(ip string) (geo.GeoInfo, error) {
 }
 
 func (geoStubLocator) Close() error { return nil }
+
+// alwaysLocateLocator is a test stub that returns a GeoInfo with HasLocation=true
+// for any IP address.  It allows geo-suppression tests to verify whether Build()
+// would have applied geo annotation — without requiring a real MaxMind database.
+type alwaysLocateLocator struct{}
+
+func (alwaysLocateLocator) LocateIP(ip string) (geo.GeoInfo, error) {
+	return geo.GeoInfo{IP: ip, HasLocation: true, City: "TestCity", CountryCode: "TC"}, nil
+}
+
+// TestBuildIPGeoSuppressedForFocusedWebModes verifies that PublicGeo and
+// TargetGeo are NOT populated for focused web modes (dns, http, port,
+// traceroute) even when a real locator is provided and both Host and PublicIP
+// are set.  This ensures the map sidebar is suppressed for operations where
+// IP-level geographic context is not meaningful.
+// Host is set to a bare IP literal so resolveTargetIP() skips DNS lookup.
+func TestBuildIPGeoSuppressedForFocusedWebModes(t *testing.T) {
+	focusedModes := []diag.WebMode{
+		diag.WebModeDNS,
+		diag.WebModeHTTP,
+		diag.WebModePort,
+		diag.WebModeTraceroute,
+	}
+	for _, mode := range focusedModes {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			dr := &diag.DiagReport{
+				Target:  diag.TargetWeb,
+				Host:    "127.0.0.1", // IP literal — resolveTargetIP skips DNS
+				WebMode: mode,
+			}
+			dr.SetPublicIP("1.2.3.4")
+			ar, err := report.Build(context.Background(), dr, alwaysLocateLocator{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ar.PublicGeo.HasLocation {
+				t.Errorf("mode=%q: PublicGeo.HasLocation must be false for focused modes", mode)
+			}
+			if ar.TargetGeo.HasLocation {
+				t.Errorf("mode=%q: TargetGeo.HasLocation must be false for focused modes", mode)
+			}
+		})
+	}
+}
+
+// TestBuildIPGeoActiveForIPAwareModes verifies that PublicGeo and TargetGeo
+// ARE populated for WebModeAll (legacy empty mode) and WebModePublicIP, which
+// are the modes where the map sidebar is expected and meaningful.
+func TestBuildIPGeoActiveForIPAwareModes(t *testing.T) {
+	ipAwareModes := []diag.WebMode{
+		diag.WebModeAll,
+		diag.WebModePublicIP,
+	}
+	for _, mode := range ipAwareModes {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			dr := &diag.DiagReport{
+				Target:  diag.TargetWeb,
+				Host:    "127.0.0.1",
+				WebMode: mode,
+			}
+			dr.SetPublicIP("1.2.3.4")
+			ar, err := report.Build(context.Background(), dr, alwaysLocateLocator{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ar.PublicGeo.HasLocation {
+				t.Errorf("mode=%q: PublicGeo.HasLocation must be true for IP-aware modes", mode)
+			}
+			if !ar.TargetGeo.HasLocation {
+				t.Errorf("mode=%q: TargetGeo.HasLocation must be true for IP-aware modes", mode)
+			}
+		})
+	}
+}

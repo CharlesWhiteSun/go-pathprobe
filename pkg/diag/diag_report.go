@@ -6,8 +6,12 @@ import "go-pathprobe/pkg/netprobe"
 // single diagnostic run.  It is injected into Request.Report (nil pointer =
 // reporting disabled) so callers can opt-in without modifying runner logic.
 type DiagReport struct {
-	Target   Target
-	Host     string
+	Target Target
+	Host   string
+	// WebMode records the active web sub-mode (e.g. "port", "dns", "http").
+	// report.Build() uses this to suppress PublicGeo/TargetGeo annotation for
+	// focused modes where IP-level geo data is not meaningful.
+	WebMode  WebMode
 	PublicIP string
 
 	// Ports holds per-port connectivity statistics from ConnectivityRunner.
