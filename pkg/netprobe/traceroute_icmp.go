@@ -56,15 +56,22 @@ func (p *ICMPTracerouteProber) Trace(ctx context.Context, host string, maxHops, 
 		return RouteResult{}, fmt.Errorf("attemptsPerHop must be > 0, got %d", attemptsPerHop)
 	}
 
-	// Resolve destination once.
+	// Resolve destination once, preferring an IPv4 address.
+	// ICMP raw sockets in this implementation only support IPv4; if the hostname
+	// resolves to IPv6 addresses only, we return a clear error rather than the
+	// old opaque "IPv6 not supported" message that did not indicate a workaround.
 	dstAddrs, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil {
 		return RouteResult{}, fmt.Errorf("traceroute: resolve %q: %w", host, err)
 	}
-	dstIP := net.ParseIP(dstAddrs[0]).To4()
-	if dstIP == nil {
-		return RouteResult{}, fmt.Errorf("traceroute: IPv6 not supported for ICMP mode, resolved %q", dstAddrs[0])
+	ipv4Str := pickIPv4Addr(dstAddrs)
+	if ipv4Str == "" {
+		return RouteResult{}, fmt.Errorf(
+			"traceroute: ICMP mode requires an IPv4 address; %q resolved only to IPv6 addresses: %v",
+			host, dstAddrs,
+		)
 	}
+	dstIP := net.ParseIP(ipv4Str).To4()
 
 	// Open a raw IPv4 ICMP socket for sending.
 	// "ip4:icmp" requires elevated privileges; the caller is responsible for

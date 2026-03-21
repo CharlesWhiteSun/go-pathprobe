@@ -3,6 +3,7 @@ package netprobe
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -283,5 +284,59 @@ func assertDuration(t *testing.T, name string, got, want time.Duration) {
 	t.Helper()
 	if got != want {
 		t.Errorf("%s: expected %v, got %v", name, want, got)
+	}
+}
+
+// ── ICMP prober: IPv6-only host returns clear error ──────────────────────────
+
+// TestICMPProber_IPv6OnlyAddressErrors verifies that ICMPTracerouteProber.Trace
+// returns an error (rather than a nil-pointer panic or an opaque message) when
+// the target resolves exclusively to an IPv6 address.
+//
+// "::1" is the IPv6 loopback; net.DefaultResolver.LookupHost("::1") returns the
+// literal address without a network call, so the test is hermetic.
+// The error message is also checked to contain "IPv4" so that operators see a
+// clear hint about the underlying limitation.
+func TestICMPProber_IPv6OnlyAddressErrors(t *testing.T) {
+	p := &ICMPTracerouteProber{}
+	_, err := p.Trace(context.Background(), "::1", 1, 1)
+	if err == nil {
+		t.Fatal("expected error for IPv6-only host, got nil")
+	}
+	if msg := err.Error(); !strings.Contains(msg, "IPv4") {
+		t.Errorf("error message should mention IPv4 to guide the operator, got: %q", msg)
+	}
+}
+
+// TestICMPProber_IPv4AddressProceedsToSocket verifies that ICMPTracerouteProber
+// does NOT return the "IPv4" resolution error when given an IPv4 literal.
+// Any error after the resolution step (e.g. raw socket permission denial) must
+// NOT contain the "IPv4 not found" wording — only socket/network errors.
+//
+// This guards against the fix accidentally rejecting valid IPv4 addresses.
+func TestICMPProber_IPv4AddressProceedsToSocket(t *testing.T) {
+	p := &ICMPTracerouteProber{}
+	_, err := p.Trace(context.Background(), "127.0.0.1", 1, 1)
+	// On CI / non-root environments the raw socket open will fail, which is
+	// expected and acceptable.  What we must NOT see is the IPv4 resolution error.
+	if err != nil && strings.Contains(err.Error(), "IPv4") {
+		t.Errorf("IPv4 literal should not trigger the IPv6-only error, got: %q", err)
+	}
+}
+
+// TestTCPProber_IPv6OnlyFallsBackToFirstAddr verifies that TCPTracerouteProber
+// does NOT return the "IPv4" resolution error for an IPv6-only host: it falls
+// back to the first resolved address and lets the OS TCP stack handle it.
+//
+// "::1" is used as an IPv6-only literal; the dial will fail (connection
+// refused / no privilege) but the error must not reference IPv4 resolution.
+func TestTCPProber_IPv6OnlyFallsBackToFirstAddr(t *testing.T) {
+	p := &TCPTracerouteProber{}
+	_, err := p.Trace(context.Background(), "::1", 1, 1)
+	// An error is expected on most machines (raw TTL sockets need privilege or
+	// the loopback may not respond).  The test only verifies the fallback logic
+	// does not introduce an IPv4-resolution error.
+	if err != nil && strings.Contains(err.Error(), "IPv4") {
+		t.Errorf("TCP prober should not require IPv4; got: %q", err)
 	}
 }

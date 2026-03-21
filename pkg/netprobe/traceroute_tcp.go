@@ -68,11 +68,17 @@ func (p *TCPTracerouteProber) Trace(ctx context.Context, host string, maxHops, a
 	}
 
 	// Resolve destination once so we can compare against the peer address.
+	// IPv4 is preferred because it avoids IPv6 literal bracket formatting in the
+	// dial target; if no IPv4 address is available we fall back to the first
+	// resolved address (which may be IPv6) and let the OS TCP stack handle it.
 	dstAddrs, err := net.DefaultResolver.LookupHost(ctx, host)
 	if err != nil {
 		return RouteResult{}, fmt.Errorf("traceroute tcp: resolve %q: %w", host, err)
 	}
-	dstAddr := dstAddrs[0]
+	dstAddr := pickIPv4Addr(dstAddrs)
+	if dstAddr == "" {
+		dstAddr = dstAddrs[0] // fallback: no IPv4 found, use first address as-is
+	}
 	target := fmt.Sprintf("%s:%d", dstAddr, p.remotePort())
 
 	hto := p.hopTimeoutFor()
