@@ -28,6 +28,41 @@
 
   // ── Private: section renderers ─────────────────────────────────────────
 
+  // Threshold for collapsing DNS record values.  When a resolver returns more
+  // than this many records, the excess is hidden behind an expand toggle.
+  // Kept as a named constant so callers, tests and CSS class names all share
+  // one source of truth without hard-coding a magic number.
+  const DNS_VALUE_COLLAPSE_THRESHOLD = 3;
+
+  // ── Private: _renderDnsValues ─────────────────────────────────────────
+  // Renders DNS record values as inline pills.  When the list exceeds
+  // DNS_VALUE_COLLAPSE_THRESHOLD the extras are wrapped in a collapsible
+  // <span> and a toggle <button> is appended.  Event handling is done via
+  // event delegation in form.js (no inline handlers → CSP-safe).
+  function _renderDnsValues(values) {
+    if (!values || !values.length) {
+      return '<span class="dns-no-value">—</span>';
+    }
+    if (values.length <= DNS_VALUE_COLLAPSE_THRESHOLD) {
+      return values.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('');
+    }
+    const visible   = values.slice(0, DNS_VALUE_COLLAPSE_THRESHOLD);
+    const overflow  = values.slice(DNS_VALUE_COLLAPSE_THRESHOLD);
+    const moreLabel = _t('dns-records-more').replace('{n}', overflow.length);
+    const lessLabel = _t('dns-records-less');
+    return (
+      visible.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('') +
+      '<span class="dns-records-overflow">' +
+        overflow.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('') +
+      '</span>' +
+      '<button type="button" class="dns-records-toggle" aria-expanded="false" ' +
+        'data-label-more="' + esc(moreLabel) + '" ' +
+        'data-label-less="' + esc(lessLabel) + '">' +
+        esc(moreLabel) +
+      '</button>'
+    );
+  }
+
   function renderSummary(r) {
     const items = [
       [_t('key-target'),    r.Target],
@@ -216,14 +251,9 @@
 
         // Records cell: actual DNS values only.  Errors and empty results
         // both show a dash — error detail is already in the Resolver column.
-        let recordsCell;
-        if (ans.Values && ans.Values.length) {
-          recordsCell = ans.Values
-            .map(v => '<span class="dns-record-value">' + esc(v) + '</span>')
-            .join('');
-        } else {
-          recordsCell = '<span class="dns-no-value">\u2014</span>';
-        }
+        // Long value lists are collapsed via _renderDnsValues() to prevent
+        // the Records column from overflowing and pushing RTT out of view.
+        const recordsCell = _renderDnsValues(ans.Values);
 
         // RTT is meaningless when the resolver errored — hide it for clarity.
         const rttCell = ans.LookupError ? '\u2014' : esc(ans.RTT);

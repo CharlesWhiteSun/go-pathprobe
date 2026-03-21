@@ -668,6 +668,31 @@ fieldset.target-fields legend {
 .dns-resolver .dns-err-label  { font-size: .72rem; margin-left: .35rem;
                                 vertical-align: middle; cursor: help; }
 
+/* DNS record value pill — each resolved IP or hostname rendered inline.
+   Monospace font keeps IPv6 addresses legible; background pill separates
+   individual values without requiring block layout.                         */
+.dns-record-value { display: inline-block; font-family: ui-monospace, monospace;
+                    font-size: .8rem; margin: .07rem .1rem;
+                    padding: .04rem .28rem; border-radius: 3px;
+                    background: var(--surface-alt); border: 1px solid var(--border); }
+
+/* Overflow container — hidden by default; .is-expanded class reveals extras.
+   Uses display:none / display:inline (not visibility) so hidden values take
+   no layout space, keeping the Records column narrow.                        */
+.dns-records-overflow           { display: none; }
+.dns-records-overflow.is-expanded { display: inline; }
+
+/* Expand/collapse toggle button — compact inline-list style.                */
+.dns-records-toggle { display: inline-block; margin: .07rem .1rem;
+                      padding: .04rem .32rem; border-radius: 3px;
+                      font-size: .76rem; cursor: pointer;
+                      color: var(--primary); background: transparent;
+                      border: 1px solid var(--primary);
+                      vertical-align: middle; line-height: 1.5; }
+.dns-records-toggle:hover,
+.dns-records-toggle:focus-visible { background: var(--primary); color: #fff;
+                                    outline: none; }
+
 /* Contextual hint banner — inside the card, below the resolver table.
    Uses a <div> rather than a table row to remain independent of the resolver
    table's column structure.  Left accent border signals an actionable issue. */

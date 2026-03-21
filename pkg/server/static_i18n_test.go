@@ -501,3 +501,34 @@ func TestStaticI18n_HttpUrlPlaceholderKey(t *testing.T) {
 		t.Error("i18n.js: 'label-http-url-hint' must be removed — HTTP URL input is now the primary target in http mode, not optional")
 	}
 }
+
+// TestStaticI18n_DNSRecordsCollapseKeys 驗證 i18n.js 在 EN 和 zh-TW 兩個語系中
+// 均宣告 dns-records-more 與 dns-records-less 鍵，這兩個鍵供 renderer.js 的
+// _renderDnsValues() 在解析記錄超過 DNS_VALUE_COLLAPSE_THRESHOLD 時渲染展開/收合
+// toggle 按鈕使用，藉此避免過多 IP 地址撐開 Records 欄，將 RTT 擠壓出可視範圍外。
+func TestStaticI18n_DNSRecordsCollapseKeys(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	// 兩個鍵均必須在 EN 和 zh-TW 兩個語系中各出現一次（共 ≥ 2 次）。
+	for _, key := range []string{"'dns-records-more'", "'dns-records-less'"} {
+		if count := strings.Count(body, key); count < 2 {
+			t.Errorf("i18n.js: key %s found %d time(s) — must appear in both en and zh-TW locales", key, count)
+		}
+	}
+	// EN: dns-records-more 必須包含 {n} 佔位符，供 JS 填入實際筆數。
+	if !strings.Contains(body, `'+{n} more'`) {
+		t.Error("i18n.js en: dns-records-more must contain '+{n} more' with {n} placeholder")
+	}
+	// zh-TW: dns-records-more 必須包含 {n} 佔位符。
+	if !strings.Contains(body, `'+{n} 筆'`) {
+		t.Error("i18n.js zh-TW: dns-records-more must contain '+{n} 筆' with {n} placeholder")
+	}
+	// EN: dns-records-less 必須帶有 'show less' 語意。
+	if !strings.Contains(body, "'show less'") {
+		t.Error("i18n.js en: dns-records-less must contain 'show less'")
+	}
+	// zh-TW: dns-records-less 必須帶有「收合」語意。
+	if !strings.Contains(body, "'收合'") {
+		t.Error("i18n.js zh-TW: dns-records-less must contain '收合'")
+	}
+}

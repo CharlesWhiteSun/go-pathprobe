@@ -538,6 +538,21 @@
     initEnterKey();
   }
 
+  // ── DNS record-value expand/collapse (event delegation) ──────────────
+  // Results are re-rendered dynamically into #results-inner, so we cannot
+  // attach listeners directly to the short-lived toggle buttons.  Delegating
+  // to document ensures the handler survives re-renders without re-registration.
+  document.addEventListener('click', function onDnsRecordsToggle(e) {
+    const btn = e.target.closest('.dns-records-toggle');
+    if (!btn) return;
+    const overflow = btn.previousElementSibling;
+    if (!overflow || !overflow.classList.contains('dns-records-overflow')) return;
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    overflow.classList.toggle('is-expanded', !expanded);
+    btn.setAttribute('aria-expanded', String(!expanded));
+    btn.textContent = expanded ? btn.dataset.labelMore : btn.dataset.labelLess;
+  });
+
   // ── Namespace registration ─────────────────────────────────────────────
   const PathProbe = window.PathProbe || {};
   PathProbe.Form = { val, checked, getModeFor, getRunningHTML, onTargetChange, init };

@@ -147,6 +147,10 @@ window.LOCALES = {
     'dns-hint-network':      'The probe could not reach the DNS resolvers. Check the network connection.',
     'dns-hint-resolver':     'The DNS resolvers returned an error status. The domain may be propagating or temporarily unavailable.',
     'dns-hint-all-failed':   'All resolvers failed. Verify the domain name and network connectivity.',
+    /* Long value-list collapse toggle — shown when a resolver returns more
+       than DNS_VALUE_COLLAPSE_THRESHOLD records.  {n} is replaced at runtime. */
+    'dns-records-more':      '+{n} more',
+    'dns-records-less':      'show less',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
@@ -338,6 +342,9 @@ window.LOCALES = {
     'dns-hint-network':      '探測主機無法連接到 DNS 解析器，請檢查網路連線。',
     'dns-hint-resolver':     'DNS 解析器回傳了錯誤狀態，該網域可能正在傳播中或暫時無法解析。',
     'dns-hint-all-failed':   '所有解析器均回傳錯誤，請確認網域名稱格式及網路連線狀態。',
+    /* 解析記錄摺疊切換 — 當解析記錄數超過閾值時顯示，{n} 為執行時替換的筆數 */
+    'dns-records-more':      '+{n} 筆',
+    'dns-records-less':      '收合',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',
