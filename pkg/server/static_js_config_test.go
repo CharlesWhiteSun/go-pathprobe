@@ -34,6 +34,29 @@ func TestStaticJS_WEB_MODES_WITH_PORTS(t *testing.T) {
 	}
 }
 
+// TestStaticJS_WEB_MODES_HideAndDNS verifies that WEB_MODES_HIDE_HOST includes both
+// 'dns' and 'http' (host input hidden for both modes), and that the independent
+// WEB_MODES_SHOW_DNS_DOMAINS constant contains only 'dns' (so #dns-domains-group
+// is not inadvertently shown for http mode).
+func TestStaticJS_WEB_MODES_HideAndDNS(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/config.js")
+
+	if !strings.Contains(body, "WEB_MODES_HIDE_HOST") {
+		t.Error("config.js: WEB_MODES_HIDE_HOST constant must be declared")
+	}
+	if !strings.Contains(body, "WEB_MODES_SHOW_DNS_DOMAINS") {
+		t.Error("config.js: WEB_MODES_SHOW_DNS_DOMAINS constant must be declared")
+	}
+	// http mode must also hide the target host input.
+	if !strings.Contains(body, "'dns', 'http'") {
+		t.Error("config.js: WEB_MODES_HIDE_HOST must include both 'dns' and 'http'")
+	}
+	// Only dns mode should show the DNS Domains input; http must not trigger it.
+	if !strings.Contains(body, "WEB_MODES_SHOW_DNS_DOMAINS = ['dns']") {
+		t.Error("config.js: WEB_MODES_SHOW_DNS_DOMAINS must contain only 'dns'")
+	}
+}
+
 // TestStaticJS_MapPointConfigs verifies that app.js declares MAP_POINT_CONFIGS
 // with 'origin' and 'target' keys, forming a data-driven foundation for all
 // map marker styling.  Callers derive visual behaviour from this object rather
@@ -371,6 +394,8 @@ func TestStaticJS_ConfigNamespace(t *testing.T) {
 		"TARGET_PORTS",
 		"TARGET_MODE_PANELS",
 		"WEB_MODES_WITH_PORTS",
+		"WEB_MODES_HIDE_HOST",
+		"WEB_MODES_SHOW_DNS_DOMAINS",
 		"COPYRIGHT_START_YEAR",
 		"THEMES",
 		"DEFAULT_THEME",

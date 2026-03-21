@@ -41,18 +41,64 @@ func TestHTTPRunnerUsesURL(t *testing.T) {
 	}
 }
 
-// TestHTTPRunnerDefaultURL uses host fallback when URL empty.
-func TestHTTPRunnerDefaultURL(t *testing.T) {
+// TestHTTPRunnerSkipsWhenURLEmpty verifies that the runner emits a skip message
+// and does not call the prober when no URL is provided.  This reflects the new
+// behaviour after removing the net.Host fallback — the HTTP mode now owns its
+// own URL input and does not inherit the target-host field.
+func TestHTTPRunnerSkipsWhenURLEmpty(t *testing.T) {
 	prober := &stubHTTPProber{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	runner := NewHTTPRunner(prober, logger)
 
-	req := Request{Target: TargetWeb, Options: Options{Global: GlobalOptions{Timeout: time.Second, MTRCount: 1}, Net: NetworkOptions{Host: "my.test"}}}
+	var events []string
+	req := Request{
+		Target:  TargetWeb,
+		Options: Options{Global: GlobalOptions{Timeout: time.Second, MTRCount: 1}},
+		Hook:    func(e ProgressEvent) { events = append(events, e.Stage) },
+	}
 	if err := runner.Run(context.Background(), req); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if prober.url != "https://my.test" {
-		t.Fatalf("expected derived url, got %s", prober.url)
+	if prober.called {
+		t.Fatal("prober must not be called when URL is empty")
+	}
+	found := false
+	for _, e := range events {
+		if e == "http" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected an 'http' skip event to be emitted when URL is empty")
+	}
+}
+
+// TestHTTPRunnerProtoResultHostFromURL verifies that ProtoResult.Host is parsed
+// from the probed URL hostname rather than net.Host (which is now empty when
+// the host input is hidden in http mode).
+func TestHTTPRunnerProtoResultHostFromURL(t *testing.T) {
+	prober := &stubHTTPProber{}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewHTTPRunner(prober, logger)
+
+	report := &DiagReport{}
+	req := Request{
+		Target: TargetWeb,
+		Options: Options{
+			Global: GlobalOptions{Timeout: time.Second},
+			Web:    WebOptions{Mode: WebModeHTTP, URL: "https://check.example.com/path"},
+			Net:    NetworkOptions{Host: ""},
+		},
+		Report: report,
+	}
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(report.Protos) == 0 {
+		t.Fatal("expected a ProtoResult to be recorded")
+	}
+	if got := report.Protos[0].Host; got != "check.example.com" {
+		t.Errorf("ProtoResult.Host = %q; want %q", got, "check.example.com")
 	}
 }
 
@@ -81,20 +127,6 @@ func TestHTTPRunnerProberError(t *testing.T) {
 	}}
 	if err := runner.Run(context.Background(), req); err == nil {
 		t.Fatalf("expected prober error, got nil")
-	}
-}
-
-// TestHTTPRunnerDefaultFallbackHost verifies that when both URL and host are empty,
-// the URL defaults to "https://example.com".
-func TestHTTPRunnerDefaultFallbackHost(t *testing.T) {
-	prober := &stubHTTPProber{}
-	runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	req := Request{Target: TargetWeb, Options: Options{Global: GlobalOptions{Timeout: time.Second}}}
-	if err := runner.Run(context.Background(), req); err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if prober.url != "https://example.com" {
-		t.Fatalf("expected fallback url, got %s", prober.url)
 	}
 }
 

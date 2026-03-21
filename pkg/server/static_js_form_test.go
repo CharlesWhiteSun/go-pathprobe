@@ -420,3 +420,28 @@ func TestStaticJS_EnterKeyTriggersRunDiag(t *testing.T) {
 		t.Error("form.js: init() must call initEnterKey() to activate Enter-key submit on page load")
 	}
 }
+
+// TestStaticJS_UpdateHostGroupDecoupled verifies that updateHostGroup() uses
+// WEB_MODES_SHOW_DNS_DOMAINS (not WEB_MODES_HIDE_HOST) to control the
+// #dns-domains-group visibility, so that http mode hides #host-group without
+// inadvertently revealing the DNS domains input.
+func TestStaticJS_UpdateHostGroupDecoupled(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/form.js")
+
+	// updateHostGroup must exist.
+	if !strings.Contains(body, "updateHostGroup") {
+		t.Fatal("form.js: updateHostGroup function must be defined")
+	}
+	// It must read the new WEB_MODES_SHOW_DNS_DOMAINS config key for dns-domains visibility.
+	if !strings.Contains(body, "WEB_MODES_SHOW_DNS_DOMAINS") {
+		t.Error("form.js: updateHostGroup must use WEB_MODES_SHOW_DNS_DOMAINS (not WEB_MODES_HIDE_HOST) to control #dns-domains-group")
+	}
+	// showDns must be the variable used to drive #dns-domains-group.hidden.
+	if !strings.Contains(body, "showDns") {
+		t.Error("form.js: updateHostGroup must declare a showDns variable for #dns-domains-group visibility")
+	}
+	// #dns-domains-group.hidden must NOT be set to !hideHost (old coupled logic).
+	if strings.Contains(body, "dnsGrp.hidden  = !hideHost") || strings.Contains(body, "dnsGrp.hidden=!hideHost") {
+		t.Error("form.js: updateHostGroup must not tie #dns-domains-group visibility directly to hideHost — use showDns instead")
+	}
+}

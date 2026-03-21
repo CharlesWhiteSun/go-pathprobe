@@ -205,9 +205,13 @@ const TARGET_MODE_PANELS = {
 // do not perform port-level connectivity checks, so they suppress port-group.
 const WEB_MODES_WITH_PORTS = ['port'];
 
-// Web modes that hide the standard Target Host input and show the DNS Domains
-// input in its place.  dns mode operates on domain names entered separately.
-const WEB_MODES_HIDE_HOST = ['dns'];
+// Web modes that hide the standard Target Host input entirely.
+// dns operates on domain names entered separately; http uses its own URL input.
+const WEB_MODES_HIDE_HOST = ['dns', 'http'];
+
+// Web modes that show the DNS Domains input (#dns-domains-group) in place of
+// the Target Host input.  This is a strict subset of WEB_MODES_HIDE_HOST.
+const WEB_MODES_SHOW_DNS_DOMAINS = ['dns'];
 
 
 // The year this project was first published.  Used to build a copyright range
@@ -245,6 +249,7 @@ PathProbe.Config = {
   TARGET_MODE_PANELS,
   WEB_MODES_WITH_PORTS,
   WEB_MODES_HIDE_HOST,
+  WEB_MODES_SHOW_DNS_DOMAINS,
   COPYRIGHT_START_YEAR,
   THEMES,
   DEFAULT_THEME,

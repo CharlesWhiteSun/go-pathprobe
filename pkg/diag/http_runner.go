@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	neturl "net/url"
 	"time"
 
 	"go-pathprobe/pkg/netprobe"
@@ -34,11 +35,8 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	}
 	url := req.Options.Web.URL
 	if url == "" {
-		host := req.Options.Net.Host
-		if host == "" {
-			host = "example.com"
-		}
-		url = "https://" + host
+		req.Emitf("http", "HTTP probe skipped: no URL specified")
+		return nil
 	}
 	req.Emitf("http", "Probing HTTP %s …", url)
 
@@ -56,11 +54,15 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		r.Logger.Info("tls info", "version", res.TLS.Version, "cipher", res.TLS.CipherSuite, "alpn", res.TLS.NegotiatedALPN)
 	}
 
+	host := req.Options.Net.Host
+	if parsed, err := neturl.Parse(url); err == nil && parsed.Hostname() != "" {
+		host = parsed.Hostname()
+	}
 	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
 	if req.Report != nil {
 		req.Report.AddProto(ProtoResult{
 			Protocol: "http",
-			Host:     req.Options.Net.Host,
+			Host:     host,
 			OK:       res.StatusCode >= 200 && res.StatusCode < 400,
 			Summary:  summary,
 		})
