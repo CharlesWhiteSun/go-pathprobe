@@ -450,6 +450,97 @@ func TestDNSComparisonAllFailedWithValues(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// NoneFound tests
+// ---------------------------------------------------------------------------
+
+// TestDNSComparisonNoneFound verifies the primary trigger for NoneFound: the
+// system resolver returns NXDOMAIN while DoH resolvers return empty (no error).
+// Previously this fell through to "Consistent" because HasDivergence=false
+// (all Values are empty) and AllEmpty=false (system has LookupError).
+func TestDNSComparisonNoneFound(t *testing.T) {
+	comp := DNSComparison{
+		Name: "24h.pchome.com.tw", Type: RecordTypeAAAA,
+		Results: []DNSAnswer{
+			{Source: "system", LookupError: "lookup 24h.pchome.com.tw: no such host"},
+			{Source: "doh-1.1.1.1", Values: []string{}},
+			{Source: "doh-8.8.8.8", Values: []string{}},
+		},
+	}
+	if !comp.NoneFound() {
+		t.Fatal("expected NoneFound=true: system=NXDOMAIN, DoH=empty — no resolver returned records")
+	}
+	// Must not also claim HasDivergence (Values are all empty).
+	if comp.HasDivergence() {
+		t.Fatal("NoneFound case must not be flagged as HasDivergence")
+	}
+	// Must not claim AllFailed (DoH resolvers succeeded with empty results).
+	if comp.AllFailed() {
+		t.Fatal("NoneFound case must not claim AllFailed when DoH resolvers responded without error")
+	}
+}
+
+// TestDNSComparisonNoneFoundFalseWhenHasValues verifies NoneFound is false
+// when at least one resolver returned actual records.
+func TestDNSComparisonNoneFoundFalseWhenHasValues(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", Values: []string{"1.2.3.4"}},
+			{Source: "cf", Values: []string{"1.2.3.4"}},
+		},
+	}
+	if comp.NoneFound() {
+		t.Fatal("expected NoneFound=false when a resolver returned actual records")
+	}
+}
+
+// TestDNSComparisonNoneFoundFalseWhenAllFailed verifies NoneFound is false
+// when all resolvers failed — AllFailed has higher badge priority.
+func TestDNSComparisonNoneFoundFalseWhenAllFailed(t *testing.T) {
+	comp := DNSComparison{
+		Name: "bad.example", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", LookupError: "no such host"},
+			{Source: "cf", LookupError: "resolver returned error status"},
+		},
+	}
+	if comp.NoneFound() {
+		t.Fatal("expected NoneFound=false when AllFailed — AllFailed has higher badge priority")
+	}
+	if !comp.AllFailed() {
+		t.Fatal("fixture setup: expected AllFailed=true")
+	}
+}
+
+// TestDNSComparisonNoneFoundSubsumesAllEmpty verifies that when AllEmpty is
+// true (all resolvers returned empty results with no errors), NoneFound is also
+// true.  AllEmpty is a strict subset of NoneFound.
+func TestDNSComparisonNoneFoundSubsumesAllEmpty(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeMX,
+		Results: []DNSAnswer{
+			{Source: "sys", Values: nil},
+			{Source: "cf", Values: []string{}},
+		},
+	}
+	if !comp.AllEmpty() {
+		t.Fatal("fixture setup: expected AllEmpty=true")
+	}
+	if !comp.NoneFound() {
+		t.Fatal("expected NoneFound=true when AllEmpty=true (AllEmpty ⊆ NoneFound)")
+	}
+}
+
+// TestDNSComparisonNoneFoundFalseWhenNoResults verifies NoneFound is false
+// for an empty Results slice (no resolvers configured).
+func TestDNSComparisonNoneFoundFalseWhenNoResults(t *testing.T) {
+	comp := DNSComparison{Name: "example.com", Type: RecordTypeA}
+	if comp.NoneFound() {
+		t.Fatal("expected NoneFound=false when Results slice is empty")
+	}
+}
+
 type spyResolver struct {
 	name    string
 	answers map[string][]string

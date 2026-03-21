@@ -144,32 +144,46 @@
 
   // Render DNS comparison results as a card-per-entry layout.
   // Each card groups all per-resolver answers under a single header that shows
-  // the domain name, record-type badge, and the four-state consistency badge.
+  // the domain name, record-type badge, and the five-state consistency badge.
   //
   // Design rationale:
   //   • Domain + Type identity belongs at the GROUP level (card header),
   //     not as repeated table columns — eliminates empty-cell rows.
   //   • The consistency/error status is shown once in the card header,
   //     decoupled from the resolver-detail table below it.
-  //   • The inner table has exactly 3 columns (Resolver | Records | RTT)
-  //     with no merged cells or colspan tricks.
+  //   • The inner table has exactly 3 columns (Resolver | Records | RTT).
+  //     Error category badges appear in the Resolver column (next to the
+  //     resolver name) rather than in Records, keeping Records for actual
+  //     DNS record values only.
   //
-  // Four-state badge priority (highest → lowest):
+  // Five-state badge priority (highest → lowest):
   //   AllFailed     → badge-fail  + dns-all-failed   (every resolver errored)
   //   HasDivergence → badge-fail  + dns-divergent    (resolvers disagree)
-  //   AllEmpty      → badge-warn  + dns-no-records   (no records, no errors)
-  //   consistent    → badge-ok    + dns-consistent   (resolvers agree)
+  //   NoneFound     → badge-warn  + dns-no-records   (no records: mix of errors+empty)
+  //   AllEmpty      → badge-warn  + dns-no-records   (no records, no errors — subset of NoneFound)
+  //   consistent    → badge-ok    + dns-consistent   (resolvers agree on non-empty data)
   function renderDNSSection(dnsEntries) {
     if (!dnsEntries || dnsEntries.length === 0) return '';
 
+    // Lookup table: ErrorCategory string → i18n key for the resolver-column badge.
+    const _errCatKey = {
+      'input':    'dns-cat-input',
+      'nxdomain': 'dns-cat-nxdomain',
+      'network':  'dns-cat-network',
+      'resolver': 'dns-cat-resolver',
+    };
+
     const groups = dnsEntries.map(entry => {
-      // ── Four-state status badge ──────────────────────────────────────────
+      // ── Five-state status badge ──────────────────────────────────────────
+      // AllFailed and NoneFound are checked before HasDivergence so that
+      // "all errors" and "no records at all" are labelled correctly rather
+      // than falling through to "Consistent".
       let badge;
       if (entry.AllFailed) {
         badge = '<span class="badge badge-fail">' + esc(_t('dns-all-failed'))  + '</span>';
       } else if (entry.HasDivergence) {
         badge = '<span class="badge badge-fail">' + esc(_t('dns-divergent'))   + '</span>';
-      } else if (entry.AllEmpty) {
+      } else if (entry.NoneFound || entry.AllEmpty) {
         badge = '<span class="badge badge-warn">' + esc(_t('dns-no-records'))  + '</span>';
       } else {
         badge = '<span class="badge badge-ok">'   + esc(_t('dns-consistent'))  + '</span>';
@@ -184,31 +198,40 @@
         '</div>';
 
       // ── Per-resolver answer rows (3 columns: Resolver | Records | RTT) ───
+      //
+      // Error category badge lives in the Resolver column alongside the
+      // resolver name, because it describes the resolver's behaviour — not
+      // the record content.  The Records column shows only actual DNS values
+      // or a dash when nothing was returned.
       const answerRows = (entry.Answers || []).map(ans => {
-        let recordsCell;
+        // Resolver cell: source name + optional error-category badge (tooltip
+        // carries the raw technical error string for debugging).
+        let resolverCell = esc(ans.Source);
         if (ans.LookupError) {
-          // ErrorCategory is set by Go (ClassifyDNSLookupError).  Map it to an
-          // i18n key so the UI shows a concise, user-friendly label.  The raw
-          // technical error is preserved in the title= tooltip for debugging.
-          const catKey = {
-            'input':    'dns-cat-input',
-            'nxdomain': 'dns-cat-nxdomain',
-            'network':  'dns-cat-network',
-            'resolver': 'dns-cat-resolver',
-          }[ans.ErrorCategory] || 'dns-cat-unknown';
-          recordsCell = '<span class="badge badge-fail dns-err-label" title="' +
+          const catKey = _errCatKey[ans.ErrorCategory] || 'dns-cat-unknown';
+          resolverCell +=
+            ' <span class="badge badge-fail dns-err-label" title="' +
             esc(ans.LookupError) + '">' + esc(_t(catKey)) + '</span>';
-        } else {
-          recordsCell = (ans.Values && ans.Values.length)
-            ? ans.Values.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('')
-            : '<span class="dns-no-value">\u2014</span>';
         }
+
+        // Records cell: actual DNS values only.  Errors and empty results
+        // both show a dash — error detail is already in the Resolver column.
+        let recordsCell;
+        if (ans.Values && ans.Values.length) {
+          recordsCell = ans.Values
+            .map(v => '<span class="dns-record-value">' + esc(v) + '</span>')
+            .join('');
+        } else {
+          recordsCell = '<span class="dns-no-value">\u2014</span>';
+        }
+
         // RTT is meaningless when the resolver errored — hide it for clarity.
         const rttCell = ans.LookupError ? '\u2014' : esc(ans.RTT);
+
         return '<tr class="dns-answer-row">' +
-          '<td class="dns-resolver">' + esc(ans.Source) + '</td>' +
-          '<td class="dns-records">'  + recordsCell      + '</td>' +
-          '<td class="dns-rtt">'      + rttCell          + '</td>' +
+          '<td class="dns-resolver">' + resolverCell + '</td>' +
+          '<td class="dns-records">'  + recordsCell  + '</td>' +
+          '<td class="dns-rtt">'      + rttCell      + '</td>' +
         '</tr>';
       }).join('');
 

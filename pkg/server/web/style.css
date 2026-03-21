@@ -661,6 +661,13 @@ fieldset.target-fields legend {
 .dns-answer-table tr:last-child td { border-bottom: none; }
 .dns-answer-table tbody tr:hover   { background: rgba(0,0,0,.02); }
 
+/* Resolver column: name + optional inline error-category badge.
+   The badge sits inline after the resolver name so it reads as
+   "system [輸入問題]" rather than appearing unrelated in Records. */
+.dns-resolver                 { white-space: nowrap; }
+.dns-resolver .dns-err-label  { font-size: .72rem; margin-left: .35rem;
+                                vertical-align: middle; cursor: help; }
+
 /* Contextual hint banner — inside the card, below the resolver table.
    Uses a <div> rather than a table row to remain independent of the resolver
    table's column structure.  Left accent border signals an actionable issue. */

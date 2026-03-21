@@ -90,8 +90,12 @@ type DNSAnswerEntry struct {
 //
 //	AllFailed     == true  → every resolver errored          (badge-fail, highest priority)
 //	HasDivergence == true  → resolvers disagree              (badge-fail)
-//	AllEmpty      == true  → all resolvers found no records  (badge-warn)
+//	NoneFound     == true  → no records at all (errors+empty mix) (badge-warn)
+//	AllEmpty      == true  → all resolvers found no records, no errors (badge-warn, subset of NoneFound)
 //	otherwise              → resolvers agree on non-empty data (badge-ok)
+//
+// NoneFound is the canonical check in the renderer for the "no records" badge;
+// AllEmpty is retained for backward-compatibility with existing tests.
 //
 // HintKey is the i18n key for a contextual explanation banner shown to the
 // user when AllFailed is true.  It is empty when not all resolvers failed.
@@ -101,6 +105,7 @@ type DNSEntry struct {
 	HasDivergence bool
 	AllEmpty      bool
 	AllFailed     bool
+	NoneFound     bool
 	HintKey       string
 	Answers       []DNSAnswerEntry
 }
@@ -276,6 +281,7 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*Annota
 			AllFailed:     comp.AllFailed(),
 			HasDivergence: comp.HasDivergence(),
 			AllEmpty:      comp.AllEmpty(),
+			NoneFound:     comp.NoneFound(),
 		}
 		for _, ans := range comp.Results {
 			cat := netprobe.ClassifyDNSLookupError(comp.Name, ans.LookupError)

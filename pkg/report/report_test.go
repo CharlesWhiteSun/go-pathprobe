@@ -821,6 +821,72 @@ func TestBuildDNSErrorCategoryPassThrough(t *testing.T) {
 	}
 }
 
+// TestBuildDNSNoneFoundPassThrough verifies that Build() correctly propagates
+// NoneFound into DNSEntry for the mixed NXDOMAIN+empty scenario (system resolver
+// returns NXDOMAIN while DoH resolvers return empty without error).
+func TestBuildDNSNoneFoundPassThrough(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		// Primary trigger: system=NXDOMAIN, DoH=empty (no error) → NoneFound.
+		{
+			Name: "24h.pchome.com.tw",
+			Type: netprobe.RecordTypeAAAA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "system", LookupError: "lookup 24h.pchome.com.tw: no such host"},
+				{Source: "doh-1.1.1.1", Values: []string{}},
+				{Source: "doh-8.8.8.8", Values: []string{}},
+			},
+		},
+		// Resolver has records → NoneFound must be false.
+		{
+			Name: "24h.pchome.com.tw",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "system", Values: []string{"34.149.253.14"}, RTT: 5 * time.Millisecond},
+				{Source: "doh-1.1.1.1", Values: []string{"34.149.253.14"}, RTT: 8 * time.Millisecond},
+				{Source: "doh-8.8.8.8", Values: []string{"34.149.253.14"}, RTT: 7 * time.Millisecond},
+			},
+		},
+		// All resolvers failed → AllFailed=true, NoneFound must be false (higher priority).
+		{
+			Name: "https://www.example.com/",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "system", LookupError: "lookup https://www.example.com/: no such host"},
+				{Source: "doh-1.1.1.1", LookupError: "resolver returned error status"},
+				{Source: "doh-8.8.8.8", LookupError: "resolver returned error status"},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 3 {
+		t.Fatalf("expected 3 DNS entries, got %d", len(ar.DNS))
+	}
+	// Entry 0: AAAA NXDOMAIN+empty mix → NoneFound.
+	e0 := ar.DNS[0]
+	if !e0.NoneFound {
+		t.Error("DNS[0] (system=NXDOMAIN, DoH=empty): expected NoneFound=true")
+	}
+	if e0.AllFailed {
+		t.Error("DNS[0]: NoneFound case must not set AllFailed")
+	}
+	if e0.HasDivergence {
+		t.Error("DNS[0]: NoneFound case must not set HasDivergence")
+	}
+	// Entry 1: A records present → NoneFound must be false.
+	if ar.DNS[1].NoneFound {
+		t.Error("DNS[1] (all resolvers have A records): expected NoneFound=false")
+	}
+	// Entry 2: all resolvers failed → AllFailed=true, NoneFound=false (higher priority).
+	e2 := ar.DNS[2]
+	if e2.NoneFound {
+		t.Error("DNS[2] (AllFailed): expected NoneFound=false — AllFailed has higher badge priority")
+	}
+	if !e2.AllFailed {
+		t.Error("DNS[2]: expected AllFailed=true")
+	}
+}
+
 // TestBuildDNSHintKey verifies that Build() populates DNSEntry.HintKey
 // according to the dominant error category when all resolvers fail.
 func TestBuildDNSHintKey(t *testing.T) {

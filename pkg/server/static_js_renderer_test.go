@@ -110,7 +110,7 @@ func TestStaticJS_RenderRouteSectionColumns(t *testing.T) {
 // AllFailed must be checked before HasDivergence so that the case where all
 // resolvers fail (Values all nil → HasDivergence=false) is correctly labelled
 // rather than falling through as "Consistent".
-func TestStaticJS_RenderDNSSectionFourStateBadge(t *testing.T) {
+func TestStaticJS_RenderDNSSectionFiveStateBadge(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
 
 	// The function must exist.
@@ -126,21 +126,33 @@ func TestStaticJS_RenderDNSSectionFourStateBadge(t *testing.T) {
 	// AllFailed must be checked first (entry.AllFailed before entry.HasDivergence).
 	allFailedIdx := strings.Index(body, "entry.AllFailed")
 	hasDivIdx := strings.Index(body, "entry.HasDivergence")
+	noneFoundIdx := strings.Index(body, "entry.NoneFound")
+	allEmptyIdx := strings.Index(body, "entry.AllEmpty")
 	if allFailedIdx == -1 {
 		t.Fatal("renderer.js: renderDNSSection must check entry.AllFailed for the all-failed badge")
 	}
 	if hasDivIdx == -1 {
 		t.Fatal("renderer.js: renderDNSSection must check entry.HasDivergence")
 	}
+	if noneFoundIdx == -1 {
+		t.Fatal("renderer.js: renderDNSSection must check entry.NoneFound for the no-records badge (fifth state)")
+	}
+	if allEmptyIdx == -1 {
+		t.Error("renderer.js: renderDNSSection must check entry.AllEmpty (AllEmpty ⊆ NoneFound, kept for safety)")
+	}
+	// Priority order: AllFailed → HasDivergence → NoneFound → AllEmpty → consistent.
 	if allFailedIdx > hasDivIdx {
-		t.Error("renderer.js: entry.AllFailed must be checked BEFORE entry.HasDivergence (priority order)")
+		t.Error("renderer.js: entry.AllFailed must be checked BEFORE entry.HasDivergence")
 	}
-	// AllEmpty → badge-warn.
-	if !strings.Contains(body, "entry.AllEmpty") {
-		t.Error("renderer.js: renderDNSSection must check entry.AllEmpty for the no-records badge")
+	if hasDivIdx > noneFoundIdx {
+		t.Error("renderer.js: entry.HasDivergence must be checked BEFORE entry.NoneFound")
 	}
+	if noneFoundIdx > allEmptyIdx {
+		t.Error("renderer.js: entry.NoneFound must be checked BEFORE entry.AllEmpty")
+	}
+	// NoneFound and AllEmpty → badge-warn.
 	if !strings.Contains(body, "badge-warn") {
-		t.Error("renderer.js: renderDNSSection must use badge-warn class for AllEmpty entries")
+		t.Error("renderer.js: renderDNSSection must use badge-warn class for NoneFound/AllEmpty entries")
 	}
 	// Failure states → badge-fail.
 	if !strings.Contains(body, "badge-fail") {
@@ -211,6 +223,32 @@ func TestStaticJS_DNSAnswerCategoryDisplay(t *testing.T) {
 	}
 	if strings.Contains(fnBody, "dns-hint-row") {
 		t.Error("renderer.js: old tr.dns-hint-row must be removed — hint is now a <div class=\"dns-hint\">")
+	}
+
+	// Error category badge (dns-err-label) must be attached to the Resolver
+	// column cell (resolverCell), NOT to the Records cell (recordsCell).
+	// The Records column is for actual DNS record values only.
+	errLabelIdx := strings.Index(fnBody, "dns-err-label")
+	resolverCellIdx := strings.Index(fnBody, "resolverCell")
+	recordsCellIdx := strings.Index(fnBody, "recordsCell")
+	if errLabelIdx == -1 {
+		t.Fatal("renderer.js: dns-err-label badge class must be used (error badge in Resolver column)")
+	}
+	if resolverCellIdx == -1 || recordsCellIdx == -1 {
+		t.Fatal("renderer.js: expected both resolverCell and recordsCell variables in renderDNSSection")
+	}
+	// dns-err-label must appear in the resolverCell block (before recordsCell).
+	if errLabelIdx > recordsCellIdx {
+		t.Error("renderer.js: dns-err-label must be set on resolverCell (before recordsCell), not in the Records column")
+	}
+	// The recordsCell block must not check ans.LookupError — Records column
+	// shows actual records (ans.Values) or a dash; error status belongs in Resolver column.
+	rttCellIdx := strings.Index(fnBody, "const rttCell")
+	if rttCellIdx > recordsCellIdx {
+		recordsCellBlock := fnBody[recordsCellIdx:rttCellIdx]
+		if strings.Contains(recordsCellBlock, "dns-err-label") {
+			t.Error("renderer.js: dns-err-label must not appear in the recordsCell block")
+		}
 	}
 }
 

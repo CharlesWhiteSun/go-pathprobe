@@ -90,6 +90,46 @@ func (c DNSComparison) AllEmpty() bool {
 	return true
 }
 
+// NoneFound reports whether no resolver returned any actual records, regardless
+// of whether individual resolvers succeeded with empty results or failed with an
+// error (e.g. NXDOMAIN).  It returns true when every resolver either returned an
+// empty Values slice or a LookupError, AND the entry is not AllFailed (at least
+// one resolver responded without error) AND resolvers do not actively disagree on
+// records (HasDivergence is false).
+//
+// This is the fifth badge state, sitting between HasDivergence and the implicit
+// "consistent non-empty" state in priority:
+//
+//	AllFailed     — every resolver errored         (highest priority)
+//	HasDivergence — resolvers disagree on values
+//	NoneFound     — no records found at all (mix of errors + empty OK)
+//	consistent    — resolvers agree on non-empty records
+//
+// Typical trigger: system resolver returns NXDOMAIN while DoH resolvers return
+// empty without error for a record type the domain does not have (e.g. AAAA or MX).
+// Previously this fell through to "Consistent" because Values were all empty, but
+// NoneFound separates it correctly as a "no records" outcome.
+func (c DNSComparison) NoneFound() bool {
+	if len(c.Results) == 0 {
+		return false
+	}
+	// At least one resolver must have responded without error (otherwise AllFailed).
+	if c.AllFailed() {
+		return false
+	}
+	// Resolvers must not disagree on actual record values.
+	if c.HasDivergence() {
+		return false
+	}
+	// True only when no resolver produced any actual records.
+	for _, r := range c.Results {
+		if len(r.Values) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func sortedStringSlice(vs []string) []string {
 	out := make([]string, len(vs))
 	copy(out, vs)
