@@ -103,6 +103,13 @@
     if (window.PathProbe && window.PathProbe.History && window.PathProbe.History.rerenderLast) {
       window.PathProbe.History.rerenderLast();
     }
+    // Re-apply i18n-dependent map labels (geo-precision-notice, tile-bar
+    // aria-labels, Leaflet popup HTML, distance badge) without a full map rebuild.
+    // map.js registers PathProbe.Map.rerenderLabels — guard so locale.js remains
+    // independent of map.js load order.
+    if (window.PathProbe && window.PathProbe.Map && window.PathProbe.Map.rerenderLabels) {
+      window.PathProbe.Map.rerenderLabels();
+    }
   }
 
   // ── Public API ───────────────────────────────────────────────────────────

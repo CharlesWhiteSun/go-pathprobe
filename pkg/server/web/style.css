@@ -963,7 +963,7 @@ fieldset.target-fields legend {
   margin-bottom: .5rem;
   background: var(--surface-alt, #f5f6f8);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--primary, #3b82f6);
+  border-left: 3px solid var(--muted);
   border-radius: var(--radius);
 }
 

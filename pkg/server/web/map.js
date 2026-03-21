@@ -44,6 +44,11 @@
   // Live Leaflet layer group for the connector arc between origin and target;
   // stored so refreshConnectorLayer() can remove the old layer before rebuilding.
   let _connectorLayer  = null;
+  // Last computed great-circle distance in km between origin and target;
+  // retained so rerenderLabels() can refresh the distance badge text when the
+  // locale changes without recomputing haversineKm().  Null when no two-point
+  // map is currently displayed.
+  let _lastDistanceKm = null;
 
   // ── Config aliases (resolved at parse time from PathProbe.Config) ──────────
   // config.js is loaded before map.js (see index.html).  The defensive guard
@@ -350,6 +355,21 @@
                                           scheme.originColor, scheme.targetColor);
     _connectorLayer.addTo(_map);
   }
+  // ── Distance badge ─────────────────────────────────────────────────────────
+
+  /** Refresh #geo-distance text using the stored _lastDistanceKm value.
+   *  Called on initial render and from rerenderLabels() so the 'map-distance'
+   *  i18n key is always resolved in the current locale.  When no two-point map
+   *  is displayed (_lastDistanceKm is null) the badge remains hidden.
+   */
+  function updateDistanceBadge() {
+    const distEl = document.getElementById('geo-distance');
+    if (!distEl) return;
+    if (_lastDistanceKm === null) { distEl.hidden = true; return; }
+    distEl.textContent = t('map-distance') + ': ' + Math.round(_lastDistanceKm).toLocaleString() + ' km';
+    distEl.hidden = false;
+  }
+
   // ── Geo precision notice ────────────────────────────────────────────────────
 
   /** Show or hide the #geo-precision-notice banner based on the LocationPrecision
@@ -407,6 +427,7 @@
       const outerEl = document.getElementById('geo-map-outer');
       if (outerEl) outerEl.hidden = true;
       if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
+      _lastDistanceKm = null;
       updateGeoPrecisionNotice(null, null);
       return;
     }
@@ -453,6 +474,7 @@
       // Pre-compute the great-circle distance so it drives both the viewport
       // proximity guard and the distance badge without a second haversineKm() call.
       const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
+      _lastDistanceKm = km;
       const hasCountryPrecision = points.some(p => p.geo.LocationPrecision === 'country');
       // Proximity guard: fitBounds() over-zooms when country centroids coincide
       // or are very close (e.g. both points map to the same national centroid).
@@ -477,10 +499,7 @@
         arcStyleCfg, arcScheme.originColor, arcScheme.targetColor
       );
       _connectorLayer.addTo(_map);
-      if (distEl) {
-        distEl.textContent = t('map-distance') + ': ' + Math.round(km).toLocaleString() + ' km';
-        distEl.hidden = false;
-      }
+      updateDistanceBadge();
     }
 
     // Update the geo-precision notice banner so users receive immediate feedback
@@ -505,11 +524,31 @@
     });
   }
 
+  // ── Locale-driven label refresh ─────────────────────────────────────────────
+
+  /** Re-apply all i18n-dependent map labels using the current locale.
+   *  Called by locale.js / applyLocale() after every locale switch so that:
+   *    • geo-precision-notice textContent (no data-i18n, set via JS)
+   *    • tile-bar button aria-label / title attributes
+   *    • Leaflet marker popup HTML (stored inside Leaflet, not in live DOM)
+   *    • map legend text (has data-i18n but is in Leaflet's control layer)
+   *    • distance badge composite text (key + numeric value + unit)
+   *  are all translated to the new locale without requiring a full map rebuild.
+   *  Safe to call when no map is displayed — each private sub-call guards on
+   *  state availability (null-checks on _map, _lastPub, _lastTgt, _lastDistanceKm).
+   */
+  function rerenderLabels() {
+    updateGeoPrecisionNotice(_lastPub, _lastTgt);
+    renderMapBar();
+    refreshMapMarkers();
+    updateDistanceBadge();
+  }
+
   // ── Global bridge (HTML onclick buttons need window.setMapTileVariant) ──────
   window.setMapTileVariant = setMapTileVariant;
 
   // ── Export ─────────────────────────────────────────────────────────────────
   const _ns = window.PathProbe || {};
-  _ns.Map = { renderMap, syncMapTileVariantToTheme, setMapTileVariant, refreshMapMarkers };
+  _ns.Map = { renderMap, syncMapTileVariantToTheme, setMapTileVariant, refreshMapMarkers, rerenderLabels };
   window.PathProbe = _ns;
 })();

@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticJS_UpdateCopyrightYearFunction verifies that locale.js defines an
 // updateCopyrightYear() function that references the footer-copyright i18n key
 // and builds an en-dash year range from COPYRIGHT_START_YEAR to the current year.
@@ -156,6 +155,49 @@ func TestStaticJS_ApplyLocaleReRendersHistory(t *testing.T) {
 	}
 	if !strings.Contains(fnBody, "rerenderLast") {
 		t.Error("locale.js: applyLocale must call rerenderLast() to re-render the history list on locale change")
+	}
+}
+
+// TestStaticJS_ApplyLocaleRerenderMapLabels 驗證 locale.js / applyLocale()
+// 在語系切換後透過執行期解析的 PathProbe.Map.rerenderLabels() 更新地圖 UI，
+// 包含 geo-precision-notice、圖磚按鈕 aria-label、Leaflet popup 與距離標示。
+// 此呼叫使用與 Renderer/History 相同的防衛性存取模式，確保 locale.js 不依賴
+// map.js 的載入順序。
+func TestStaticJS_ApplyLocaleRerenderMapLabels(t *testing.T) {
+	h := newStaticHandler(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/locale.js", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /locale.js: want 200, got %d", rec.Code)
+	}
+	localeJS := rec.Body.String()
+
+	fnStart := strings.Index(localeJS, "function applyLocale(")
+	if fnStart == -1 {
+		t.Fatal("locale.js: applyLocale function not found")
+	}
+	nextFn := strings.Index(localeJS[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = localeJS[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 3000
+		if end > len(localeJS) {
+			end = len(localeJS)
+		}
+		fnBody = localeJS[fnStart:end]
+	}
+
+	// 必須透過執行期解析呼叫 PathProbe.Map，而非直接 import，以保持低耦合。
+	if !strings.Contains(fnBody, "PathProbe.Map") {
+		t.Error("locale.js: applyLocale must trigger map label refresh via PathProbe.Map.rerenderLabels()")
+	}
+	if !strings.Contains(fnBody, "rerenderLabels") {
+		t.Error("locale.js: applyLocale must call rerenderLabels() to refresh map i18n labels on locale change")
+	}
+	// 必須與 Renderer/History 使用相同的防衛性存取模式（三重 &&）。
+	if !strings.Contains(fnBody, "PathProbe.Map && window.PathProbe.Map.rerenderLabels") {
+		t.Error("locale.js: applyLocale must guard PathProbe.Map.rerenderLabels with existence check (same pattern as Renderer/History)")
 	}
 }
 

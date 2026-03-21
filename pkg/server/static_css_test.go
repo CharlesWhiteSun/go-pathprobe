@@ -1496,3 +1496,34 @@ func TestStaticCSS_GeoPrecisionNotice(t *testing.T) {
 		t.Error("style.css: .geo-precision-notice must use a border-left accent to signal informational intent")
 	}
 }
+
+// TestStaticCSS_GeoPrecisionNoticeUsesNeutralAccent 驗證 .geo-precision-notice
+// 的左側 accent 邊框使用 --muted（中性灰色）而非 --primary（品牌藍）。
+// --primary 在各主題下顏色差異大（預設=藍、dark=紫、forest-green=綠），
+// 用於互動元素（按鈕、焦點框等）；地理精度提示是純資訊性橫幅，應使用
+// 中性的 --muted 確保在所有主題下視覺一致，並與同一區域的 .geo-distance
+// 元素保持相同的配色邏輯。
+func TestStaticCSS_GeoPrecisionNoticeUsesNeutralAccent(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/style.css")
+
+	// 找到 .geo-precision-notice 規則區塊。
+	ruleStart := strings.Index(body, ".geo-precision-notice")
+	if ruleStart == -1 {
+		t.Fatal("style.css: .geo-precision-notice rule not found")
+	}
+	// 擷取規則本體（至下一個 } 為止）。
+	closeIdx := strings.Index(body[ruleStart:], "}")
+	if closeIdx == -1 {
+		t.Fatal("style.css: .geo-precision-notice rule block not properly terminated")
+	}
+	ruleBlock := body[ruleStart : ruleStart+closeIdx+1]
+
+	// 左側 accent 邊框必須使用 --muted（中性語意，跨主題一致）。
+	if !strings.Contains(ruleBlock, "var(--muted)") {
+		t.Error("style.css: .geo-precision-notice border-left must use var(--muted) for theme-neutral informational accent")
+	}
+	// 不應使用 --primary（品牌色，適合互動元素而非資訊性橫幅）。
+	if strings.Contains(ruleBlock, "var(--primary") {
+		t.Error("style.css: .geo-precision-notice must NOT use var(--primary) for the accent — use var(--muted) instead")
+	}
+}

@@ -888,3 +888,133 @@ func TestStaticJS_RenderMapCallsPrecisionNotice(t *testing.T) {
 		t.Error("map.js: renderMap must call updateGeoPrecisionNotice(null, null) on the hide path to clear the banner")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// rerenderLabels — locale 切換後重新套用所有 i18n 標籤
+// ---------------------------------------------------------------------------
+
+// TestStaticJS_MapRerenderLabelsAPI 驗證 map.js 在匯出的 PathProbe.Map 命名空間中
+// 暴露了 rerenderLabels 方法，讓 locale.js 可在語系切換時呼叫，而無需直接依賴 map.js。
+func TestStaticJS_MapRerenderLabelsAPI(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/map.js")
+
+	// 函式本體必須存在。
+	if !strings.Contains(body, "function rerenderLabels(") {
+		t.Fatal("map.js: rerenderLabels function not found — locale-driven label refresh requires this function")
+	}
+	// 必須納入 Map 命名空間匯出，使 locale.js 可執行期解析呼叫。
+	if !strings.Contains(body, "rerenderLabels") {
+		t.Error("map.js: rerenderLabels must be exported in the PathProbe.Map namespace")
+	}
+	// 匯出物件中必須同時保留 renderMap 與 rerenderLabels。
+	exportIdx := strings.Index(body, "_ns.Map =")
+	if exportIdx == -1 {
+		t.Fatal("map.js: PathProbe.Map export not found")
+	}
+	exportEnd := exportIdx + 200
+	if exportEnd > len(body) {
+		exportEnd = len(body)
+	}
+	exportLine := body[exportIdx:exportEnd]
+	if !strings.Contains(exportLine, "rerenderLabels") {
+		t.Error("map.js: rerenderLabels must appear in the _ns.Map export object literal")
+	}
+}
+
+// TestStaticJS_MapRerenderLabelsRefreshesAllComponents 驗證 rerenderLabels() 內部
+// 呼叫所有需要重新套用語系的子函式，確保切換語系時四類 UI 元素都能同步更新：
+//   - updateGeoPrecisionNotice: 精度提示橫幅文字
+//   - renderMapBar: 圖磚按鈕 aria-label / title
+//   - refreshMapMarkers: Leaflet marker popup 與 legend（Leaflet 內部 HTML）
+//   - updateDistanceBadge: 距離標示複合文字（i18n key + 數值 + 單位）
+func TestStaticJS_MapRerenderLabelsRefreshesAllComponents(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/map.js")
+
+	fnStart := strings.Index(body, "function rerenderLabels(")
+	if fnStart == -1 {
+		t.Fatal("map.js: rerenderLabels function not found")
+	}
+	// 擷取函式本體（取到下一個頂層函式或檔案尾端）。
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	for _, call := range []string{
+		"updateGeoPrecisionNotice(",
+		"renderMapBar()",
+		"refreshMapMarkers()",
+		"updateDistanceBadge()",
+	} {
+		if !strings.Contains(fnBody, call) {
+			t.Errorf("map.js: rerenderLabels must call %s to refresh locale-dependent UI", call)
+		}
+	}
+}
+
+// TestStaticJS_MapUpdateDistanceBadgeExists 驗證 map.js 定義了私有的
+// updateDistanceBadge() 函式，將距離標示文字的更新邏輯從 renderMap() 解耦，
+// 使 rerenderLabels() 可在不重建地圖的情況下重新套用語系。
+func TestStaticJS_MapUpdateDistanceBadgeExists(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/map.js")
+
+	if !strings.Contains(body, "function updateDistanceBadge(") {
+		t.Fatal("map.js: updateDistanceBadge function not found — distance badge refresh must be a named helper")
+	}
+	// 必須讀取 _lastDistanceKm 狀態（而非每次重算 haversineKm）。
+	fnStart := strings.Index(body, "function updateDistanceBadge(")
+	end := fnStart + 400
+	if end > len(body) {
+		end = len(body)
+	}
+	fnBody := body[fnStart:end]
+	if !strings.Contains(fnBody, "_lastDistanceKm") {
+		t.Error("map.js: updateDistanceBadge must read _lastDistanceKm (stored state) not recompute haversineKm")
+	}
+	if !strings.Contains(fnBody, "map-distance") {
+		t.Error("map.js: updateDistanceBadge must use i18n key 'map-distance' via t() for locale-aware label")
+	}
+}
+
+// TestStaticJS_MapRenderMapStoresDistanceKm 驗證 renderMap() 在計算出距離後
+// 將值儲存至 _lastDistanceKm，使後續 rerenderLabels() 呼叫可直接引用
+// 而無需重新呼叫者傳入 pub/tgt 參數。
+func TestStaticJS_MapRenderMapStoresDistanceKm(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/map.js")
+
+	fnStart := strings.Index(body, "function renderMap(")
+	if fnStart == -1 {
+		t.Fatal("map.js: renderMap function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 8000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	// renderMap 必須在計算 km 後儲存至 _lastDistanceKm。
+	if !strings.Contains(fnBody, "_lastDistanceKm = km") {
+		t.Error("map.js: renderMap must store the computed distance as _lastDistanceKm for rerenderLabels() to use")
+	}
+	// 隱藏路徑必須清除 _lastDistanceKm（避免 rerenderLabels 顯示過期數值）。
+	if !strings.Contains(fnBody, "_lastDistanceKm = null") {
+		t.Error("map.js: renderMap hide path must reset _lastDistanceKm = null when the map is hidden")
+	}
+	// renderMap 不應再包含 inline 更新距離的 textContent 賦值 — 應改呼叫 updateDistanceBadge()。
+	if strings.Contains(fnBody, "t('map-distance')") {
+		t.Error("map.js: renderMap must not inline distance label — delegate to updateDistanceBadge() instead")
+	}
+}
