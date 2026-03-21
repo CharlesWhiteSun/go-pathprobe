@@ -37,7 +37,8 @@ func TestStaticJS_WEB_MODES_WITH_PORTS(t *testing.T) {
 // TestStaticJS_WEB_MODES_HideAndDNS verifies that WEB_MODES_HIDE_HOST includes both
 // 'dns' and 'http' (host input hidden for both modes), and that the independent
 // WEB_MODES_SHOW_DNS_DOMAINS constant contains only 'dns' (so #dns-domains-group
-// is not inadvertently shown for http mode).
+// is not inadvertently shown for http mode).  Also verifies WEB_MODES_SHOW_HTTP_URL
+// = ['http'] which drives the new #http-url-group top-level visibility.
 func TestStaticJS_WEB_MODES_HideAndDNS(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/config.js")
 
@@ -47,6 +48,9 @@ func TestStaticJS_WEB_MODES_HideAndDNS(t *testing.T) {
 	if !strings.Contains(body, "WEB_MODES_SHOW_DNS_DOMAINS") {
 		t.Error("config.js: WEB_MODES_SHOW_DNS_DOMAINS constant must be declared")
 	}
+	if !strings.Contains(body, "WEB_MODES_SHOW_HTTP_URL") {
+		t.Error("config.js: WEB_MODES_SHOW_HTTP_URL constant must be declared")
+	}
 	// http mode must also hide the target host input.
 	if !strings.Contains(body, "'dns', 'http'") {
 		t.Error("config.js: WEB_MODES_HIDE_HOST must include both 'dns' and 'http'")
@@ -54,6 +58,10 @@ func TestStaticJS_WEB_MODES_HideAndDNS(t *testing.T) {
 	// Only dns mode should show the DNS Domains input; http must not trigger it.
 	if !strings.Contains(body, "WEB_MODES_SHOW_DNS_DOMAINS = ['dns']") {
 		t.Error("config.js: WEB_MODES_SHOW_DNS_DOMAINS must contain only 'dns'")
+	}
+	// Only http mode should show the HTTP URL input.
+	if !strings.Contains(body, "WEB_MODES_SHOW_HTTP_URL = ['http']") {
+		t.Error("config.js: WEB_MODES_SHOW_HTTP_URL must contain only 'http'")
 	}
 }
 
@@ -395,6 +403,7 @@ func TestStaticJS_ConfigNamespace(t *testing.T) {
 		"TARGET_MODE_PANELS",
 		"WEB_MODES_WITH_PORTS",
 		"WEB_MODES_HIDE_HOST",
+		"WEB_MODES_SHOW_HTTP_URL",
 		"WEB_MODES_SHOW_DNS_DOMAINS",
 		"COPYRIGHT_START_YEAR",
 		"THEMES",

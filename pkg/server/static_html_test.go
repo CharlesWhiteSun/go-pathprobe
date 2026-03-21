@@ -663,3 +663,56 @@ func TestStaticHTML_ScriptLoadOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestStaticHTML_HttpUrlGroupAtTopLevel 驗證 #http-url-group 已移至頂層 form-grid，
+// 與 #host-group 和 #dns-domains-group 並列，而非藏在 #fields-web 的子面板中。
+// 切換至 HTTP/HTTPS 探測模式時此欄取代 Target Host，與 DNS 模式的處理方式一致。
+func TestStaticHTML_HttpUrlGroupAtTopLevel(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	// #http-url-group 必須存在且預設隱藏（HTTP 模式啟用時才顯示）。
+	if !strings.Contains(body, `id="http-url-group" hidden`) {
+		t.Error("index.html: #http-url-group must exist at top-level form-grid and be hidden by default")
+	}
+	// #http-url input 必須帶有 data-i18n-placeholder，使用通用 i18n 機制翻譯 placeholder。
+	if !strings.Contains(body, `data-i18n-placeholder="ph-http-url"`) {
+		t.Error("index.html: #http-url input must carry data-i18n-placeholder=\"ph-http-url\" for i18n support")
+	}
+	// id 與 data-i18n-placeholder 必須在同一個 input 標籤上。
+	httpUrlIdx := strings.Index(body, `id="http-url"`)
+	if httpUrlIdx == -1 {
+		t.Fatal("index.html: #http-url input not found")
+	}
+	tagEnd := httpUrlIdx + 200
+	if tagEnd > len(body) {
+		tagEnd = len(body)
+	}
+	if !strings.Contains(body[httpUrlIdx:tagEnd], `data-i18n-placeholder="ph-http-url"`) {
+		t.Error("index.html: data-i18n-placeholder=\"ph-http-url\" must be on the same #http-url input element")
+	}
+	// #http-url-group 必須出現在 #host-group 之後（兩者在同一層 form-grid），
+	// 並且在 panel-stage（#fields-web fieldset）之前。
+	hostGrpIdx := strings.Index(body, `id="host-group"`)
+	httpUrlGrpIdx := strings.Index(body, `id="http-url-group"`)
+	panelStageIdx := strings.Index(body, `id="panel-stage"`)
+	if hostGrpIdx == -1 || httpUrlGrpIdx == -1 || panelStageIdx == -1 {
+		t.Fatal("index.html: #host-group, #http-url-group, or #panel-stage not found")
+	}
+	if httpUrlGrpIdx < hostGrpIdx {
+		t.Error("index.html: #http-url-group must appear after #host-group in the DOM")
+	}
+	if httpUrlGrpIdx > panelStageIdx {
+		t.Error("index.html: #http-url-group must appear before #panel-stage (should be in top-level form-grid, not inside fieldset)")
+	}
+}
+
+// TestStaticHTML_WebFieldsHttpRemoved 驗證 #web-fields-http 子面板已從 #fields-web
+// 內移除。#http-url input 已移至頂層 form-grid 的 #http-url-group，不再重複存在。
+func TestStaticHTML_WebFieldsHttpRemoved(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	// #web-fields-http 已被移除，不應再出現於 HTML 中。
+	if strings.Contains(body, `id="web-fields-http"`) {
+		t.Error("index.html: #web-fields-http sub-panel must be removed — #http-url input has moved to top-level #http-url-group")
+	}
+}

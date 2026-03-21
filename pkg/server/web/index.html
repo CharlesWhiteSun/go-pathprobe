@@ -80,6 +80,13 @@
         <input type="text" id="dns-domains" data-i18n-placeholder="ph-dns-domains" placeholder="e.g. google.com">
       </div>
 
+      <!-- http-url-group: 只在 web + http 模式下顯示，取代 Target Host。
+           HTTP 探測模式以此完整 URL 作為探測目標，不依賴 Target Host 欄位。 -->
+      <div class="field-group" id="http-url-group" hidden>
+        <label for="http-url" data-i18n="label-http-url">HTTP URL</label>
+        <input type="text" id="http-url" data-i18n-placeholder="ph-http-url" placeholder="e.g. google.com">
+      </div>
+
       <!-- port-group: 依目標類型與偵測模式動態顯示。
            web/port 模式與非 web 目標均顯示文字輸入框。
            其餘 web 模式（public-ip/dns/http/traceroute）不需要連接埠，保持隱藏。
@@ -119,12 +126,6 @@
               <label><input type="checkbox" id="dns-AAAA" checked> <span data-i18n="dns-type-AAAA">IPv6</span></label>
               <label><input type="checkbox" id="dns-MX"   checked> <span data-i18n="dns-type-MX">MX</span></label>
             </div>
-          </div>
-        </div>
-        <div id="web-fields-http" hidden>
-          <div class="field-group">
-            <label for="http-url"><span data-i18n="label-http-url">HTTP URL</span> <small data-i18n="label-http-url-hint">(optional probe)</small></label>
-            <input type="text" id="http-url" placeholder="https://example.com">
           </div>
         </div>
         <div id="web-fields-traceroute" hidden>

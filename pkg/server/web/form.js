@@ -31,6 +31,7 @@
   function _webModesWithPorts()     { return _cfg().WEB_MODES_WITH_PORTS    || []; }
   function _webModesHideHost()      { return _cfg().WEB_MODES_HIDE_HOST      || []; }
   function _webModesShowDnsDomains(){ return _cfg().WEB_MODES_SHOW_DNS_DOMAINS || []; }
+  function _webModesShowHttpUrl()   { return _cfg().WEB_MODES_SHOW_HTTP_URL   || []; }
 
   // ── Locale (runtime-resolved) ─────────────────────────────────────────
   /** Return the translation for key in the current locale, falling back to key. */
@@ -114,21 +115,26 @@
   }
 
   /**
-   * Show or hide the Target Host field (#host-group) and the DNS Domains field
-   * (#dns-domains-group) based on the current target and mode.
+   * Show or hide the Target Host field (#host-group) and its per-mode
+   * replacements (#dns-domains-group, #http-url-group) based on the current
+   * target and mode.
    *
    * Rules:
-   *   - web + mode in WEB_MODES_HIDE_HOST      → hide #host-group
+   *   - web + mode in WEB_MODES_HIDE_HOST        → hide #host-group
    *   - web + mode in WEB_MODES_SHOW_DNS_DOMAINS → show #dns-domains-group
-   *   - all other combinations                 → show #host-group, hide #dns-domains-group
+   *   - web + mode in WEB_MODES_SHOW_HTTP_URL    → show #http-url-group
+   *   - all other combinations                   → show #host-group, hide replacements
    */
   function updateHostGroup(target, mode) {
-    const hostGrp = document.getElementById('host-group');
-    const dnsGrp  = document.getElementById('dns-domains-group');
-    const hideHost = (target === 'web') && _webModesHideHost().includes(mode);
-    const showDns  = (target === 'web') && _webModesShowDnsDomains().includes(mode);
-    if (hostGrp) hostGrp.hidden = hideHost;
-    if (dnsGrp)  dnsGrp.hidden  = !showDns;
+    const hostGrp    = document.getElementById('host-group');
+    const dnsGrp     = document.getElementById('dns-domains-group');
+    const httpUrlGrp = document.getElementById('http-url-group');
+    const hideHost    = (target === 'web') && _webModesHideHost().includes(mode);
+    const showDns     = (target === 'web') && _webModesShowDnsDomains().includes(mode);
+    const showHttpUrl = (target === 'web') && _webModesShowHttpUrl().includes(mode);
+    if (hostGrp)    hostGrp.hidden    = hideHost;
+    if (dnsGrp)     dnsGrp.hidden     = !showDns;
+    if (httpUrlGrp) httpUrlGrp.hidden = !showHttpUrl;
   }
 
   // ── Panel height measurement ───────────────────────────────────────────

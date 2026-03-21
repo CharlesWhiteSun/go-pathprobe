@@ -90,6 +90,8 @@ func TestStaticI18n_WebModeKeys(t *testing.T) {
 		"dns-type-MX",
 		"ph-dns-domains",
 		"ph-host",
+		"label-http-url",
+		"ph-http-url",
 	}
 	for _, k := range requiredKeys {
 		if !strings.Contains(body, `'`+k+`'`) {
@@ -472,5 +474,30 @@ func TestStaticI18n_DNSAllFailedAndCategoryKeys(t *testing.T) {
 	// EN: dns-hint-input 必須提示 URL / https:// 問題。
 	if !strings.Contains(body, "https://") {
 		t.Error("i18n.js en: dns-hint-input must mention 'https://' to guide the user")
+	}
+}
+
+// TestStaticI18n_HttpUrlPlaceholderKey 驗證 i18n.js 在 EN 和 zh-TW 兩個語系中均宣告
+// ph-http-url 鍵，且 placeholder 格式為完整 URL（https://google.com），
+// 讓使用者清楚知道需輸入完整網址（含 scheme），而非裸主機名稱。
+// 同時確認舊的 label-http-url-hint 鍵（「選填探測」提示）已移除。
+func TestStaticI18n_HttpUrlPlaceholderKey(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	// ph-http-url 必須在兩個語系中各出現一次（共 ≥ 2 次）。
+	if count := strings.Count(body, `'ph-http-url'`); count < 2 {
+		t.Errorf("i18n.js: 'ph-http-url' found %d time(s) — must appear in both en and zh-TW locales", count)
+	}
+	// placeholder 必須是完整 URL 格式（帶 https:// scheme），提示使用者輸入完整網址。
+	if !strings.Contains(body, `'https://google.com'`) {
+		t.Error("i18n.js: ph-http-url must use 'https://google.com' format to guide users to enter a full URL with scheme")
+	}
+	// EN 與 zh-TW 兩個語系皆應使用相同的 https://google.com 格式（兩者出現 ≥ 2 次）。
+	if strings.Count(body, "https://google.com") < 2 {
+		t.Error("i18n.js: ph-http-url must use https://google.com in both en and zh-TW locales")
+	}
+	// label-http-url-hint（舊的「選填探測」提示）必須已移除。
+	if strings.Contains(body, `'label-http-url-hint'`) {
+		t.Error("i18n.js: 'label-http-url-hint' must be removed — HTTP URL input is now the primary target in http mode, not optional")
 	}
 }

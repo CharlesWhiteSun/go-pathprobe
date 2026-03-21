@@ -38,6 +38,12 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		req.Emitf("http", "HTTP probe skipped: no URL specified")
 		return nil
 	}
+	// Normalise scheme: if the user omitted https:// or http://, prepend https://.
+	// net/http rejects schemeless strings with "unsupported protocol scheme".
+	if parsed, err := neturl.Parse(url); err == nil && parsed.Scheme == "" {
+		url = "https://" + url
+		req.Emitf("http", "No scheme detected — assuming HTTPS: %s", url)
+	}
 	req.Emitf("http", "Probing HTTP %s …", url)
 
 	res, err := r.Prober.Probe(ctx, netprobe.HTTPProbeRequest{

@@ -191,7 +191,6 @@ const TARGET_PORTS = {
 const TARGET_MODE_PANELS = {
   web: {
     'web-fields-dns':        ['dns'],
-    'web-fields-http':       ['http'],
     'web-fields-traceroute': ['traceroute'],
   },
   smtp: {
@@ -208,6 +207,10 @@ const WEB_MODES_WITH_PORTS = ['port'];
 // Web modes that hide the standard Target Host input entirely.
 // dns operates on domain names entered separately; http uses its own URL input.
 const WEB_MODES_HIDE_HOST = ['dns', 'http'];
+
+// Web modes that show the HTTP URL input (#http-url-group) in place of the
+// Target Host input.  This is a strict subset of WEB_MODES_HIDE_HOST.
+const WEB_MODES_SHOW_HTTP_URL = ['http'];
 
 // Web modes that show the DNS Domains input (#dns-domains-group) in place of
 // the Target Host input.  This is a strict subset of WEB_MODES_HIDE_HOST.
@@ -249,6 +252,7 @@ PathProbe.Config = {
   TARGET_MODE_PANELS,
   WEB_MODES_WITH_PORTS,
   WEB_MODES_HIDE_HOST,
+  WEB_MODES_SHOW_HTTP_URL,
   WEB_MODES_SHOW_DNS_DOMAINS,
   COPYRIGHT_START_YEAR,
   THEMES,

@@ -31,7 +31,7 @@ window.LOCALES = {
     'dns-type-MX':           'MX',
     'ph-dns-domains':        'e.g. google.com',
     'label-http-url':        'HTTP URL',
-    'label-http-url-hint':   '(optional probe)',
+    'ph-http-url':           'https://google.com',
     'label-max-hops':        'Max Hops',
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */
@@ -224,7 +224,7 @@ window.LOCALES = {
     'dns-type-MX':           'MX',
     'ph-dns-domains':        '例: google.com',
     'label-http-url':        'HTTP URL',
-    'label-http-url-hint':   '（選填探測）',
+    'ph-http-url':           'https://google.com',
     'label-max-hops':        '最大躍點數',
 
     /* ── SMTP fieldset ────────────────────────────────────────────────── */

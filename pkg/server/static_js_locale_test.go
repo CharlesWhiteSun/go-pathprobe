@@ -300,3 +300,24 @@ func TestStaticJS_LocaleRuntimeResolvedCrossModuleCalls(t *testing.T) {
 			"for runtime-resolved cross-module calls")
 	}
 }
+
+// TestStaticJS_ApplyLocaleCoversHttpUrlPlaceholder 驗證 locale.js 的通用
+// [data-i18n-placeholder] 迴圈能自動覆蓋 #http-url 的 placeholder，
+// 無需額外為 http-url 撰寫專屬的 DOM 查詢邏輯。
+// #http-url 現已加上 data-i18n-placeholder="ph-http-url"，故由通用迴圈統一處理。
+func TestStaticJS_ApplyLocaleCoversHttpUrlPlaceholder(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/locale.js")
+
+	// 通用 [data-i18n-placeholder] 迴圈必須存在（#http-url 由此覆蓋）。
+	if !strings.Contains(body, "data-i18n-placeholder") {
+		t.Error("locale.js: [data-i18n-placeholder] loop must exist to cover #http-url placeholder i18n")
+	}
+	// 不應有針對 http-url 的專屬 DOM 查詢（硬編碼 getElementById('http-url')）。
+	if strings.Contains(body, `getElementById('http-url')`) || strings.Contains(body, `getElementById("http-url")`) {
+		t.Error("locale.js: must NOT have a dedicated getElementById('http-url') — use the generic [data-i18n-placeholder] loop instead")
+	}
+	// 不應有針對 ph-http-url 的專屬參考。
+	if strings.Contains(body, `'ph-http-url'`) || strings.Contains(body, `"ph-http-url"`) {
+		t.Error("locale.js: must NOT hardcode 'ph-http-url' — let data-i18n-placeholder attribute drive the lookup")
+	}
+}

@@ -102,6 +102,69 @@ func TestHTTPRunnerProtoResultHostFromURL(t *testing.T) {
 	}
 }
 
+// TestHTTPRunnerSchemeNormalisation verifies that bare hostnames (no https:// or
+// http://) are automatically promoted to https:// before probing, so the user
+// can type "www.google.com" without getting "unsupported protocol scheme" errors.
+// A progress event must also be emitted to inform the user of the auto-correction.
+func TestHTTPRunnerSchemeNormalisation(t *testing.T) {
+	cases := []struct {
+		input   string
+		wantURL string
+	}{
+		{"google.com", "https://google.com"},
+		{"www.google.com", "https://www.google.com"},
+		{"google.com/path?q=1", "https://google.com/path?q=1"},
+		// Already correct — must pass through unchanged.
+		{"https://google.com", "https://google.com"},
+		{"http://google.com", "http://google.com"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			prober := &stubHTTPProber{}
+			runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+			var events []string
+			req := Request{
+				Target:  TargetWeb,
+				Options: Options{Global: GlobalOptions{Timeout: time.Second}, Web: WebOptions{URL: tc.input}},
+				Hook:    func(e ProgressEvent) { events = append(events, e.Message) },
+			}
+			if err := runner.Run(context.Background(), req); err != nil {
+				t.Fatalf("input=%q: unexpected error: %v", tc.input, err)
+			}
+			if prober.url != tc.wantURL {
+				t.Errorf("input=%q: probed URL = %q; want %q", tc.input, prober.url, tc.wantURL)
+			}
+			// When scheme was auto-added, a "assuming HTTPS" event must have been emitted.
+			if tc.wantURL != tc.input {
+				found := false
+				for _, msg := range events {
+					if len(msg) > 0 && contains(msg, "assuming HTTPS") {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("input=%q: expected 'assuming HTTPS' emit event, got %v", tc.input, events)
+				}
+			}
+		})
+	}
+}
+
+// contains is a trivial helper to avoid importing strings in test file.
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && func() bool {
+		for i := 0; i <= len(s)-len(sub); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+		return false
+	}()
+}
+
 // errHTTPProber is a stub that always returns a configured error.
 type errHTTPProber struct{ err error }
 
