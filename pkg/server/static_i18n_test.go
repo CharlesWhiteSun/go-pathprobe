@@ -402,29 +402,6 @@ func TestStaticI18n_ConnectorStyleKeysInBothLocales(t *testing.T) {
 	}
 }
 
-// TestStaticI18n_GeoPrecisionNoticeKeys 驗證 i18n.js 在 EN 和 zh-TW 兩種語言
-// 中都定義了 geo-notice-country-precision 和 geo-notice-same-region 鍵。
-// 這兩個鍵由 updateGeoPrecisionNotice() 函式將內容顯示於
-// #geo-precision-notice 橫幅中，必須對兩種語言同時支援。
-func TestStaticI18n_GeoPrecisionNoticeKeys(t *testing.T) {
-	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
-
-	// 兩個鍵各必須在 EN 和 zh-TW 兩個語言區塊各出現一次（共兩次）。
-	for _, key := range []string{"'geo-notice-country-precision'", "'geo-notice-same-region'"} {
-		if count := strings.Count(body, key); count < 2 {
-			t.Errorf("i18n.js: key %s found %d time(s) — must appear in both en and zh-TW locales", key, count)
-		}
-	}
-	// EN 內容需包含菱文說明國家精度的用語。
-	if !strings.Contains(body, "country centroids") {
-		t.Error("i18n.js en: geo-notice-country-precision must mention 'country centroids'")
-	}
-	// zh-TW 內容需包含「國家中心點」等關鍵詞。
-	if !strings.Contains(body, "國家中心點") {
-		t.Error("i18n.js zh-TW: geo-notice-country-precision must mention '\u570b\u5bb6\u4e2d\u5fc3\u9ede'")
-	}
-}
-
 // TestStaticI18n_DNSAllFailedAndCategoryKeys 驗證 i18n.js 在 EN 和 zh-TW
 // 兩種語言中都定義了 dns-all-failed 鍵、五個錯誤類別標籤（dns-cat-*），
 // 以及五個情境提示橫幅訊息（dns-hint-*）。

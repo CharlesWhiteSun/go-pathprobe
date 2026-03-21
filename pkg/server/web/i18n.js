@@ -168,9 +168,6 @@ window.LOCALES = {
     /* ── Geo precision labels ─────────────────────────────────────────── */
     'geo-precision-country': 'Country-level',
     'geo-precision-city':    'City-level',
-    /* ── Geo precision notice banner ─────────────────────────────────────── */
-    'geo-notice-country-precision': 'Location accuracy is country-level — coordinates show estimated country centroids, not actual addresses.',
-    'geo-notice-same-region':       'Both endpoints appear to be in the same country. Map positions may overlap due to country-level accuracy.',
     /* ── Marker style label ─────────────────────────────────────────────── */
     'marker-style-diamond-pulse':    'Pulse',
     /* ── Marker colour scheme ────────────────────────────────────────────── */
@@ -368,9 +365,6 @@ window.LOCALES = {
     /* ── 地理精度標籤 ─────────────────────────────────────────── */
     'geo-precision-country': '國家層級',
     'geo-precision-city':    '城市層級',
-    /* ── 地理精度提示橫幅 ─────────────────────────────────────── */
-    'geo-notice-country-precision': '地理精度為國家層級，座標為國家中心點估算値，非實際位址。',
-    'geo-notice-same-region':       '兩個端點均位於相同國家，因國家層級精度限制，地圖位置可能重疊。',
     /* ── 標記外觀標籤 ─────────────────────────────────────────── */
     'marker-style-diamond-pulse':    '脈衝',
     /* ── 標記配色方案 ────────────────────────────────────────── */

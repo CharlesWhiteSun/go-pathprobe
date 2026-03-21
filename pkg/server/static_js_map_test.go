@@ -443,6 +443,42 @@ func TestStaticJS_RefreshMapMarkersFunction(t *testing.T) {
 	}
 }
 
+// TestStaticJS_RefreshMapMarkersPreservesOpenPopup 驗證 refreshMapMarkers() 在
+// 重建 marker 前記錄已開啟的 popup 狀態，並在重建後恢復，
+// 使語系切換時不會意外關閉使用者正在查看的 popup。
+func TestStaticJS_RefreshMapMarkersPreservesOpenPopup(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/map.js")
+
+	fnStart := strings.Index(body, "function refreshMapMarkers(")
+	if fnStart == -1 {
+		t.Fatal("map.js: refreshMapMarkers function not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 1800
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	// 必須使用 isPopupOpen() 偵測已開啟的 popup。
+	if !strings.Contains(fnBody, "isPopupOpen()") {
+		t.Error("map.js: refreshMapMarkers must call isPopupOpen() to detect open popups before rebuilding")
+	}
+	// 必須使用 openPopup() 恢復 popup。
+	if !strings.Contains(fnBody, "openPopup()") {
+		t.Error("map.js: refreshMapMarkers must call openPopup() to restore previously open popups after rebuild")
+	}
+	// 必須有追蹤 popup 狀態的 Set 或暫存結構。
+	if !strings.Contains(fnBody, "openPopupTypes") {
+		t.Error("map.js: refreshMapMarkers must track open popup types (e.g. openPopupTypes) before clearing markers")
+	}
+}
+
 // TestStaticJS_RenderMapStoresLastGeo verifies that renderMap() stores the
 // pub and tgt arguments into _lastPub and _lastTgt so that refreshMapMarkers()
 // can recreate markers without requiring a full map rebuild.
@@ -771,56 +807,6 @@ func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 返回區域提示與返回區域接近鐵過測試 — geo precision notice + proximity zoom
-// ---------------------------------------------------------------------------
-
-// TestStaticJS_UpdateGeoPrecisionNotice 驗證 map.js 定義了 updateGeoPrecisionNotice()
-// 函式，該函式負責顯示或隱藏 #geo-precision-notice 橫幅。
-// 核心邏輯：任意點為 country 精度就顯示提示；
-// 兩點同國則顯示》相同區域《訊息。
-func TestStaticJS_UpdateGeoPrecisionNotice(t *testing.T) {
-	body := fetchBody(t, newStaticHandler(t), "/map.js")
-
-	// 函式必須存在。
-	if !strings.Contains(body, "function updateGeoPrecisionNotice(") {
-		t.Fatal("map.js: updateGeoPrecisionNotice function not found")
-	}
-	fnStart := strings.Index(body, "function updateGeoPrecisionNotice(")
-	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
-	var fnBody string
-	if nextFn != -1 {
-		fnBody = body[fnStart : fnStart+1+nextFn]
-	} else {
-		end := fnStart + 800
-		if end > len(body) {
-			end = len(body)
-		}
-		fnBody = body[fnStart:end]
-	}
-
-	// 必須根據 LocationPrecision === 'country' 判斷。
-	if !strings.Contains(fnBody, "LocationPrecision === 'country'") {
-		t.Error("map.js: updateGeoPrecisionNotice must check LocationPrecision === 'country'")
-	}
-	// 必須操作 #geo-precision-notice 元素的 hidden 屬性。
-	if !strings.Contains(fnBody, "geo-precision-notice") {
-		t.Error("map.js: updateGeoPrecisionNotice must reference #geo-precision-notice element")
-	}
-	// 必須使用》相同區域《 i18n 鍵。
-	if !strings.Contains(fnBody, "geo-notice-same-region") {
-		t.Error("map.js: updateGeoPrecisionNotice must use i18n key 'geo-notice-same-region'")
-	}
-	// 必須使用國家層級精度通用提示鍵。
-	if !strings.Contains(fnBody, "geo-notice-country-precision") {
-		t.Error("map.js: updateGeoPrecisionNotice must use i18n key 'geo-notice-country-precision'")
-	}
-	// 無 country 精度時必須隱藏 (hidden = true 或 textContent = '').
-	if !strings.Contains(fnBody, "hidden = true") && !strings.Contains(fnBody, "el.hidden = true") {
-		t.Error("map.js: updateGeoPrecisionNotice must hide the notice when no country-level precision is present")
-	}
-}
-
 // TestStaticJS_RenderMapProximityZoom 驗證 renderMap() 在兩點距離小於閾値
 // 且任一點為國家精度時，使用 setView 取代 fitBounds，
 // 避免因國家中心點幾乎重疊而造成 Leaflet 過度放大。
@@ -857,38 +843,6 @@ func TestStaticJS_RenderMapProximityZoom(t *testing.T) {
 	}
 }
 
-// TestStaticJS_RenderMapCallsPrecisionNotice 驗證 renderMap()在
-// 顯示和隱藏地圖兩種情況下都會呼叫 updateGeoPrecisionNotice()，
-// 保證橫幅狀態始終與地圖同步。
-func TestStaticJS_RenderMapCallsPrecisionNotice(t *testing.T) {
-	body := fetchBody(t, newStaticHandler(t), "/map.js")
-
-	fnStart := strings.Index(body, "function renderMap(")
-	if fnStart == -1 {
-		t.Fatal("map.js: renderMap function not found")
-	}
-	nextFn := strings.Index(body[fnStart+1:], "\nfunction ")
-	var fnBody string
-	if nextFn != -1 {
-		fnBody = body[fnStart : fnStart+1+nextFn]
-	} else {
-		end := fnStart + 8000
-		if end > len(body) {
-			end = len(body)
-		}
-		fnBody = body[fnStart:end]
-	}
-
-	// renderMap 必須呼叫 updateGeoPrecisionNotice().
-	if !strings.Contains(fnBody, "updateGeoPrecisionNotice(") {
-		t.Error("map.js: renderMap must call updateGeoPrecisionNotice() to sync the banner with geo results")
-	}
-	// 隱藏路徑（points.length === 0）必須呼叫传入 null,null.
-	if !strings.Contains(fnBody, "updateGeoPrecisionNotice(null, null)") {
-		t.Error("map.js: renderMap must call updateGeoPrecisionNotice(null, null) on the hide path to clear the banner")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // rerenderLabels — locale 切換後重新套用所有 i18n 標籤
 // ---------------------------------------------------------------------------
@@ -922,8 +876,7 @@ func TestStaticJS_MapRerenderLabelsAPI(t *testing.T) {
 }
 
 // TestStaticJS_MapRerenderLabelsRefreshesAllComponents 驗證 rerenderLabels() 內部
-// 呼叫所有需要重新套用語系的子函式，確保切換語系時四類 UI 元素都能同步更新：
-//   - updateGeoPrecisionNotice: 精度提示橫幅文字
+// 呼叫所有需要重新套用語系的子函式，確保切換語系時三類 UI 元素都能同步更新：
 //   - renderMapBar: 圖磚按鈕 aria-label / title
 //   - refreshMapMarkers: Leaflet marker popup 與 legend（Leaflet 內部 HTML）
 //   - updateDistanceBadge: 距離標示複合文字（i18n key + 數值 + 單位）
@@ -948,7 +901,6 @@ func TestStaticJS_MapRerenderLabelsRefreshesAllComponents(t *testing.T) {
 	}
 
 	for _, call := range []string{
-		"updateGeoPrecisionNotice(",
 		"renderMapBar()",
 		"refreshMapMarkers()",
 		"updateDistanceBadge()",

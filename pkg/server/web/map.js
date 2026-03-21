@@ -49,6 +49,9 @@
   // locale changes without recomputing haversineKm().  Null when no two-point
   // map is currently displayed.
   let _lastDistanceKm = null;
+  // Maps marker type ('origin' | 'target') to the live L.Marker instance so
+  // refreshMapMarkers() can restore any open popup after rebuilding markers.
+  let _markerByType = {};
 
   // ── Config aliases (resolved at parse time from PathProbe.Config) ──────────
   // config.js is loaded before map.js (see index.html).  The defensive guard
@@ -193,6 +196,13 @@
    */
   function refreshMapMarkers() {
     if (!_map || (!_lastPub && !_lastTgt)) return;
+    // Preserve open popup state before removing markers so that locale switches
+    // (which call this function) do not dismiss any popup the user has open.
+    const openPopupTypes = new Set();
+    for (const [type, marker] of Object.entries(_markerByType)) {
+      if (marker && marker.isPopupOpen()) openPopupTypes.add(type);
+    }
+    _markerByType = {};
     _map.eachLayer(layer => {
       if (layer instanceof L.Marker) _map.removeLayer(layer);
     });
@@ -202,9 +212,14 @@
     if (_lastPub && _lastPub.HasLocation) points.push({ geo: _lastPub, type: 'origin' });
     if (_lastTgt && _lastTgt.HasLocation) points.push({ geo: _lastTgt, type: 'target' });
     for (const p of points) {
-      L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
+      const m = L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
         .addTo(_map)
         .bindPopup(buildPopupHtml(p.geo, p.type));
+      _markerByType[p.type] = m;
+    }
+    // Restore any popup that was open before the rebuild.
+    for (const type of openPopupTypes) {
+      if (_markerByType[type]) _markerByType[type].openPopup();
     }
     if (points.length > 1) {
       _legendControl = buildMapLegend(points.map(p => p.type));
@@ -370,32 +385,6 @@
     distEl.hidden = false;
   }
 
-  // ── Geo precision notice ────────────────────────────────────────────────────
-
-  /** Show or hide the #geo-precision-notice banner based on the LocationPrecision
-   *  of each geocoded point.  The notice is visible whenever any visible point
-   *  uses country-level precision (coordinates are national centroids, not exact
-   *  addresses), giving users immediate context without requiring a popup click.
-   *  When both endpoints share the same country a more specific "same-region"
-   *  message is shown to explain the overlap artefact on the map.
-   *  Pass null/null to clear and hide the notice (e.g. when the map is hidden).
-   */
-  function updateGeoPrecisionNotice(pub, tgt) {
-    const el = document.getElementById('geo-precision-notice');
-    if (!el) return;
-    const pubCountry = pub && pub.HasLocation && pub.LocationPrecision === 'country';
-    const tgtCountry = tgt && tgt.HasLocation && tgt.LocationPrecision === 'country';
-    if (!pubCountry && !tgtCountry) {
-      el.textContent = '';
-      el.hidden = true;
-      return;
-    }
-    // Use the more specific "same-region" key when both endpoints share a country.
-    const sameCountry = pubCountry && tgtCountry &&
-                        Boolean(pub.CountryCode) && pub.CountryCode === tgt.CountryCode;
-    el.textContent = t(sameCountry ? 'geo-notice-same-region' : 'geo-notice-country-precision');
-    el.hidden = false;
-  }
   // ── Main render function ───────────────────────────────────────────────────
 
   /** Render (or remove) the Leaflet map based on geo results.
@@ -428,7 +417,7 @@
       if (outerEl) outerEl.hidden = true;
       if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
       _lastDistanceKm = null;
-      updateGeoPrecisionNotice(null, null);
+      _markerByType = {};
       return;
     }
 
@@ -454,9 +443,10 @@
 
     const latLngs = [];
     for (const p of points) {
-      L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
+      const m = L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
         .addTo(_map)
         .bindPopup(buildPopupHtml(p.geo, p.type));
+      _markerByType[p.type] = m;
       latLngs.push([p.geo.Lat, p.geo.Lon]);
     }
 
@@ -502,10 +492,6 @@
       updateDistanceBadge();
     }
 
-    // Update the geo-precision notice banner so users receive immediate feedback
-    // about location accuracy without having to click a marker popup.
-    updateGeoPrecisionNotice(pub, tgt);
-
     // Add a legend when multiple marker types are present so users can
     // distinguish origin (偵測起點) from target (偵測目標).
     if (points.length > 1) {
@@ -528,7 +514,6 @@
 
   /** Re-apply all i18n-dependent map labels using the current locale.
    *  Called by locale.js / applyLocale() after every locale switch so that:
-   *    • geo-precision-notice textContent (no data-i18n, set via JS)
    *    • tile-bar button aria-label / title attributes
    *    • Leaflet marker popup HTML (stored inside Leaflet, not in live DOM)
    *    • map legend text (has data-i18n but is in Leaflet's control layer)
@@ -538,7 +523,6 @@
    *  state availability (null-checks on _map, _lastPub, _lastTgt, _lastDistanceKm).
    */
   function rerenderLabels() {
-    updateGeoPrecisionNotice(_lastPub, _lastTgt);
     renderMapBar();
     refreshMapMarkers();
     updateDistanceBadge();

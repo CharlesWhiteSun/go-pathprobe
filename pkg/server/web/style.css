@@ -952,21 +952,6 @@ fieldset.target-fields legend {
   border-radius: var(--radius);
 }
 
-/* Geo precision notice — info banner shown above the map when any geo point
-   uses country-level accuracy.  The left accent border signals informational
-   intent without the urgency of an error colour.  Hides automatically when
-   all points have city-level precision or when there is no map to display. */
-.geo-precision-notice {
-  font-size: .8rem;
-  color: var(--muted);
-  padding: .4rem .75rem;
-  margin-bottom: .5rem;
-  background: var(--surface-alt, #f5f6f8);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--muted);
-  border-radius: var(--radius);
-}
-
 /* Popup inner layout */
 .geo-popup { font-size: .84rem; min-width: 130px; line-height: 1.5; }
 .geo-popup__role {

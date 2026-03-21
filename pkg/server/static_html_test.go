@@ -637,28 +637,3 @@ func TestStaticHTML_ScriptLoadOrder(t *testing.T) {
 		}
 	}
 }
-
-// TestStaticHTML_GeoPrecisionNoticeElement 驗證 index.html 包含
-// #geo-precision-notice 元素，且預設為 hidden。
-// 該元素由 renderMap() 內的 updateGeoPrecisionNotice() 填充，
-// 將 country 精度限制資訊即時呈現給使用者。
-func TestStaticHTML_GeoPrecisionNoticeElement(t *testing.T) {
-	body := fetchBody(t, newStaticHandler(t), "/")
-
-	if !strings.Contains(body, `id="geo-precision-notice"`) {
-		t.Error(`index.html: element with id="geo-precision-notice" must be present for the precision notice banner`)
-	}
-	// 預設必須隱藏，避免白白顯示女幕。
-	if !strings.Contains(body, `id="geo-precision-notice" class="geo-precision-notice" hidden`) {
-		t.Error(`index.html: #geo-precision-notice must carry class="geo-precision-notice" and the hidden attribute`)
-	}
-	// 必須位於 #geo-map-outer 之前（顯示在地圖上方）。
-	noticeIdx := strings.Index(body, `id="geo-precision-notice"`)
-	outerIdx := strings.Index(body, `id="geo-map-outer"`)
-	if noticeIdx == -1 || outerIdx == -1 {
-		t.Fatal("index.html: both #geo-precision-notice and #geo-map-outer must be present")
-	}
-	if noticeIdx >= outerIdx {
-		t.Error("index.html: #geo-precision-notice must appear before #geo-map-outer so it renders above the map")
-	}
-}
