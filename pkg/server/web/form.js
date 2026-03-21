@@ -10,6 +10,7 @@
 //   • onTargetChange()  — target-switch handler (panels + port fill + placeholder)
 //   • initCustomSelect() — .cs-wrap keyboard/accessible dropdown widget
 //   • initAdvancedOpts() — animated open/close for the Advanced Options panel
+//   • initEnterKey()    — document-level Enter-key → runDiag() delegation
 //   • init()            — wraps all form-related DOMContentLoaded setup
 //
 // Dependencies (runtime-resolved, no hard import):
@@ -310,7 +311,33 @@
     updateHostGroup(target, getModeFor(target));
   }
 
-  // ── Advanced-options animated expand/collapse ──────────────────────────
+  // ── Enter-key submit ───────────────────────────────────────────────────
+  /**
+   * Attach a document-level keydown listener so pressing Enter inside any
+   * text or number input triggers the diagnostic run (window.runDiag).
+   *
+   * Guards:
+   *   – e.isComposing  → skip mid-IME-composition input (CJK, etc.)
+   *   – run-btn is disabled → skip when a diagnostic is already running
+   *   – non-INPUT / non-TEXTAREA target → skip (checkboxes, radios, buttons …)
+   *
+   * Event delegation on document means all current and future input fields
+   * are covered without per-element wiring.
+   */
+  function initEnterKey() {
+    document.addEventListener('keydown', function onEnterKey(e) {
+      if (e.key !== 'Enter') return;
+      if (e.isComposing) return;                         // IME: not yet committed
+      const tag = e.target && e.target.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+      const btn = document.getElementById('run-btn');
+      if (btn && btn.disabled) return;                   // diagnostic already running
+      e.preventDefault();                                // prevent browser form submit
+      if (window.runDiag) window.runDiag();
+    });
+  }
+
+  // ── Advanced Options animated expand/collapse ──────────────────────────
   /**
    * Wire up animated open/close for the Advanced Options <details> element.
    * Intercepts summary clicks and drives a height transition on .adv-body
@@ -498,6 +525,9 @@
 
     // Wire up animated open/close for the advanced options panel.
     initAdvancedOpts();
+
+    // Wire up Enter key to submit the diagnostic from any input field.
+    initEnterKey();
   }
 
   // ── Namespace registration ─────────────────────────────────────────────

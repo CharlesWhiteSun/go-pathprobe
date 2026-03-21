@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticJS_CustomSelectFunctions verifies that app.js defines
 // initCustomSelect(), selectItem() logic, and the _initTargetDone guard that
 // prevents the entrance animation from firing on the cold page load.
@@ -345,5 +344,54 @@ func TestStaticJS_FormPublicAPIComplete(t *testing.T) {
 		if !strings.Contains(exportBlock, sym) {
 			t.Errorf("form.js: PathProbe.Form must export %q", sym)
 		}
+	}
+}
+
+// TestStaticJS_EnterKeyTriggersRunDiag verifies that form.js wires up a
+// document-level keydown listener via initEnterKey() so pressing Enter in any
+// text or number input submits the diagnostic without clicking the run button.
+//
+// The function must:
+//   - be a named, isolated function (initEnterKey) for readability and testability
+//   - guard against mid-IME composition (e.isComposing) to avoid double-fire with CJK
+//   - guard against double-submit when the run button is already disabled
+//   - use document-level event delegation so future input fields are covered automatically
+//   - call window.runDiag to trigger the diagnostic flow
+//   - be called from init() so it activates on page load
+func TestStaticJS_EnterKeyTriggersRunDiag(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/form.js")
+
+	// initEnterKey must be a named function for isolated readability and testing.
+	if !strings.Contains(body, "initEnterKey") {
+		t.Fatal("form.js: initEnterKey function must be defined to wire Enter-key submit")
+	}
+	// Must listen for the 'Enter' key specifically.
+	if !strings.Contains(body, "'Enter'") && !strings.Contains(body, `"Enter"`) {
+		t.Error("form.js: initEnterKey must check for e.key === 'Enter'")
+	}
+	// Must guard against mid-IME input (CJK, etc.) to avoid double-fire.
+	if !strings.Contains(body, "isComposing") {
+		t.Error("form.js: initEnterKey must check e.isComposing to skip input mid-IME composition")
+	}
+	// Must guard against submitting while a diagnostic is already running.
+	if !strings.Contains(body, "btn.disabled") {
+		t.Error("form.js: initEnterKey must check run-btn.disabled to prevent double-submit")
+	}
+	// Must use event delegation on document (not per-input binding) so future
+	// input fields are automatically covered without additional wiring.
+	if !strings.Contains(body, "document.addEventListener") {
+		t.Error("form.js: initEnterKey must use event delegation on document, not per-element binding")
+	}
+	// Must forward to window.runDiag to trigger the diagnostic flow.
+	if !strings.Contains(body, "runDiag") {
+		t.Error("form.js: initEnterKey must invoke runDiag to submit the diagnostic")
+	}
+	// init() must call initEnterKey() to activate it on page load.
+	initIdx := strings.Index(body, "function init(")
+	if initIdx == -1 {
+		t.Fatal("form.js: init() function not found")
+	}
+	if !strings.Contains(body[initIdx:], "initEnterKey()") {
+		t.Error("form.js: init() must call initEnterKey() to activate Enter-key submit on page load")
 	}
 }
