@@ -382,7 +382,7 @@ func TestDNSComparisonAllFailed(t *testing.T) {
 	comp := DNSComparison{
 		Name: "https://www.example.com/", Type: RecordTypeA,
 		Results: []DNSAnswer{
-			{Source: "system",     LookupError: "lookup https://www.example.com/: no such host"},
+			{Source: "system", LookupError: "lookup https://www.example.com/: no such host"},
 			{Source: "doh-1.1.1.1", LookupError: "resolver returned error status"},
 			{Source: "doh-8.8.8.8", LookupError: "resolver returned error status"},
 		},
@@ -399,7 +399,7 @@ func TestDNSComparisonAllFailedFalseWhenOneSucceeds(t *testing.T) {
 		Name: "example.com", Type: RecordTypeMX,
 		Results: []DNSAnswer{
 			{Source: "sys", LookupError: "no such host"},
-			{Source: "cf",  Values: []string{}},  // succeeded, just no records
+			{Source: "cf", Values: []string{}}, // succeeded, just no records
 		},
 	}
 	if comp.AllFailed() {
@@ -424,7 +424,7 @@ func TestDNSComparisonAllFailedNotDivergent(t *testing.T) {
 		Name: "bad.example", Type: RecordTypeA,
 		Results: []DNSAnswer{
 			{Source: "sys", LookupError: "no such host"},
-			{Source: "cf",  LookupError: "resolver returned error status"},
+			{Source: "cf", LookupError: "resolver returned error status"},
 		},
 	}
 	if comp.HasDivergence() {
@@ -442,7 +442,7 @@ func TestDNSComparisonAllFailedWithValues(t *testing.T) {
 		Name: "example.com", Type: RecordTypeA,
 		Results: []DNSAnswer{
 			{Source: "sys", Values: []string{"93.184.216.34"}},
-			{Source: "cf",  LookupError: "resolver returned error status"},
+			{Source: "cf", LookupError: "resolver returned error status"},
 		},
 	}
 	if comp.AllFailed() {

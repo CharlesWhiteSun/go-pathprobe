@@ -624,6 +624,52 @@ fieldset.target-fields legend {
               font-size: .77rem; font-weight: 700; }
 .badge-ok   { background: var(--badge-ok-bg);   color: var(--ok);   }
 .badge-fail { background: var(--badge-fail-bg);  color: var(--fail);  }
+.badge-warn { background: var(--badge-warn-bg, #fef9c3); color: var(--warn, #854d0e); }
+
+/* ── DNS comparison — card-per-entry layout ─────────────────────────────── */
+/* Each domain + record-type pair is rendered as a self-contained card.
+   The card header (domain | type pill | status badge) is visually separate
+   from the per-resolver table below it, eliminating column coupling and
+   the repeated-empty-cell problem of the previous flat-table approach.     */
+.dns-groups       { display: flex; flex-direction: column; gap: .75rem; }
+.dns-group        { border: 1px solid var(--border); border-radius: 6px;
+                    overflow: hidden; }
+
+/* Card header: domain name (flex 1), record-type pill, consistency badge */
+.dns-group-header { display: flex; align-items: center; gap: .55rem;
+                    padding: .48rem .75rem;
+                    background: var(--surface-alt);
+                    border-bottom: 1px solid var(--border); }
+.dns-group-domain { font-weight: 700; font-size: .9rem;
+                    flex: 1; min-width: 0;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dns-group-type   { font-size: .73rem; font-weight: 600;
+                    padding: .12rem .46rem; border-radius: 4px;
+                    background: var(--border); color: var(--muted);
+                    white-space: nowrap; flex-shrink: 0; }
+
+/* Inner resolver table — no outer border (the card provides it) */
+.dns-answer-table               { width: 100%; border-collapse: collapse;
+                                  font-size: .875rem; }
+.dns-answer-table th            { text-align: left; padding: .35rem .65rem;
+                                  border-bottom: 1px solid var(--border);
+                                  font-weight: 600; font-size: .78rem;
+                                  color: var(--muted); white-space: nowrap; }
+.dns-answer-table td            { padding: .38rem .65rem;
+                                  border-bottom: 1px solid var(--border);
+                                  vertical-align: middle; }
+.dns-answer-table tr:last-child td { border-bottom: none; }
+.dns-answer-table tbody tr:hover   { background: rgba(0,0,0,.02); }
+
+/* Contextual hint banner — inside the card, below the resolver table.
+   Uses a <div> rather than a table row to remain independent of the resolver
+   table's column structure.  Left accent border signals an actionable issue. */
+.dns-hint { font-size: .83rem; color: var(--muted);
+            padding: .35rem .75rem .45rem 1rem;
+            border-top: 1px solid var(--border);
+            border-left: 3px solid var(--fail);
+            background: var(--badge-fail-bg);
+            font-style: italic; }
 
 /* ── Results — geo section ──────────────────────────────────────────────── */
 .geo-grid       { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }

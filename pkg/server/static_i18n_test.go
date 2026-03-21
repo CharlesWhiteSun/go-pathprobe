@@ -425,27 +425,43 @@ func TestStaticI18n_GeoPrecisionNoticeKeys(t *testing.T) {
 	}
 }
 
-// TestStaticI18n_DNSAllFailedAndFriendlyErrors 驗證 i18n.js 在 EN 和 zh-TW
-// 兩種語言中都定義了 dns-all-failed 鍵以及五個 friendlyDNSError() 使用的
-// 友善錯誤訊息鍵。這些鍵取代了直接顯示 Go 內部錯誤訊息的舊行為，
-// 使使用者看到的是易讀的問題描述而非技術細節。
-func TestStaticI18n_DNSAllFailedAndFriendlyErrors(t *testing.T) {
+// TestStaticI18n_DNSAllFailedAndCategoryKeys 驗證 i18n.js 在 EN 和 zh-TW
+// 兩種語言中都定義了 dns-all-failed 鍵、五個錯誤類別標籤（dns-cat-*），
+// 以及五個情境提示橫幅訊息（dns-hint-*）。
+// 這些鍵由 Go 端的 ClassifyDNSLookupError 計算後傳入 renderer，
+// 讓使用者看到易讀的分類標籤與操作建議，而非 Go 內部錯誤訊息。
+func TestStaticI18n_DNSAllFailedAndCategoryKeys(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
 
+	// Every key must appear in both EN and zh-TW locales (count ≥ 2).
 	keys := []string{
 		"'dns-all-failed'",
-		"'dns-err-no-host'",
-		"'dns-err-invalid-domain'",
-		"'dns-err-resolver-failed'",
-		"'dns-err-timeout'",
-		"'dns-err-generic'",
+		"'dns-cat-input'",
+		"'dns-cat-nxdomain'",
+		"'dns-cat-network'",
+		"'dns-cat-resolver'",
+		"'dns-cat-unknown'",
+		"'dns-hint-input'",
+		"'dns-hint-nxdomain'",
+		"'dns-hint-network'",
+		"'dns-hint-resolver'",
+		"'dns-hint-all-failed'",
 	}
 	for _, key := range keys {
 		if count := strings.Count(body, key); count < 2 {
 			t.Errorf("i18n.js: key %s found %d time(s) — must appear in both en and zh-TW locales", key, count)
 		}
 	}
-	// EN: dns-all-failed 必須包含 "All Failed" 或類似字樣。
+	// Old dns-err-* keys must have been removed (classification now in Go).
+	for _, obsolete := range []string{
+		"'dns-err-no-host'", "'dns-err-invalid-domain'",
+		"'dns-err-resolver-failed'", "'dns-err-timeout'", "'dns-err-generic'",
+	} {
+		if strings.Contains(body, obsolete) {
+			t.Errorf("i18n.js: obsolete key %s must be removed — use dns-cat-* instead", obsolete)
+		}
+	}
+	// EN: dns-all-failed 必須包含 "All Failed" 字樣。
 	if !strings.Contains(body, "All Failed") {
 		t.Error("i18n.js en: dns-all-failed must contain 'All Failed'")
 	}
@@ -453,5 +469,8 @@ func TestStaticI18n_DNSAllFailedAndFriendlyErrors(t *testing.T) {
 	if !strings.Contains(body, "全部失敗") {
 		t.Error("i18n.js zh-TW: dns-all-failed must contain '全部失敗'")
 	}
+	// EN: dns-hint-input 必須提示 URL / https:// 問題。
+	if !strings.Contains(body, "https://") {
+		t.Error("i18n.js en: dns-hint-input must mention 'https://' to guide the user")
+	}
 }
-

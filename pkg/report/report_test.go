@@ -717,7 +717,7 @@ func TestBuildDNSAllFailedPassThrough(t *testing.T) {
 			Name: "https://www.rakuten.co.jp/",
 			Type: netprobe.RecordTypeA,
 			Results: []netprobe.DNSAnswer{
-				{Source: "system",      LookupError: "lookup https://www.rakuten.co.jp/: no such host"},
+				{Source: "system", LookupError: "lookup https://www.rakuten.co.jp/: no such host"},
 				{Source: "doh-1.1.1.1", LookupError: "resolver returned error status"},
 				{Source: "doh-8.8.8.8", LookupError: "resolver returned error status"},
 			},
@@ -728,7 +728,7 @@ func TestBuildDNSAllFailedPassThrough(t *testing.T) {
 			Type: netprobe.RecordTypeA,
 			Results: []netprobe.DNSAnswer{
 				{Source: "sys", LookupError: "no such host"},
-				{Source: "cf",  Values: []string{"93.184.216.34"}, RTT: 3 * time.Millisecond},
+				{Source: "cf", Values: []string{"93.184.216.34"}, RTT: 3 * time.Millisecond},
 			},
 		},
 	})
@@ -749,6 +749,123 @@ func TestBuildDNSAllFailedPassThrough(t *testing.T) {
 	// Entry 1: one succeeded → not AllFailed.
 	if ar.DNS[1].AllFailed {
 		t.Error("DNS[1] (one resolver succeeded): expected AllFailed=false")
+	}
+}
+
+// TestBuildDNSErrorCategoryPassThrough verifies that Build() calls
+// ClassifyDNSLookupError and propagates the result to DNSAnswerEntry.ErrorCategory,
+// so the renderer can display a user-friendly category label without any
+// JS-side pattern matching on raw Go error strings.
+func TestBuildDNSErrorCategoryPassThrough(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		{
+			Name: "https://www.rakuten.co.jp/",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				// URL-format domain → input error regardless of raw message.
+				{Source: "sys", LookupError: "lookup https://www.rakuten.co.jp/: no such host"},
+				{Source: "cf", LookupError: "resolver returned error status"},
+			},
+		},
+		{
+			Name: "notexist.example",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				// Valid domain + "no such host" → nxdomain.
+				{Source: "sys", LookupError: "lookup notexist.example: no such host"},
+				// Timeout → network.
+				{Source: "cf", LookupError: "context deadline exceeded"},
+			},
+		},
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeMX,
+			Results: []netprobe.DNSAnswer{
+				// Successful answer → empty ErrorCategory.
+				{Source: "sys", Values: []string{"10 mail.example.com."}, RTT: time.Millisecond},
+				// DoH resolver error → resolver.
+				{Source: "doh", LookupError: "resolver returned error status 500"},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 3 {
+		t.Fatalf("expected 3 DNS entries, got %d", len(ar.DNS))
+	}
+
+	// Entry 0: URL domain — both answers must be classified as "input".
+	e0 := ar.DNS[0]
+	for i, ans := range e0.Answers {
+		if ans.ErrorCategory != "input" {
+			t.Errorf("DNS[0].Answers[%d]: ErrorCategory=%q, want %q", i, ans.ErrorCategory, "input")
+		}
+	}
+
+	// Entry 1: valid domain — sys → nxdomain, cf → network.
+	e1 := ar.DNS[1]
+	if got := e1.Answers[0].ErrorCategory; got != "nxdomain" {
+		t.Errorf("DNS[1].Answers[0] (no such host): ErrorCategory=%q, want %q", got, "nxdomain")
+	}
+	if got := e1.Answers[1].ErrorCategory; got != "network" {
+		t.Errorf("DNS[1].Answers[1] (timeout): ErrorCategory=%q, want %q", got, "network")
+	}
+
+	// Entry 2: success + resolver error.
+	e2 := ar.DNS[2]
+	if got := e2.Answers[0].ErrorCategory; got != "" {
+		t.Errorf("DNS[2].Answers[0] (success): ErrorCategory=%q, want empty", got)
+	}
+	if got := e2.Answers[1].ErrorCategory; got != "resolver" {
+		t.Errorf("DNS[2].Answers[1] (resolver error): ErrorCategory=%q, want %q", got, "resolver")
+	}
+}
+
+// TestBuildDNSHintKey verifies that Build() populates DNSEntry.HintKey
+// according to the dominant error category when all resolvers fail.
+func TestBuildDNSHintKey(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		// All resolvers return "input" errors → dns-hint-input.
+		{
+			Name: "https://www.example.com/",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "lookup https://www.example.com/: no such host"},
+				{Source: "cf", LookupError: "resolver returned error status"},
+			},
+		},
+		// Mixed categories (nxdomain + network) → dns-hint-all-failed.
+		{
+			Name: "gone.example",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "lookup gone.example: no such host"},
+				{Source: "cf", LookupError: "context deadline exceeded"},
+			},
+		},
+		// One resolver succeeds → HintKey must be empty.
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "lookup example.com: no such host"},
+				{Source: "cf", Values: []string{"93.184.216.34"}, RTT: 3 * time.Millisecond},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 3 {
+		t.Fatalf("expected 3 DNS entries, got %d", len(ar.DNS))
+	}
+	if got := ar.DNS[0].HintKey; got != "dns-hint-input" {
+		t.Errorf("DNS[0] (all input): HintKey=%q, want %q", got, "dns-hint-input")
+	}
+	if got := ar.DNS[1].HintKey; got != "dns-hint-all-failed" {
+		t.Errorf("DNS[1] (mixed): HintKey=%q, want %q", got, "dns-hint-all-failed")
+	}
+	if got := ar.DNS[2].HintKey; got != "" {
+		t.Errorf("DNS[2] (one succeeded): HintKey=%q, want empty", got)
 	}
 }
 

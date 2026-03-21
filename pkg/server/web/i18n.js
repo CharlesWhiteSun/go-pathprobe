@@ -126,8 +126,6 @@ window.LOCALES = {
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS Comparison',
-    'th-dns-domain':         'Domain',
-    'th-dns-type':           'Type',
     'th-dns-resolver':       'Resolver',
     'th-dns-records':        'Records',
     'th-dns-rtt':            'RTT',
@@ -135,12 +133,20 @@ window.LOCALES = {
     'dns-consistent':        'Consistent',
     'dns-no-records':        'No Records',
     'dns-all-failed':        'All Failed',
-    /* Friendly resolver error labels (raw Go errors are not user-facing) */
-    'dns-err-no-host':       'Host not found',
-    'dns-err-invalid-domain':'Invalid domain format',
-    'dns-err-resolver-failed':'Resolver error',
-    'dns-err-timeout':       'Query timed out',
-    'dns-err-generic':       'Lookup failed',
+    /* Error category labels — shown as badge text on failing resolver answers.
+       Computed in Go (ClassifyDNSLookupError) and passed via ans.ErrorCategory. */
+    'dns-cat-input':         'Input error',
+    'dns-cat-nxdomain':      'Domain not found',
+    'dns-cat-network':       'Network error',
+    'dns-cat-resolver':      'Resolver error',
+    'dns-cat-unknown':       'Lookup failed',
+    /* Contextual hint banners — shown below the entry row when AllFailed is true.
+       Each key corresponds to a DNSErrorCategory value or the generic fallback. */
+    'dns-hint-input':        'The query looks like a URL. Enter just the hostname (e.g. www.example.com) without https:// or a trailing path.',
+    'dns-hint-nxdomain':     'This domain does not exist or has no DNS records of this type.',
+    'dns-hint-network':      'The probe could not reach the DNS resolvers. Check the network connection.',
+    'dns-hint-resolver':     'The DNS resolvers returned an error status. The domain may be propagating or temporarily unavailable.',
+    'dns-hint-all-failed':   'All resolvers failed. Verify the domain name and network connectivity.',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
@@ -322,8 +328,6 @@ window.LOCALES = {
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS 比對結果',
-    'th-dns-domain':         '網域',
-    'th-dns-type':           '類型',
     'th-dns-resolver':       '解析器',
     'th-dns-records':        '解析記錄',
     'th-dns-rtt':            'RTT',
@@ -331,12 +335,18 @@ window.LOCALES = {
     'dns-consistent':        '一致',
     'dns-no-records':        '無記錄',
     'dns-all-failed':        '全部失敗',
-    /* 解析器錯誤處理友善標籤（隐藏內部 Go 錯誤訊息） */
-    'dns-err-no-host':       '無法解析主機',
-    'dns-err-invalid-domain':'網域格式無效',
-    'dns-err-resolver-failed':'解析器連線失敗',
-    'dns-err-timeout':       '查詢逾時',
-    'dns-err-generic':       '解析失敗',
+    /* 錯誤類別標籤（顯示於失敗解析器的 badge 文字） */
+    'dns-cat-input':         '輸入錯誤',
+    'dns-cat-nxdomain':      '網域不存在',
+    'dns-cat-network':       '網路錯誤',
+    'dns-cat-resolver':      '解析器錯誤',
+    'dns-cat-unknown':       '解析失敗',
+    /* 情境提示横幅（全部失敗時顯示於資料列下方） */
+    'dns-hint-input':        '查詢內容似乎是 URL 格式，請僅輸入主機名稱（如 www.example.com），無需包含 https:// 或路徑。',
+    'dns-hint-nxdomain':     '此網域不存在，或尚未設定此類型的 DNS 記錄。',
+    'dns-hint-network':      '探測主機無法連接到 DNS 解析器，請檢查網路連線。',
+    'dns-hint-resolver':     'DNS 解析器回傳了錯誤狀態，該網域可能正在傳播中或暫時無法解析。',
+    'dns-hint-all-failed':   '所有解析器均回傳錯誤，請確認網域名稱格式及網路連線狀態。',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',

@@ -142,22 +142,17 @@
       '</table></div>';
   }
 
-  // friendlyDNSError converts a raw Go resolver error string into a concise,
-  // user-readable label using i18n keys.  Raw error messages contain internal
-  // details (Go package paths, socket errors) that are not helpful to end-users.
-  // Adding new patterns here keeps all error-classification in one place (SRP).
-  function friendlyDNSError(msg) {
-    if (!msg) return '\u2014';
-    if (msg.includes('no such host'))                 return _t('dns-err-no-host');
-    if (msg.includes('invalid character'))            return _t('dns-err-invalid-domain');
-    if (msg.includes('resolver returned error'))      return _t('dns-err-resolver-failed');
-    if (msg.includes('deadline exceeded') ||
-        msg.includes('timed out'))                    return _t('dns-err-timeout');
-    return _t('dns-err-generic');
-  }
-
-  // Render DNS comparison results grouped by domain+type.
-  // Each entry shows a four-state badge followed by per-resolver sub-rows.
+  // Render DNS comparison results as a card-per-entry layout.
+  // Each card groups all per-resolver answers under a single header that shows
+  // the domain name, record-type badge, and the four-state consistency badge.
+  //
+  // Design rationale:
+  //   • Domain + Type identity belongs at the GROUP level (card header),
+  //     not as repeated table columns — eliminates empty-cell rows.
+  //   • The consistency/error status is shown once in the card header,
+  //     decoupled from the resolver-detail table below it.
+  //   • The inner table has exactly 3 columns (Resolver | Records | RTT)
+  //     with no merged cells or colspan tricks.
   //
   // Four-state badge priority (highest → lowest):
   //   AllFailed     → badge-fail  + dns-all-failed   (every resolver errored)
@@ -166,9 +161,9 @@
   //   consistent    → badge-ok    + dns-consistent   (resolvers agree)
   function renderDNSSection(dnsEntries) {
     if (!dnsEntries || dnsEntries.length === 0) return '';
-    const rows = dnsEntries.map(entry => {
-      // Four-state badge — AllFailed takes priority over HasDivergence to
-      // avoid misleadingly showing "Consistent" when every resolver fails.
+
+    const groups = dnsEntries.map(entry => {
+      // ── Four-state status badge ──────────────────────────────────────────
       let badge;
       if (entry.AllFailed) {
         badge = '<span class="badge badge-fail">' + esc(_t('dns-all-failed'))  + '</span>';
@@ -180,13 +175,29 @@
         badge = '<span class="badge badge-ok">'   + esc(_t('dns-consistent'))  + '</span>';
       }
 
-      // Build a sub-row for each resolver answer.
+      // ── Card header: domain | record-type pill | status badge ────────────
+      const header =
+        '<div class="dns-group-header">' +
+          '<span class="dns-group-domain">' + esc(entry.Domain) + '</span>' +
+          '<span class="dns-group-type">'   + esc(entry.Type)   + '</span>' +
+          badge +
+        '</div>';
+
+      // ── Per-resolver answer rows (3 columns: Resolver | Records | RTT) ───
       const answerRows = (entry.Answers || []).map(ans => {
         let recordsCell;
         if (ans.LookupError) {
-          // Show a friendly label plus a tooltip with the raw technical detail.
+          // ErrorCategory is set by Go (ClassifyDNSLookupError).  Map it to an
+          // i18n key so the UI shows a concise, user-friendly label.  The raw
+          // technical error is preserved in the title= tooltip for debugging.
+          const catKey = {
+            'input':    'dns-cat-input',
+            'nxdomain': 'dns-cat-nxdomain',
+            'network':  'dns-cat-network',
+            'resolver': 'dns-cat-resolver',
+          }[ans.ErrorCategory] || 'dns-cat-unknown';
           recordsCell = '<span class="badge badge-fail dns-err-label" title="' +
-            esc(ans.LookupError) + '">' + esc(friendlyDNSError(ans.LookupError)) + '</span>';
+            esc(ans.LookupError) + '">' + esc(_t(catKey)) + '</span>';
         } else {
           recordsCell = (ans.Values && ans.Values.length)
             ? ans.Values.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('')
@@ -195,33 +206,38 @@
         // RTT is meaningless when the resolver errored — hide it for clarity.
         const rttCell = ans.LookupError ? '\u2014' : esc(ans.RTT);
         return '<tr class="dns-answer-row">' +
-          '<td></td>' +
-          '<td></td>' +
           '<td class="dns-resolver">' + esc(ans.Source) + '</td>' +
           '<td class="dns-records">'  + recordsCell      + '</td>' +
           '<td class="dns-rtt">'      + rttCell          + '</td>' +
         '</tr>';
       }).join('');
 
-      return '<tr class="dns-entry-row">' +
-        '<td><strong class="dns-domain">' + esc(entry.Domain) + '</strong></td>' +
-        '<td class="dns-type">' + esc(entry.Type) + '</td>' +
-        '<td colspan="3">'      + badge            + '</td>' +
-      '</tr>' + answerRows;
+      // ── Contextual hint banner (inside card, below resolver table) ────────
+      // Shown when the Go layer computed a HintKey (always when AllFailed).
+      // Uses a <div> rather than a table row so hint styling is independent
+      // of the resolver table's column structure.
+      const hintHtml = entry.HintKey
+        ? '<div class="dns-hint">' + esc(_t(entry.HintKey)) + '</div>'
+        : '';
+
+      return '<div class="dns-group">' +
+        header +
+        '<table class="dns-answer-table">' +
+          '<thead><tr>' +
+            '<th>' + esc(_t('th-dns-resolver')) + '</th>' +
+            '<th>' + esc(_t('th-dns-records'))  + '</th>' +
+            '<th>' + esc(_t('th-dns-rtt'))      + '</th>' +
+          '</tr></thead>' +
+          '<tbody>' + answerRows + '</tbody>' +
+        '</table>' +
+        hintHtml +
+      '</div>';
     }).join('');
 
     return '<div class="result-section">' +
       '<h3>' + esc(_t('section-dns')) + '</h3>' +
-      '<table class="result-table dns-table">' +
-        '<thead><tr>' +
-          '<th>' + esc(_t('th-dns-domain'))   + '</th>' +
-          '<th>' + esc(_t('th-dns-type'))     + '</th>' +
-          '<th>' + esc(_t('th-dns-resolver')) + '</th>' +
-          '<th>' + esc(_t('th-dns-records'))  + '</th>' +
-          '<th>' + esc(_t('th-dns-rtt'))      + '</th>' +
-        '</tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table></div>';
+      '<div class="dns-groups">' + groups + '</div>' +
+    '</div>';
   }
 
   function renderGeoSection(pub, tgt) {

@@ -156,30 +156,32 @@ func TestStaticJS_RenderDNSSectionFourStateBadge(t *testing.T) {
 	}
 }
 
-// TestStaticJS_FriendlyDNSError verifies that renderer.js defines a
-// friendlyDNSError() helper that converts raw Go resolver errors into
-// user-readable labels, keeping raw error strings out of the UI.
-func TestStaticJS_FriendlyDNSError(t *testing.T) {
+// TestStaticJS_DNSAnswerCategoryDisplay verifies that renderer.js uses the
+// Go-computed ans.ErrorCategory field to choose a user-facing category label,
+// keeping raw Go error strings out of the visible UI and in the tooltip only.
+// Classification logic lives in Go (ClassifyDNSLookupError); the renderer
+// performs a pure lookup-table mapping from category string to i18n key.
+func TestStaticJS_DNSAnswerCategoryDisplay(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
 
-	if !strings.Contains(body, "function friendlyDNSError(") {
-		t.Fatal("renderer.js: friendlyDNSError function must be defined")
+	// The old JS-side pattern-matching helper must no longer exist.
+	if strings.Contains(body, "function friendlyDNSError(") {
+		t.Error("renderer.js: friendlyDNSError() must be removed — classification moved to Go side")
 	}
-	// Must reference the friendly-error i18n keys.
-	for _, key := range []string{"dns-err-no-host", "dns-err-invalid-domain",
-		"dns-err-resolver-failed", "dns-err-timeout", "dns-err-generic"} {
-		if !strings.Contains(body, "'"+key+"'") {
-			t.Errorf("renderer.js: friendlyDNSError must reference i18n key %q", key)
+	// renderDNSSection must reference ans.ErrorCategory (Go-computed field).
+	if !strings.Contains(body, "ans.ErrorCategory") {
+		t.Error("renderer.js: renderDNSSection must use ans.ErrorCategory to choose the error label")
+	}
+	// Must map all four actionable categories to i18n keys.
+	for _, key := range []string{
+		"'dns-cat-input'", "'dns-cat-nxdomain'", "'dns-cat-network'",
+		"'dns-cat-resolver'", "'dns-cat-unknown'",
+	} {
+		if !strings.Contains(body, key) {
+			t.Errorf("renderer.js: must reference i18n key %s for DNS error category display", key)
 		}
 	}
-	// Must detect common raw Go error patterns.
-	for _, pattern := range []string{"no such host", "invalid character",
-		"resolver returned error", "deadline exceeded", "timed out"} {
-		if !strings.Contains(body, "'"+pattern+"'") && !strings.Contains(body, "\""+pattern+"\"") {
-			t.Errorf("renderer.js: friendlyDNSError must detect the pattern %q", pattern)
-		}
-	}
-	// The error cell must use friendlyDNSError() when rendering LookupError.
+	// Raw LookupError must appear in a title= tooltip, not as visible text.
 	fnStart := strings.Index(body, "function renderDNSSection(")
 	if fnStart == -1 {
 		t.Fatal("renderer.js: renderDNSSection not found")
@@ -189,18 +191,93 @@ func TestStaticJS_FriendlyDNSError(t *testing.T) {
 	if nextFn != -1 {
 		fnBody = body[fnStart : fnStart+1+nextFn]
 	} else {
-		end := fnStart + 3000
+		end := fnStart + 4000
 		if end > len(body) {
 			end = len(body)
 		}
 		fnBody = body[fnStart:end]
 	}
-	if !strings.Contains(fnBody, "friendlyDNSError(") {
-		t.Error("renderer.js: renderDNSSection must call friendlyDNSError() when rendering ans.LookupError")
-	}
-	// Raw LookupError must be in tooltip (title=), not as visible text.
 	if !strings.Contains(fnBody, "title=") {
 		t.Error("renderer.js: raw LookupError must be placed in a title= attribute (tooltip), not rendered as visible text")
 	}
+	// Hint row must be rendered using entry.HintKey.
+	if !strings.Contains(fnBody, "entry.HintKey") {
+		t.Error("renderer.js: renderDNSSection must render a hint banner using entry.HintKey")
+	}
+	// Hint is now a <div class="dns-hint"> inside the card, independent of the
+	// resolver table's column structure — not a table row with colspan.
+	if !strings.Contains(fnBody, "dns-hint") {
+		t.Error(`renderer.js: hint banner must use class "dns-hint" (div-based, not a table row)`)
+	}
+	if strings.Contains(fnBody, "dns-hint-row") {
+		t.Error("renderer.js: old tr.dns-hint-row must be removed — hint is now a <div class=\"dns-hint\">")
+	}
 }
 
+// TestStaticJS_DNSSectionCardLayout verifies that renderDNSSection uses the
+// card-per-entry layout that cleanly separates group-level identity (domain,
+// type, status) from resolver-level detail (resolver name, records, RTT).
+//
+// Key structural requirements:
+//   - Outer container is dns-groups (div), not a flat table
+//   - Each entry is a dns-group card with a dns-group-header
+//   - Card header contains dns-group-domain and dns-group-type spans
+//   - Inner resolver table uses class dns-answer-table (3 columns only)
+//   - th-dns-domain and th-dns-type must NOT appear (solved column-repetition bug)
+func TestStaticJS_DNSSectionCardLayout(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	fnStart := strings.Index(body, "function renderDNSSection(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: renderDNSSection not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 6000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	// Outer container must be a div.dns-groups, not a flat table.
+	if !strings.Contains(fnBody, "dns-groups") {
+		t.Error("renderer.js: renderDNSSection must use a dns-groups container div")
+	}
+	// Each entry must be a dns-group card.
+	if !strings.Contains(fnBody, "dns-group") {
+		t.Error("renderer.js: renderDNSSection must wrap each entry in a dns-group card")
+	}
+	// Card header must contain both dns-group-domain and dns-group-type.
+	for _, cls := range []string{"dns-group-header", "dns-group-domain", "dns-group-type"} {
+		if !strings.Contains(fnBody, cls) {
+			t.Errorf("renderer.js: card header must use class %q", cls)
+		}
+	}
+	// Domain and Type are shown directly in the card header — the old i18n
+	// column-header keys must no longer appear in the renderer.
+	for _, obsolete := range []string{"th-dns-domain", "th-dns-type"} {
+		if strings.Contains(fnBody, "'"+obsolete+"'") {
+			t.Errorf("renderer.js: obsolete column-header i18n key %q must be removed", obsolete)
+		}
+	}
+	// Inner resolver table must use dns-answer-table (not result-table).
+	if !strings.Contains(fnBody, "dns-answer-table") {
+		t.Error("renderer.js: inner resolver table must use class dns-answer-table")
+	}
+	// The three column-header i18n keys that remain must still be present.
+	for _, key := range []string{"'th-dns-resolver'", "'th-dns-records'", "'th-dns-rtt'"} {
+		if !strings.Contains(fnBody, key) {
+			t.Errorf("renderer.js: inner table must reference i18n key %s", key)
+		}
+	}
+	// Old flat-table artifacts must be gone.
+	for _, old := range []string{"dns-entry-row", "dns-table", "colspan=\"5\""} {
+		if strings.Contains(fnBody, old) {
+			t.Errorf("renderer.js: old flat-table artifact %q must be removed", old)
+		}
+	}
+}

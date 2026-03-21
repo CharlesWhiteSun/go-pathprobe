@@ -73,11 +73,14 @@ type HopEntry struct {
 
 // DNSAnswerEntry is one resolver's answer for a domain + record type.
 // LookupError is non-empty when the resolver failed; Values will be nil in that case.
+// ErrorCategory holds the result of netprobe.ClassifyDNSLookupError and is empty
+// when the resolver succeeded.
 type DNSAnswerEntry struct {
-	Source      string
-	Values      []string
-	RTT         string
-	LookupError string
+	Source        string
+	Values        []string
+	RTT           string
+	LookupError   string
+	ErrorCategory string // "input" | "nxdomain" | "network" | "resolver" | "unknown" | ""
 }
 
 // DNSEntry represents the cross-resolver comparison result for one
@@ -89,12 +92,16 @@ type DNSAnswerEntry struct {
 //	HasDivergence == true  → resolvers disagree              (badge-fail)
 //	AllEmpty      == true  → all resolvers found no records  (badge-warn)
 //	otherwise              → resolvers agree on non-empty data (badge-ok)
+//
+// HintKey is the i18n key for a contextual explanation banner shown to the
+// user when AllFailed is true.  It is empty when not all resolvers failed.
 type DNSEntry struct {
 	Domain        string
 	Type          string
 	HasDivergence bool
 	AllEmpty      bool
 	AllFailed     bool
+	HintKey       string
 	Answers       []DNSAnswerEntry
 }
 
@@ -111,6 +118,36 @@ type AnnotatedReport struct {
 	Protos []ProtoEntry
 	Route  []HopEntry
 	DNS    []DNSEntry
+}
+
+// dnsHintKey selects an appropriate i18n hint key when all resolvers for an
+// entry have failed.  If every answer shares the same actionable error category
+// (input, nxdomain, network, or resolver) a category-specific key is returned;
+// mixed categories or the "unknown" fallback both return "dns-hint-all-failed".
+// An empty string is returned whenever at least one answer succeeded.
+func dnsHintKey(answers []DNSAnswerEntry) string {
+	if len(answers) == 0 {
+		return ""
+	}
+	for _, a := range answers {
+		if a.LookupError == "" {
+			return ""
+		}
+	}
+	// All answers are failures — determine dominant error category.
+	first := answers[0].ErrorCategory
+	for _, a := range answers[1:] {
+		if a.ErrorCategory != first {
+			return "dns-hint-all-failed"
+		}
+	}
+	switch first {
+	case string(netprobe.DNSErrInput), string(netprobe.DNSErrNXDomain),
+		string(netprobe.DNSErrNetwork), string(netprobe.DNSErrResolver):
+		return "dns-hint-" + first
+	default:
+		return "dns-hint-all-failed"
+	}
 }
 
 // dnsTypeDisplayName maps an internal DNS RecordType to a user-friendly label.
@@ -241,13 +278,16 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*Annota
 			AllEmpty:      comp.AllEmpty(),
 		}
 		for _, ans := range comp.Results {
+			cat := netprobe.ClassifyDNSLookupError(comp.Name, ans.LookupError)
 			entry.Answers = append(entry.Answers, DNSAnswerEntry{
-				Source:      ans.Source,
-				Values:      ans.Values,
-				RTT:         fmtDur(ans.RTT),
-				LookupError: ans.LookupError,
+				Source:        ans.Source,
+				Values:        ans.Values,
+				RTT:           fmtDur(ans.RTT),
+				LookupError:   ans.LookupError,
+				ErrorCategory: string(cat),
 			})
 		}
+		entry.HintKey = dnsHintKey(entry.Answers)
 		ar.DNS = append(ar.DNS, entry)
 	}
 
