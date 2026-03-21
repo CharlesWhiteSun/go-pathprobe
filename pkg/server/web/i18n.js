@@ -134,6 +134,13 @@ window.LOCALES = {
     'dns-divergent':         'Divergent',
     'dns-consistent':        'Consistent',
     'dns-no-records':        'No Records',
+    'dns-all-failed':        'All Failed',
+    /* Friendly resolver error labels (raw Go errors are not user-facing) */
+    'dns-err-no-host':       'Host not found',
+    'dns-err-invalid-domain':'Invalid domain format',
+    'dns-err-resolver-failed':'Resolver error',
+    'dns-err-timeout':       'Query timed out',
+    'dns-err-generic':       'Lookup failed',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
@@ -323,6 +330,13 @@ window.LOCALES = {
     'dns-divergent':         '有差異',
     'dns-consistent':        '一致',
     'dns-no-records':        '無記錄',
+    'dns-all-failed':        '全部失敗',
+    /* 解析器錯誤處理友善標籤（隐藏內部 Go 錯誤訊息） */
+    'dns-err-no-host':       '無法解析主機',
+    'dns-err-invalid-domain':'網域格式無效',
+    'dns-err-resolver-failed':'解析器連線失敗',
+    'dns-err-timeout':       '查詢逾時',
+    'dns-err-generic':       '解析失敗',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',

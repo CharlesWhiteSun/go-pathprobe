@@ -705,6 +705,53 @@ func TestBuildDNSAllEmptyPassThrough(t *testing.T) {
 	}
 }
 
+// TestBuildDNSAllFailedPassThrough verifies that when every resolver returns
+// a LookupError, DNSEntry.AllFailed is set to true.  This exposes the fourth
+// badge state so the UI can distinguish "all failed" from "consistent" (the
+// previous bug where all-nil Values caused a false "Consistent" badge).
+func TestBuildDNSAllFailedPassThrough(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		// All resolvers fail → AllFailed must be propagated to DNSEntry.
+		{
+			Name: "https://www.rakuten.co.jp/",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "system",      LookupError: "lookup https://www.rakuten.co.jp/: no such host"},
+				{Source: "doh-1.1.1.1", LookupError: "resolver returned error status"},
+				{Source: "doh-8.8.8.8", LookupError: "resolver returned error status"},
+			},
+		},
+		// One resolver succeeds → AllFailed must be false.
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "no such host"},
+				{Source: "cf",  Values: []string{"93.184.216.34"}, RTT: 3 * time.Millisecond},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 2 {
+		t.Fatalf("expected 2 DNS entries, got %d", len(ar.DNS))
+	}
+	// Entry 0: all failed.
+	if !ar.DNS[0].AllFailed {
+		t.Error("DNS[0] (all resolvers errored): expected AllFailed=true")
+	}
+	if ar.DNS[0].AllEmpty {
+		t.Error("DNS[0]: AllFailed entry must not also be AllEmpty")
+	}
+	if ar.DNS[0].HasDivergence {
+		t.Error("DNS[0]: AllFailed entry must not be HasDivergence (Values all nil)")
+	}
+	// Entry 1: one succeeded → not AllFailed.
+	if ar.DNS[1].AllFailed {
+		t.Error("DNS[1] (one resolver succeeded): expected AllFailed=false")
+	}
+}
+
 // geoStubLocator returns a fixed non-zero GeoInfo for any IP so that
 // HasLocation=true, allowing tests to exercise the geo branches in templates
 // without requiring a real MaxMind database.

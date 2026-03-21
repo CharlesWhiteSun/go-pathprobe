@@ -142,45 +142,71 @@
       '</table></div>';
   }
 
+  // friendlyDNSError converts a raw Go resolver error string into a concise,
+  // user-readable label using i18n keys.  Raw error messages contain internal
+  // details (Go package paths, socket errors) that are not helpful to end-users.
+  // Adding new patterns here keeps all error-classification in one place (SRP).
+  function friendlyDNSError(msg) {
+    if (!msg) return '\u2014';
+    if (msg.includes('no such host'))                 return _t('dns-err-no-host');
+    if (msg.includes('invalid character'))            return _t('dns-err-invalid-domain');
+    if (msg.includes('resolver returned error'))      return _t('dns-err-resolver-failed');
+    if (msg.includes('deadline exceeded') ||
+        msg.includes('timed out'))                    return _t('dns-err-timeout');
+    return _t('dns-err-generic');
+  }
+
   // Render DNS comparison results grouped by domain+type.
-  // Each entry shows a badge (Divergent / Consistent), then expands one row
-  // per resolver with its answers and RTT.
+  // Each entry shows a four-state badge followed by per-resolver sub-rows.
+  //
+  // Four-state badge priority (highest → lowest):
+  //   AllFailed     → badge-fail  + dns-all-failed   (every resolver errored)
+  //   HasDivergence → badge-fail  + dns-divergent    (resolvers disagree)
+  //   AllEmpty      → badge-warn  + dns-no-records   (no records, no errors)
+  //   consistent    → badge-ok    + dns-consistent   (resolvers agree)
   function renderDNSSection(dnsEntries) {
     if (!dnsEntries || dnsEntries.length === 0) return '';
     const rows = dnsEntries.map(entry => {
-      // Three-state badge: Divergent → AllEmpty → Consistent.
+      // Four-state badge — AllFailed takes priority over HasDivergence to
+      // avoid misleadingly showing "Consistent" when every resolver fails.
       let badge;
-      if (entry.HasDivergence) {
-        badge = '<span class="badge badge-fail">' + esc(_t('dns-divergent'))  + '</span>';
+      if (entry.AllFailed) {
+        badge = '<span class="badge badge-fail">' + esc(_t('dns-all-failed'))  + '</span>';
+      } else if (entry.HasDivergence) {
+        badge = '<span class="badge badge-fail">' + esc(_t('dns-divergent'))   + '</span>';
       } else if (entry.AllEmpty) {
-        badge = '<span class="badge badge-warn">' + esc(_t('dns-no-records')) + '</span>';
+        badge = '<span class="badge badge-warn">' + esc(_t('dns-no-records'))  + '</span>';
       } else {
-        badge = '<span class="badge badge-ok">'   + esc(_t('dns-consistent')) + '</span>';
+        badge = '<span class="badge badge-ok">'   + esc(_t('dns-consistent'))  + '</span>';
       }
 
       // Build a sub-row for each resolver answer.
       const answerRows = (entry.Answers || []).map(ans => {
         let recordsCell;
         if (ans.LookupError) {
-          recordsCell = '<span class="badge badge-fail">' + esc(ans.LookupError) + '</span>';
+          // Show a friendly label plus a tooltip with the raw technical detail.
+          recordsCell = '<span class="badge badge-fail dns-err-label" title="' +
+            esc(ans.LookupError) + '">' + esc(friendlyDNSError(ans.LookupError)) + '</span>';
         } else {
           recordsCell = (ans.Values && ans.Values.length)
-            ? ans.Values.map(v => esc(v)).join('<br>')
-            : '\u2014';
+            ? ans.Values.map(v => '<span class="dns-record-value">' + esc(v) + '</span>').join('')
+            : '<span class="dns-no-value">\u2014</span>';
         }
+        // RTT is meaningless when the resolver errored — hide it for clarity.
+        const rttCell = ans.LookupError ? '\u2014' : esc(ans.RTT);
         return '<tr class="dns-answer-row">' +
           '<td></td>' +
           '<td></td>' +
           '<td class="dns-resolver">' + esc(ans.Source) + '</td>' +
-          '<td class="dns-records">'  + recordsCell       + '</td>' +
-          '<td>'                      + esc(ans.RTT)      + '</td>' +
+          '<td class="dns-records">'  + recordsCell      + '</td>' +
+          '<td class="dns-rtt">'      + rttCell          + '</td>' +
         '</tr>';
       }).join('');
 
       return '<tr class="dns-entry-row">' +
-        '<td><strong>' + esc(entry.Domain) + '</strong></td>' +
-        '<td>'         + esc(entry.Type)   + '</td>' +
-        '<td colspan="3">' + badge + '</td>' +
+        '<td><strong class="dns-domain">' + esc(entry.Domain) + '</strong></td>' +
+        '<td class="dns-type">' + esc(entry.Type) + '</td>' +
+        '<td colspan="3">'      + badge            + '</td>' +
       '</tr>' + answerRows;
     }).join('');
 

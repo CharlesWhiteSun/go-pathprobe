@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticJS_WebTargetPortDefaults verifies that TARGET_PORTS.web includes
 // both port 80 (HTTP) and port 443 (HTTPS) as the auto-fill defaults shown
 // when the user selects web target + port connectivity mode.
@@ -449,6 +448,7 @@ func TestStaticJS_ConfigScopeIsolation(t *testing.T) {
 			"PathProbe.Config and window.PathProbe")
 	}
 }
+
 // TestStaticJS_GeoSameRegionThresholdKM 驗證 config.js 導出了
 // GEO_SAME_REGION_THRESHOLD_KM 常數，以導驅 map.js 的返回區域返回區域接近避免下的 zoom 决策。
 // 該常數展水自 config.js ，避免在 map.js 中硬編碼數字。

@@ -370,6 +370,86 @@ func TestDNSComparisonAllEmptyFalseWhenNoResults(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// AllFailed tests
+// ---------------------------------------------------------------------------
+
+// TestDNSComparisonAllFailed verifies AllFailed returns true when every
+// resolver carries a LookupError.  This is the root cause of the bug where
+// three failing resolvers all returned Values=[] and HasDivergence=false,
+// misleadingly showing "Consistent".
+func TestDNSComparisonAllFailed(t *testing.T) {
+	comp := DNSComparison{
+		Name: "https://www.example.com/", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "system",     LookupError: "lookup https://www.example.com/: no such host"},
+			{Source: "doh-1.1.1.1", LookupError: "resolver returned error status"},
+			{Source: "doh-8.8.8.8", LookupError: "resolver returned error status"},
+		},
+	}
+	if !comp.AllFailed() {
+		t.Fatal("expected AllFailed=true when every resolver has a LookupError")
+	}
+}
+
+// TestDNSComparisonAllFailedFalseWhenOneSucceeds verifies AllFailed is false
+// when at least one resolver succeeded (even with empty records).
+func TestDNSComparisonAllFailedFalseWhenOneSucceeds(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeMX,
+		Results: []DNSAnswer{
+			{Source: "sys", LookupError: "no such host"},
+			{Source: "cf",  Values: []string{}},  // succeeded, just no records
+		},
+	}
+	if comp.AllFailed() {
+		t.Fatal("expected AllFailed=false when one resolver succeeded")
+	}
+}
+
+// TestDNSComparisonAllFailedFalseWhenNoResults verifies AllFailed is false
+// for an empty Results slice (no resolvers configured).
+func TestDNSComparisonAllFailedFalseWhenNoResults(t *testing.T) {
+	comp := DNSComparison{Name: "example.com", Type: RecordTypeA}
+	if comp.AllFailed() {
+		t.Fatal("expected AllFailed=false when Results slice is empty")
+	}
+}
+
+// TestDNSComparisonAllFailedNotDivergent verifies that AllFailed results are
+// not also marked as HasDivergence: all nil Values compare equal, so the
+// fix must be at the badge-selection layer rather than in HasDivergence.
+func TestDNSComparisonAllFailedNotDivergent(t *testing.T) {
+	comp := DNSComparison{
+		Name: "bad.example", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", LookupError: "no such host"},
+			{Source: "cf",  LookupError: "resolver returned error status"},
+		},
+	}
+	if comp.HasDivergence() {
+		t.Fatal("all-failed results must not be flagged as divergent (Values are all nil/empty)")
+	}
+	if !comp.AllFailed() {
+		t.Fatal("expected AllFailed=true when all resolvers errored")
+	}
+}
+
+// TestDNSComparisonAllFailedWithValues verifies AllFailed is false when a
+// resolver returned actual records even alongside errored resolvers.
+func TestDNSComparisonAllFailedWithValues(t *testing.T) {
+	comp := DNSComparison{
+		Name: "example.com", Type: RecordTypeA,
+		Results: []DNSAnswer{
+			{Source: "sys", Values: []string{"93.184.216.34"}},
+			{Source: "cf",  LookupError: "resolver returned error status"},
+		},
+	}
+	if comp.AllFailed() {
+		t.Fatal("expected AllFailed=false when at least one resolver has Values")
+	}
+}
+
 type spyResolver struct {
 	name    string
 	answers map[string][]string

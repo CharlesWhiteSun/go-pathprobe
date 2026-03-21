@@ -99,37 +99,54 @@ func TestStaticJS_RenderRouteSectionColumns(t *testing.T) {
 	}
 }
 
-// TestStaticJS_RenderDNSSectionThreeStateBadge verifies that renderDNSSection
-// in renderer.js implements the three-state badge logic:
+// TestStaticJS_RenderDNSSectionFourStateBadge verifies that renderDNSSection
+// in renderer.js implements the four-state badge logic:
 //
+//	AllFailed       → badge-fail  + dns-all-failed  (every resolver errored — highest priority)
 //	HasDivergence   → badge-fail  + dns-divergent
 //	AllEmpty        → badge-warn  + dns-no-records
 //	consistent+data → badge-ok    + dns-consistent
-func TestStaticJS_RenderDNSSectionThreeStateBadge(t *testing.T) {
+//
+// AllFailed must be checked before HasDivergence so that the case where all
+// resolvers fail (Values all nil → HasDivergence=false) is correctly labelled
+// rather than falling through as "Consistent".
+func TestStaticJS_RenderDNSSectionFourStateBadge(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
 
 	// The function must exist.
 	if !strings.Contains(body, "renderDNSSection") {
 		t.Fatal("renderer.js: renderDNSSection function must be defined")
 	}
-	// All three i18n keys must be referenced.
-	for _, key := range []string{"dns-divergent", "dns-no-records", "dns-consistent"} {
+	// All four i18n keys must be referenced.
+	for _, key := range []string{"dns-all-failed", "dns-divergent", "dns-no-records", "dns-consistent"} {
 		if !strings.Contains(body, "'"+key+"'") {
 			t.Errorf("renderer.js: renderDNSSection must reference i18n key %q", key)
 		}
 	}
-	// The AllEmpty branch must guard with badge-warn.
+	// AllFailed must be checked first (entry.AllFailed before entry.HasDivergence).
+	allFailedIdx := strings.Index(body, "entry.AllFailed")
+	hasDivIdx := strings.Index(body, "entry.HasDivergence")
+	if allFailedIdx == -1 {
+		t.Fatal("renderer.js: renderDNSSection must check entry.AllFailed for the all-failed badge")
+	}
+	if hasDivIdx == -1 {
+		t.Fatal("renderer.js: renderDNSSection must check entry.HasDivergence")
+	}
+	if allFailedIdx > hasDivIdx {
+		t.Error("renderer.js: entry.AllFailed must be checked BEFORE entry.HasDivergence (priority order)")
+	}
+	// AllEmpty → badge-warn.
 	if !strings.Contains(body, "entry.AllEmpty") {
 		t.Error("renderer.js: renderDNSSection must check entry.AllEmpty for the no-records badge")
 	}
 	if !strings.Contains(body, "badge-warn") {
 		t.Error("renderer.js: renderDNSSection must use badge-warn class for AllEmpty entries")
 	}
-	// The divergent branch must use badge-fail.
+	// Failure states → badge-fail.
 	if !strings.Contains(body, "badge-fail") {
-		t.Error("renderer.js: renderDNSSection must use badge-fail class for divergent entries")
+		t.Error("renderer.js: renderDNSSection must use badge-fail class for AllFailed/Divergent entries")
 	}
-	// The consistent branch must use badge-ok.
+	// Consistent → badge-ok.
 	if !strings.Contains(body, "badge-ok") {
 		t.Error("renderer.js: renderDNSSection must use badge-ok class for consistent entries")
 	}
@@ -138,3 +155,52 @@ func TestStaticJS_RenderDNSSectionThreeStateBadge(t *testing.T) {
 		t.Error("renderer.js: renderReport must call renderDNSSection(r.DNS)")
 	}
 }
+
+// TestStaticJS_FriendlyDNSError verifies that renderer.js defines a
+// friendlyDNSError() helper that converts raw Go resolver errors into
+// user-readable labels, keeping raw error strings out of the UI.
+func TestStaticJS_FriendlyDNSError(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	if !strings.Contains(body, "function friendlyDNSError(") {
+		t.Fatal("renderer.js: friendlyDNSError function must be defined")
+	}
+	// Must reference the friendly-error i18n keys.
+	for _, key := range []string{"dns-err-no-host", "dns-err-invalid-domain",
+		"dns-err-resolver-failed", "dns-err-timeout", "dns-err-generic"} {
+		if !strings.Contains(body, "'"+key+"'") {
+			t.Errorf("renderer.js: friendlyDNSError must reference i18n key %q", key)
+		}
+	}
+	// Must detect common raw Go error patterns.
+	for _, pattern := range []string{"no such host", "invalid character",
+		"resolver returned error", "deadline exceeded", "timed out"} {
+		if !strings.Contains(body, "'"+pattern+"'") && !strings.Contains(body, "\""+pattern+"\"") {
+			t.Errorf("renderer.js: friendlyDNSError must detect the pattern %q", pattern)
+		}
+	}
+	// The error cell must use friendlyDNSError() when rendering LookupError.
+	fnStart := strings.Index(body, "function renderDNSSection(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: renderDNSSection not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 3000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+	if !strings.Contains(fnBody, "friendlyDNSError(") {
+		t.Error("renderer.js: renderDNSSection must call friendlyDNSError() when rendering ans.LookupError")
+	}
+	// Raw LookupError must be in tooltip (title=), not as visible text.
+	if !strings.Contains(fnBody, "title=") {
+		t.Error("renderer.js: raw LookupError must be placed in a title= attribute (tooltip), not rendered as visible text")
+	}
+}
+

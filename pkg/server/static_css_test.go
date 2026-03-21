@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticCSS_ButtonFixedDimensions verifies that the embedded style.css declares
 // all fixed-dimension properties required to prevent layout shift on buttons.
 func TestStaticCSS_ButtonFixedDimensions(t *testing.T) {
@@ -26,7 +25,6 @@ func TestStaticCSS_ButtonFixedDimensions(t *testing.T) {
 		t.Error("style.css: #run-btn must declare 'height: 2.75rem' to prevent vertical layout shift")
 	}
 }
-
 
 // TestStaticCSS_ThemeBarButtons verifies that the embedded style.css defines
 // the circular dot-button styles for the .theme-bar switcher. It confirms:
@@ -100,7 +98,6 @@ func TestStaticCSS_ThemeBarButtons(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ThemeBarFlat verifies that .header-brand exists in CSS to
 // support the left-column flex layout of the 3-column header.
 func TestStaticCSS_ThemeBarFlat(t *testing.T) {
@@ -115,7 +112,6 @@ func TestStaticCSS_ThemeBarFlat(t *testing.T) {
 		t.Error("style.css: lang-switcher must not use margin-left: auto in the 3-column layout")
 	}
 }
-
 
 // TestStaticCSS_ThemeVariables verifies that the embedded style.css contains
 // CSS variable override blocks for all four non-default themes. Each block is
@@ -145,7 +141,6 @@ func TestStaticCSS_ThemeVariables(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_BrandTypography verifies that the embedded style.css contains
 // the --brand-font token, individual brand-span rules, and the commented-out
 // @font-face swap-point template so future custom fonts require only updating
@@ -171,7 +166,6 @@ func TestStaticCSS_BrandTypography(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_HeaderPaddingToken verifies that the embedded style.css uses a
 // --header-py CSS custom property for vertical header padding.  This makes
 // header height adjustments a single-token change with no selector hunting.
@@ -185,7 +179,6 @@ func TestStaticCSS_HeaderPaddingToken(t *testing.T) {
 		t.Error("style.css: .site-header must consume var(--header-py) for vertical padding")
 	}
 }
-
 
 // TestStaticCSS_BrandLogoSizeTokens verifies that style.css declares a unified
 // --brand-logo-size token in :root and that both .brand-path and .brand-probe
@@ -210,7 +203,6 @@ func TestStaticCSS_BrandLogoSizeTokens(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ModeSelector verifies the .mode-selector and .mode-option style rules exist.
 func TestStaticCSS_ModeSelector(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/style.css")
@@ -221,7 +213,6 @@ func TestStaticCSS_ModeSelector(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_HeaderShadow verifies that the embedded style.css declares a
 // --header-shadow CSS token in :root and that .site-header consumes it via
@@ -236,7 +227,6 @@ func TestStaticCSS_HeaderShadow(t *testing.T) {
 		t.Error("style.css: .site-header must consume var(--header-shadow)")
 	}
 }
-
 
 // TestStaticCSS_StickyHeader verifies that the embedded style.css makes the
 // site header stick to the top of the viewport while the page is scrolled.
@@ -256,7 +246,6 @@ func TestStaticCSS_StickyHeader(t *testing.T) {
 		t.Error("style.css: .site-header must declare 'z-index: 100' to layer above page content")
 	}
 }
-
 
 // TestStaticCSS_SelectCustomChevron verifies that the embedded style.css
 // removes the native OS dropdown arrow and replaces it with a custom chevron
@@ -294,7 +283,6 @@ func TestStaticCSS_SelectCustomChevron(t *testing.T) {
 		t.Error("style.css: .cs-wrap.open::after must rotate the chevron 180deg to indicate open state")
 	}
 }
-
 
 // TestStaticCSS_CustomSelectPopup verifies that style.css defines the
 // cs-* component rules with theme-aware tokens for the popup's visual style.
@@ -347,7 +335,6 @@ func TestStaticCSS_CustomSelectPopup(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_PanelTransition verifies that style.css declares the
 // panel-appear @keyframes and the .target-fields.panel-entering rule so
 // onTargetChange() can trigger the fade-in animation without extra CSS.
@@ -392,7 +379,6 @@ func TestStaticCSS_PanelTransition(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_FooterStyles verifies that the embedded style.css defines the
 // three footer component rules (.site-footer, .footer-inner, .footer-copy) and
 // the --footer-shadow design token.  This ensures the footer can be restyled by
@@ -436,7 +422,6 @@ func TestStaticCSS_FooterStyles(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_BodyFlushBottom verifies that the embedded style.css configures
 // the body as a flex-column container with min-height: 100vh, and that .main
 // carries flex: 1 and width: 100%.  Together these rules guarantee:
@@ -463,7 +448,6 @@ func TestStaticCSS_BodyFlushBottom(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ChromeHeightParity verifies that the embedded style.css
 // declares a --chrome-inner-h design token and applies it as min-height to
 // both .header-inner and .footer-inner.  This single token guarantees the
@@ -482,7 +466,6 @@ func TestStaticCSS_ChromeHeightParity(t *testing.T) {
 		t.Errorf("style.css: var(--chrome-inner-h) must appear at least twice (header-inner + footer-inner), got %d", count)
 	}
 }
-
 
 // TestStaticCSS_SelectOptionTheming verifies that style.css defines theme-aware
 // option styling using only CSS custom-property tokens.  A single pair of rules
@@ -528,7 +511,6 @@ func TestStaticCSS_SelectOptionTheming(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_OptionCheckedFgToken verifies that --option-checked-fg is
 // declared in :root (defaulting to #fff) and that [data-theme="dark"] overrides
 // it to a dark tint.  The dark theme's primary is #bb86fc (light purple), so
@@ -561,7 +543,6 @@ func TestStaticCSS_OptionCheckedFgToken(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_AnimationTokens verifies that style.css declares the four
 // animation design tokens in :root and implements the [data-anim="vivid"] and
 // [data-anim="off"] override blocks so JS can switch animation intensity by
@@ -590,7 +571,6 @@ func TestStaticCSS_AnimationTokens(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_CustomSelectHasSelection verifies that style.css defines a
 // persistent visual indicator for .cs-wrap.has-selection .cs-trigger so the
 // widget looks "selected" even when it does not have keyboard focus — mirroring
@@ -609,7 +589,6 @@ func TestStaticCSS_CustomSelectHasSelection(t *testing.T) {
 		t.Error("style.css: .cs-wrap.has-selection .cs-trigger should use color-mix() for a subtle primary background tint")
 	}
 }
-
 
 // TestStaticCSS_PanelLeaveAnimation verifies that style.css defines both
 // halves of the panel cross-fade: @keyframes panel-leave and the
@@ -633,7 +612,6 @@ func TestStaticCSS_PanelLeaveAnimation(t *testing.T) {
 		t.Error("style.css: .target-fields.panel-leaving must declare pointer-events: none to block stray clicks during fade-out")
 	}
 }
-
 
 // TestStaticCSS_AdvancedOptsAnimation verifies that style.css declares the
 // rules required for the Advanced Options animated expand/collapse, and that
@@ -698,7 +676,6 @@ func TestStaticCSS_AdvancedOptsAnimation(t *testing.T) {
 		t.Error("style.css: .adv-is-open class must be declared to rotate the chevron in sync with the height animation")
 	}
 }
-
 
 // TestStaticCSS_CustomCheckbox verifies that style.css replaces the native
 // checkbox appearance with a fully themed custom box driven by design tokens.
@@ -776,7 +753,6 @@ func TestStaticCSS_CustomCheckbox(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_RouteTable verifies that style.css contains the CSS rules
 // needed to style the route-trace hop table and distinguish timed-out hops.
 func TestStaticCSS_RouteTable(t *testing.T) {
@@ -791,7 +767,6 @@ func TestStaticCSS_RouteTable(t *testing.T) {
 		t.Error("style.css: .hop-timedout rule must exist for timed-out traceroute hops")
 	}
 }
-
 
 // TestStaticCSS_RunAnimation verifies that style.css defines the dots
 // run-button animation class and its associated @keyframes.
@@ -821,7 +796,6 @@ func TestStaticCSS_RunAnimation(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_AutofillTheme verifies that style.css overrides the browser
 // autofill background colour so the site theme is preserved when the browser
 // fills in a previously entered value for the target-host input.
@@ -842,7 +816,6 @@ func TestStaticCSS_AutofillTheme(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ErrorBannerFlex verifies that the updated error-banner uses
 // flexbox layout (with .error-icon and .error-text children) for better visual
 // separation between the icon and the message text.
@@ -861,7 +834,6 @@ func TestStaticCSS_ErrorBannerFlex(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_HiddenAttributeEnforced verifies that style.css declares a
 // [hidden] reset rule with !important so that component-level display
 // properties (e.g. display:flex on .error-banner) cannot override the HTML
@@ -877,7 +849,6 @@ func TestStaticCSS_HiddenAttributeEnforced(t *testing.T) {
 		t.Error("style.css: [hidden] rule must use 'display: none !important' to override component display values")
 	}
 }
-
 
 // TestStaticCSS_RunBtnCentering verifies that style.css correctly centres both
 // the run-button resting state (▶ glyph) and its loading state (dots animation)
@@ -901,7 +872,6 @@ func TestStaticCSS_RunBtnCentering(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_GeoMarkerStyles verifies that style.css defines the custom
 // marker dot classes used by buildMarkerIcon() via L.divIcon.
 func TestStaticCSS_GeoMarkerStyles(t *testing.T) {
@@ -913,7 +883,6 @@ func TestStaticCSS_GeoMarkerStyles(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_GeoLegendAndDistance verifies that style.css defines the
 // .geo-legend and .geo-distance classes used by the in-map legend control and
@@ -927,7 +896,6 @@ func TestStaticCSS_GeoLegendAndDistance(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_BodyIncludesOpacityTransition verifies that the theme-fade
 // opacity transition is applied to .main (not body) so that applyTheme()'s
@@ -959,7 +927,6 @@ func TestStaticCSS_BodyIncludesOpacityTransition(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_InputBaseCaretColor verifies that the base input rule (outside
 // of the :-webkit-autofill override) explicitly sets caret-color so the text
 // insertion cursor stays theme-coloured even in dark themes.
@@ -984,7 +951,6 @@ func TestStaticCSS_InputBaseCaretColor(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_InputBaseTextFillColor verifies that the base input rule sets
 // -webkit-text-fill-color so dark-theme text remains readable when the browser
 // applies autocomplete suggestion overlay styles.
@@ -1006,7 +972,6 @@ func TestStaticCSS_InputBaseTextFillColor(t *testing.T) {
 		t.Error("style.css: base input rule must set -webkit-text-fill-color: var(--text) to prevent dark-theme text appearing black")
 	}
 }
-
 
 // TestStaticCSS_RadiusTokenDefined verifies that --radius is defined in :root
 // so all component rules that use var(--radius) resolve to a valid value.
@@ -1035,7 +1000,6 @@ func TestStaticCSS_RadiusTokenDefined(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ThemeTransitioning verifies that style.css defines the
 // body.theme-transitioning rule which snaps opacity to 0 for the theme fade.
 func TestStaticCSS_ThemeTransitioning(t *testing.T) {
@@ -1048,7 +1012,6 @@ func TestStaticCSS_ThemeTransitioning(t *testing.T) {
 		t.Error("style.css: --theme-fade-dur CSS custom property not found")
 	}
 }
-
 
 // TestStaticCSS_GeoMapFading verifies that style.css defines the
 // #geo-map.geo-map--fading rule used during tile-swap fade animation.
@@ -1063,7 +1026,6 @@ func TestStaticCSS_GeoMapFading(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_MapTileBar verifies that style.css declares the .geo-map-bar
 // and .map-tile-btn rules required for the tile-variant dot selector bar.
 func TestStaticCSS_MapTileBar(t *testing.T) {
@@ -1075,7 +1037,6 @@ func TestStaticCSS_MapTileBar(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_DarkThemeColorScheme verifies that all three dark themes
 // declare color-scheme: dark so Chrome/Safari use dark-mode form-control
@@ -1108,7 +1069,6 @@ func TestStaticCSS_DarkThemeColorScheme(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_RootColorSchemeLight verifies that :root declares
 // color-scheme: light as the baseline so light themes' form controls default
 // to light-mode UA rendering.
@@ -1135,7 +1095,6 @@ func TestStaticCSS_RootColorSchemeLight(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_MapTileBarOverlay verifies that .geo-map-bar uses
 // position: absolute so it overlays the map instead of sitting above it.
 func TestStaticCSS_MapTileBarOverlay(t *testing.T) {
@@ -1160,7 +1119,6 @@ func TestStaticCSS_MapTileBarOverlay(t *testing.T) {
 		t.Error("style.css: .geo-map-bar must use position:absolute to overlay the map")
 	}
 }
-
 
 // TestStaticCSS_GeoMapOuterRelative verifies that .geo-map-outer has
 // position: relative, providing the positioning context for .geo-map-bar.
@@ -1187,7 +1145,6 @@ func TestStaticCSS_GeoMapOuterRelative(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_MapTileBtnCircle verifies that .map-tile-btn is styled as a
 // circle (border-radius: 50%) matching the .theme-btn visual language.
 func TestStaticCSS_MapTileBtnCircle(t *testing.T) {
@@ -1213,7 +1170,6 @@ func TestStaticCSS_MapTileBtnCircle(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_MapTileBtnVariantColors verifies that per-variant colour swatches
 // are declared for all three tile variants (light, osm, dark).
 func TestStaticCSS_MapTileBtnVariantColors(t *testing.T) {
@@ -1232,7 +1188,6 @@ func TestStaticCSS_MapTileBtnVariantColors(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_GeoMapIsolation verifies that #geo-map has isolation: isolate so
 // that Leaflet's internal pane z-indices (200, 400…) are contained within the
@@ -1265,7 +1220,6 @@ func TestStaticCSS_GeoMapIsolation(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_HeaderHasColorTransition verifies that .site-header explicitly
 // defines CSS transitions for background and color so the chrome strip smoothly
 // cross-fades between theme palettes without ever disappearing (no opacity fade).
@@ -1294,7 +1248,6 @@ func TestStaticCSS_HeaderHasColorTransition(t *testing.T) {
 		t.Error("style.css: .site-header transition must include background")
 	}
 }
-
 
 // TestStaticCSS_FooterHasColorTransition verifies that .site-footer explicitly
 // defines CSS transitions for background and color, mirroring .site-header,
@@ -1325,7 +1278,6 @@ func TestStaticCSS_FooterHasColorTransition(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_ThemeTransitioningMainOpacity verifies that
 // body.theme-transitioning targets .main with opacity: 0 so only the main
 // content area fades out during a theme switch (header and footer stay visible).
@@ -1355,7 +1307,6 @@ func TestStaticCSS_ThemeTransitioningMainOpacity(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_MarkerStyleSnippets verifies that style.css contains CSS rules
 // for the diamond-pulse marker shape.
 func TestStaticCSS_MarkerStyleSnippets(t *testing.T) {
@@ -1378,7 +1329,6 @@ func TestStaticCSS_MarkerStyleSnippets(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_PulseAnimation verifies that style.css declares the
 // @keyframes geo-dia-pulse animation used by the diamond-pulse marker style.
 func TestStaticCSS_PulseAnimation(t *testing.T) {
@@ -1394,7 +1344,6 @@ func TestStaticCSS_PulseAnimation(t *testing.T) {
 		t.Error("style.css: @keyframes geo-dia-pulse must be declared for the diamond-pulse marker animation")
 	}
 }
-
 
 // TestStaticCSS_MarkerStyleTokensRoot verifies that style.css declares the
 // marker design tokens inside :root.  The chrome tokens (--marker-border,
@@ -1434,7 +1383,6 @@ func TestStaticCSS_MarkerStyleTokensRoot(t *testing.T) {
 		}
 	}
 }
-
 
 // TestStaticCSS_MarkerStyleTokensDarkThemes verifies that the three dark
 // themes (deep-blue, forest-green, dark) each override the marker design tokens
@@ -1478,7 +1426,6 @@ func TestStaticCSS_MarkerStyleTokensDarkThemes(t *testing.T) {
 	}
 }
 
-
 // TestStaticCSS_McColorTokensInMarkerRules verifies that no hardcoded #22a55b /
 // #e03c3c hex colours remain outside :root — all role-colour references in
 // component rules must use var(--mc-origin) / var(--mc-target).
@@ -1511,7 +1458,6 @@ func TestStaticCSS_McColorTokensInMarkerRules(t *testing.T) {
 		t.Error("style.css: hardcoded #e03c3c found outside :root — use var(--mc-target) instead")
 	}
 }
-
 
 // TestStaticCSS_ConnectorArrowIcon verifies that style.css defines the CSS
 // class for the arrow divIcon markers used on the map.

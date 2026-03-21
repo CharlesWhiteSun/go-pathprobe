@@ -424,3 +424,34 @@ func TestStaticI18n_GeoPrecisionNoticeKeys(t *testing.T) {
 		t.Error("i18n.js zh-TW: geo-notice-country-precision must mention '\u570b\u5bb6\u4e2d\u5fc3\u9ede'")
 	}
 }
+
+// TestStaticI18n_DNSAllFailedAndFriendlyErrors 驗證 i18n.js 在 EN 和 zh-TW
+// 兩種語言中都定義了 dns-all-failed 鍵以及五個 friendlyDNSError() 使用的
+// 友善錯誤訊息鍵。這些鍵取代了直接顯示 Go 內部錯誤訊息的舊行為，
+// 使使用者看到的是易讀的問題描述而非技術細節。
+func TestStaticI18n_DNSAllFailedAndFriendlyErrors(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	keys := []string{
+		"'dns-all-failed'",
+		"'dns-err-no-host'",
+		"'dns-err-invalid-domain'",
+		"'dns-err-resolver-failed'",
+		"'dns-err-timeout'",
+		"'dns-err-generic'",
+	}
+	for _, key := range keys {
+		if count := strings.Count(body, key); count < 2 {
+			t.Errorf("i18n.js: key %s found %d time(s) — must appear in both en and zh-TW locales", key, count)
+		}
+	}
+	// EN: dns-all-failed 必須包含 "All Failed" 或類似字樣。
+	if !strings.Contains(body, "All Failed") {
+		t.Error("i18n.js en: dns-all-failed must contain 'All Failed'")
+	}
+	// zh-TW: dns-all-failed 必須包含「全部失敗」。
+	if !strings.Contains(body, "全部失敗") {
+		t.Error("i18n.js zh-TW: dns-all-failed must contain '全部失敗'")
+	}
+}
+

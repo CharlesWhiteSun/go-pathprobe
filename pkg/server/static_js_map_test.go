@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // TestStaticJS_RenderMapInvalidateSize verifies that renderMap() defers a call
 // to _map.invalidateSize() via requestAnimationFrame so Leaflet re-projects all
 // tiles after the #results section transitions from display:none to display:block.
