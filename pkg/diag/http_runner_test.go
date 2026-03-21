@@ -103,6 +103,52 @@ func TestHTTPRunnerProtoResultHostFromURL(t *testing.T) {
 	if got := report.Protos[0].Protocol; got != "https" {
 		t.Errorf("ProtoResult.Protocol = %q; want \"https\" (scheme must reflect URL, not be hardcoded 'http')", got)
 	}
+	if got := report.Protos[0].Port; got != 443 {
+		t.Errorf("ProtoResult.Port = %d; want 443 (https default port)", got)
+	}
+}
+
+// TestHTTPRunnerProtoResultPort validates that ProtoResult.Port is populated
+// correctly for every combination of scheme and explicit port specification:
+//   - https with no port → 443 (well-known default)
+//   - http  with no port → 80  (well-known default)
+//   - https with explicit :8443 → 8443 (explicit wins over default)
+//   - http  with explicit :8080 → 8080 (explicit wins over default)
+func TestHTTPRunnerProtoResultPort(t *testing.T) {
+	cases := []struct {
+		url      string
+		wantPort int
+	}{
+		{"https://example.com/path", 443},
+		{"http://example.com/path", 80},
+		{"https://example.com:8443/path", 8443},
+		{"http://example.com:8080/path", 8080},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.url, func(t *testing.T) {
+			prober := &stubHTTPProber{}
+			runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			report := &DiagReport{}
+			req := Request{
+				Target: TargetWeb,
+				Options: Options{
+					Global: GlobalOptions{Timeout: time.Second},
+					Web:    WebOptions{Mode: WebModeHTTP, URL: tc.url},
+				},
+				Report: report,
+			}
+			if err := runner.Run(context.Background(), req); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(report.Protos) == 0 {
+				t.Fatal("expected a ProtoResult to be recorded")
+			}
+			if got := report.Protos[0].Port; got != tc.wantPort {
+				t.Errorf("url=%q: ProtoResult.Port = %d; want %d", tc.url, got, tc.wantPort)
+			}
+		})
+	}
 }
 
 // TestHTTPRunnerSchemeNormalisation verifies that bare hostnames (no https:// or

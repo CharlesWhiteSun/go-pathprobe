@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	neturl "net/url"
+	"strconv"
 	"time"
 
 	"go-pathprobe/pkg/netprobe"
@@ -70,14 +71,37 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 			scheme = parsed.Scheme
 		}
 	}
+	// Resolve port: explicit port in URL wins; fall back to the well-known
+	// port for the scheme (https → 443, http → 80).
+	port := defaultPortForScheme(scheme)
+	if parsed, err := neturl.Parse(url); err == nil {
+		if p := parsed.Port(); p != "" {
+			if n, err2 := strconv.Atoi(p); err2 == nil {
+				port = n
+			}
+		}
+	}
 	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
 	if req.Report != nil {
 		req.Report.AddProto(ProtoResult{
 			Protocol: scheme,
 			Host:     host,
+			Port:     port,
 			OK:       res.StatusCode >= 200 && res.StatusCode < 400,
 			Summary:  summary,
 		})
 	}
 	return nil
+}
+
+// defaultPortForScheme returns the well-known TCP port for http and https.
+// All other schemes return 0 (unknown / not applicable).
+func defaultPortForScheme(scheme string) int {
+	switch scheme {
+	case "https":
+		return 443
+	case "http":
+		return 80
+	}
+	return 0
 }
