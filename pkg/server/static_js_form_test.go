@@ -347,6 +347,31 @@ func TestStaticJS_FormPublicAPIComplete(t *testing.T) {
 	}
 }
 
+// TestStaticJS_FormOnTargetChangeUsesUnifiedPlaceholder 驗證 form.js 的
+// onTargetChange() 使用統一的 ph-host i18n 鍵設定 #host 佔位提示文字，
+// 不再依賴 TARGET_PLACEHOLDER_KEYS 逐模式查詢，確保所有偵測模式的
+// 主機輸入框皆顯示相同的範例提示，維持低耦合設計。
+func TestStaticJS_FormOnTargetChangeUsesUnifiedPlaceholder(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/form.js")
+
+	// 必須直接使用 'ph-host' 統一鍵設定 #host placeholder。
+	if !strings.Contains(body, "'ph-host'") {
+		t.Error("form.js: onTargetChange must use 'ph-host' key for #host placeholder — not a per-mode lookup")
+	}
+	// 不得再宣告或呼叫 _targetPlaceholderKeys 輔助函式。
+	if strings.Contains(body, "_targetPlaceholderKeys") {
+		t.Error("form.js: _targetPlaceholderKeys helper must be removed — use 'ph-host' directly")
+	}
+	// 不得再參照 TARGET_PLACEHOLDER_KEYS。
+	if strings.Contains(body, "TARGET_PLACEHOLDER_KEYS") {
+		t.Error("form.js: form.js must NOT reference TARGET_PLACEHOLDER_KEYS — use 'ph-host' directly")
+	}
+	// 不得再使用 ph-host-default 的 fallback 邏輯。
+	if strings.Contains(body, "ph-host-default") {
+		t.Error("form.js: ph-host-default must be removed — obsolete fallback key no longer exists")
+	}
+}
+
 // TestStaticJS_EnterKeyTriggersRunDiag verifies that form.js wires up a
 // document-level keydown listener via initEnterKey() so pressing Enter in any
 // text or number input submits the diagnostic without clicking the run button.

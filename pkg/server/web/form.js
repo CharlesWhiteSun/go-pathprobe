@@ -15,7 +15,7 @@
 //
 // Dependencies (runtime-resolved, no hard import):
 //   • window.PathProbe.Config — TARGET_PORTS, TARGET_MODE_PANELS,
-//     WEB_MODES_WITH_PORTS, TARGET_PLACEHOLDER_KEYS (declared in config.js)
+//     WEB_MODES_WITH_PORTS (declared in config.js)
 //   • window.PathProbe.Locale.t — translation function (declared in locale.js)
 //
 // This module must be loaded AFTER config.js, locale.js and theme.js
@@ -30,7 +30,6 @@
   function _targetModePanels()      { return _cfg().TARGET_MODE_PANELS      || {}; }
   function _webModesWithPorts()     { return _cfg().WEB_MODES_WITH_PORTS    || []; }
   function _webModesHideHost()      { return _cfg().WEB_MODES_HIDE_HOST     || []; }
-  function _targetPlaceholderKeys() { return _cfg().TARGET_PLACEHOLDER_KEYS || {}; }
 
   // ── Locale (runtime-resolved) ─────────────────────────────────────────
   /** Return the translation for key in the current locale, falling back to key. */
@@ -304,7 +303,7 @@
     }
     const hostEl = document.getElementById('host');
     if (hostEl) {
-      hostEl.placeholder = _t(_targetPlaceholderKeys()[target] || 'ph-host-default');
+      hostEl.placeholder = _t('ph-host');
     }
     applyModePanels(target);
     updatePortGroup(target, getModeFor(target));

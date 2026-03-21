@@ -203,6 +203,27 @@ func TestStaticJS_ApplyLocaleRerenderMapLabels(t *testing.T) {
 
 // ── Sub-task 3.2: locale.js tests ─────────────────────────────────────────
 
+// TestStaticJS_ApplyLocaleUsesUnifiedHostPlaceholder 驗證 locale.js 的 applyLocale()
+// 不再透過 TARGET_PLACEHOLDER_KEYS 逐模式查詢 #host 佔位鍵，而是依賴通用的
+// [data-i18n-placeholder] 迴圈統一處理所有輸入框的語系翻譯。
+// 這確保 #host 的 placeholder 翻譯與 #dns-domains 採用相同的低耦合機制。
+func TestStaticJS_ApplyLocaleUsesUnifiedHostPlaceholder(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/locale.js")
+
+	// applyLocale 必須有通用 [data-i18n-placeholder] 迴圈以處理所有帶此屬性的 input。
+	if !strings.Contains(body, "data-i18n-placeholder") {
+		t.Error("locale.js: applyLocale must use [data-i18n-placeholder] loop for placeholder i18n")
+	}
+	// 不應再有逐模式查詢 TARGET_PLACEHOLDER_KEYS 的邏輯。
+	if strings.Contains(body, "TARGET_PLACEHOLDER_KEYS") {
+		t.Error("locale.js: applyLocale must NOT reference TARGET_PLACEHOLDER_KEYS — use data-i18n-placeholder attribute instead")
+	}
+	// 不應再有 ph-host-default 的 fallback 邏輯（已被移除）。
+	if strings.Contains(body, "ph-host-default") {
+		t.Error("locale.js: applyLocale must NOT reference ph-host-default — use unified ph-host key instead")
+	}
+}
+
 // TestStaticJS_SetLocaleGlobal verifies that locale.js exposes setLocale as a
 // global (window.setLocale = setLocale) so that inline onclick attributes in
 // index.html (e.g. onclick="setLocale('en')") can call it without requiring

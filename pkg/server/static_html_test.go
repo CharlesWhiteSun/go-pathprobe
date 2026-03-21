@@ -158,6 +158,32 @@ func TestStaticHTML_WebModeDNSSubpanel(t *testing.T) {
 	}
 }
 
+// TestStaticHTML_HostInputPlaceholderI18n 驗證 #host 輸入框使用 data-i18n-placeholder="ph-host"
+// 屬性，讓 locale.js 的通用 [data-i18n-placeholder] 迴圈統一處理佔位文字翻譯，
+// 不再依賴各偵測模式的逐一查詢邏輯。
+func TestStaticHTML_HostInputPlaceholderI18n(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	// #host 必須使用 data-i18n-placeholder="ph-host" 以支援通用 i18n 機制。
+	if !strings.Contains(body, `data-i18n-placeholder="ph-host"`) {
+		t.Error("index.html: #host input must carry data-i18n-placeholder=\"ph-host\" for unified i18n placeholder")
+	}
+	// id 與屬性必須出現在同一個 input 元素中（#host）。
+	hostInputIdx := strings.Index(body, `id="host"`)
+	if hostInputIdx == -1 {
+		t.Fatal("index.html: #host input not found")
+	}
+	// 截取 #host 標籤片段（最多 200 字元），確認 data-i18n-placeholder 就在該標籤上。
+	tagEnd := hostInputIdx + 200
+	if tagEnd > len(body) {
+		tagEnd = len(body)
+	}
+	tag := body[hostInputIdx:tagEnd]
+	if !strings.Contains(tag, `data-i18n-placeholder="ph-host"`) {
+		t.Error("index.html: data-i18n-placeholder=\"ph-host\" must be on the same #host input element, not elsewhere")
+	}
+}
+
 // TestStaticHTML_WebModeRecordTypeLabels verifies i18n labels for A/AAAA/MX.
 func TestStaticHTML_WebModeRecordTypeLabels(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/")

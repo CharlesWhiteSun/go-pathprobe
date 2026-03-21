@@ -186,14 +186,8 @@ window.LOCALES = {
     'btn-lang-en':           'EN',
     'btn-lang-zh':           'TW',
 
-    /* ── Host input placeholders ──────────────────────────────────────── */
-    'ph-web':                'e.g. google.com',
-    'ph-smtp':               'e.g. mail.example.com',
-    'ph-imap':               'e.g. mail.example.com',
-    'ph-pop':                'e.g. mail.example.com',
-    'ph-ftp':                'e.g. ftp.example.com',
-    'ph-sftp':               'e.g. sftp.example.com',
-    'ph-host-default':       'hostname or IP',
+    /* ── Host input placeholder (unified across all probe modes) ────── */
+    'ph-host':               'e.g. google.com',
 
     /* ── Theme switcher ─────────────────────────────────────────────── */
     'theme-default':          'Default',
@@ -228,7 +222,7 @@ window.LOCALES = {
     'dns-type-A':            'IPv4',
     'dns-type-AAAA':         'IPv6',
     'dns-type-MX':           'MX',
-    'ph-dns-domains':        '例如 google.com',
+    'ph-dns-domains':        '例: google.com',
     'label-http-url':        'HTTP URL',
     'label-http-url-hint':   '（選填探測）',
     'label-max-hops':        '最大躍點數',
@@ -383,14 +377,8 @@ window.LOCALES = {
     'btn-lang-en':           '英文',
     'btn-lang-zh':           '繁中',
 
-    /* ── Host input placeholders ──────────────────────────────────────── */
-    'ph-web':                '例：google.com',
-    'ph-smtp':               '例：mail.example.com',
-    'ph-imap':               '例：mail.example.com',
-    'ph-pop':                '例：mail.example.com',
-    'ph-ftp':                '例：ftp.example.com',
-    'ph-sftp':               '例：sftp.example.com',
-    'ph-host-default':       '主機名稱或 IP',
+    /* ── Host input placeholder（統一所有偵測模式）────────────────── */
+    'ph-host':               '例: google.com',
 
     /* ── Theme switcher ─────────────────────────────────────────────── */
     'theme-default':          '預設',

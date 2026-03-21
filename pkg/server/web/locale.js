@@ -10,7 +10,7 @@
 //
 // Dependencies (runtime-resolved, no hard import):
 //   • window.LOCALES          — i18n dictionary loaded by i18n.js
-//   • window.PathProbe.Config — COPYRIGHT_START_YEAR, TARGET_PLACEHOLDER_KEYS
+//   • window.PathProbe.Config — COPYRIGHT_START_YEAR
 //   • window.PathProbe.Renderer.rerenderLast — optional, called after locale
 //     change so the results section is re-rendered in the new language
 //   • window.PathProbe.History.rerenderLast  — optional, called after locale
@@ -67,16 +67,6 @@
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       el.placeholder = t(el.dataset.i18nPlaceholder);
     });
-
-    // Refresh host placeholder (depends on current target selection).
-    // val() lives in app.js; access defensively so locale.js has no hard
-    // dependency on app.js load order.
-    const cfg = (window.PathProbe && window.PathProbe.Config) || {};
-    const placeholderKeys = cfg.TARGET_PLACEHOLDER_KEYS || {};
-    const targetEl = document.getElementById('target');
-    const target = targetEl ? targetEl.value : '';
-    const hostEl = document.getElementById('host');
-    if (hostEl) hostEl.placeholder = t(placeholderKeys[target] || 'ph-host-default');
 
     // Update run button label (unless currently running — disabled state
     // means a spinner is shown and must not be overwritten).

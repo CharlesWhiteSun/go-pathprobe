@@ -89,10 +89,33 @@ func TestStaticI18n_WebModeKeys(t *testing.T) {
 		"dns-type-AAAA",
 		"dns-type-MX",
 		"ph-dns-domains",
+		"ph-host",
 	}
 	for _, k := range requiredKeys {
 		if !strings.Contains(body, `'`+k+`'`) {
 			t.Errorf("i18n.js: missing key '%s'", k)
+		}
+	}
+}
+
+// TestStaticI18n_HostPlaceholderKeyUnified 驗證 i18n.js 使用單一 ph-host 鍵統一
+// 所有偵測模式的主機輸入框佔位提示文字，並確保舊的分散式 ph-* 鍵已被移除。
+// ph-host 必須在 EN 和 zh-TW 兩個語系中各出現一次，且皆以 google.com 為範例。
+func TestStaticI18n_HostPlaceholderKeyUnified(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	// ph-host 必須在兩個語系中各出現（共 2 次）。
+	if count := strings.Count(body, `'ph-host'`); count < 2 {
+		t.Errorf("i18n.js: 'ph-host' found %d time(s) — must appear in both en and zh-TW locales", count)
+	}
+	// 兩個語系皆需以 google.com 為範例網域。
+	if !strings.Contains(body, "google.com") {
+		t.Error("i18n.js: ph-host must use google.com as the example domain")
+	}
+	// 舊的分散式 ph-* 鍵必須已被移除，確保統一由 ph-host 負責。
+	for _, obsolete := range []string{"'ph-web'", "'ph-smtp'", "'ph-imap'", "'ph-pop'", "'ph-ftp'", "'ph-sftp'", "'ph-host-default'"} {
+		if strings.Contains(body, obsolete) {
+			t.Errorf("i18n.js: obsolete key %s must be removed — use ph-host instead", obsolete)
 		}
 	}
 }
