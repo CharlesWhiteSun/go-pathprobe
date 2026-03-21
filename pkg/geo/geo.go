@@ -24,6 +24,11 @@ type GeoInfo struct {
 	OrgName     string
 	// HasLocation is true when Lat/Lon are populated from a city database.
 	HasLocation bool
+	// LocationPrecision indicates the geographic accuracy of Lat/Lon:
+	// "country" means the coordinates are the country centroid (country-level precision);
+	// "city" means the coordinates come from a city-level database.
+	// Empty when HasLocation is false.
+	LocationPrecision string
 }
 
 // IPLocator is the minimal read-only interface required by consumers that only
@@ -124,6 +129,9 @@ func (l *GeoLite2Locator) LocateIP(ipStr string) (GeoInfo, error) {
 			info.CountryName = rec.Country.Names["en"]
 			// HasLocation only when at least one coordinate is non-zero.
 			info.HasLocation = rec.Location.Latitude != 0 || rec.Location.Longitude != 0
+			if info.HasLocation {
+				info.LocationPrecision = "city"
+			}
 		}
 	}
 

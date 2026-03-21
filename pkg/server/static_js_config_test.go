@@ -449,3 +449,27 @@ func TestStaticJS_ConfigScopeIsolation(t *testing.T) {
 			"PathProbe.Config and window.PathProbe")
 	}
 }
+// TestStaticJS_GeoSameRegionThresholdKM 驗證 config.js 導出了
+// GEO_SAME_REGION_THRESHOLD_KM 常數，以導驅 map.js 的返回區域返回區域接近避免下的 zoom 决策。
+// 該常數展水自 config.js ，避免在 map.js 中硬編碼數字。
+func TestStaticJS_GeoSameRegionThresholdKM(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/config.js")
+
+	// 常數必須存在。
+	if !strings.Contains(body, "GEO_SAME_REGION_THRESHOLD_KM") {
+		t.Error("config.js: GEO_SAME_REGION_THRESHOLD_KM constant must be declared")
+	}
+	// 必須導出到 PathProbe.Config。
+	cfgStart := strings.Index(body, "PathProbe.Config = {")
+	if cfgStart == -1 {
+		t.Fatal("config.js: PathProbe.Config export block not found")
+	}
+	cfgEnd := strings.Index(body[cfgStart:], "};")
+	if cfgEnd == -1 {
+		t.Fatal("config.js: closing }; of PathProbe.Config not found")
+	}
+	cfgBlock := body[cfgStart : cfgStart+cfgEnd]
+	if !strings.Contains(cfgBlock, "GEO_SAME_REGION_THRESHOLD_KM") {
+		t.Error("config.js: GEO_SAME_REGION_THRESHOLD_KM must be exported inside PathProbe.Config")
+	}
+}

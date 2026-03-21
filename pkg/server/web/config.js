@@ -139,6 +139,14 @@ const MAP_THEME_TO_TILE_VARIANT = {
 // to the light/neutral style.  Must stay in sync with THEMES (below).
 const MAP_DARK_THEMES = new Set(['dark', 'deep-blue', 'forest-green']);
 
+// ── Geo proximity threshold ────────────────────────────────────────────────
+// When two geocoded points are closer than this distance (km) AND at least one
+// has country-level location precision, the map switches from fitBounds() to a
+// fixed-zoom setView() centred on the midpoint.  This prevents Leaflet from
+// over-zooming on identical or near-identical country centroids and producing
+// an uninformative blank-ocean view.
+const GEO_SAME_REGION_THRESHOLD_KM = 200;
+
 // Tile layer configurations keyed by variant ('light' | 'osm' | 'dark').
 // Using CARTO basemaps for light/dark; osm is the canonical OpenStreetMap style.
 // Only change the URLs here if a different provider is desired — no other code
@@ -241,6 +249,7 @@ PathProbe.Config = {
   MAP_THEME_TO_TILE_VARIANT,
   MAP_DARK_THEMES,
   TILE_LAYER_CONFIGS,
+  GEO_SAME_REGION_THRESHOLD_KM,
   TARGET_PORTS,
   TARGET_MODE_PANELS,
   WEB_MODES_WITH_PORTS,

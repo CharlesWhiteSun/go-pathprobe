@@ -1533,3 +1533,20 @@ func TestStaticCSS_ConnectorArrowIcon(t *testing.T) {
 		}
 	}
 }
+
+// TestStaticCSS_GeoPrecisionNotice 驗證 style.css 宣告了 .geo-precision-notice 規則。
+// 該類別用於地圖上方的精度提示橫幅（#geo-precision-notice），
+// 包含左側 accent 色邊框以視覺化傳達「資訊性」意圖。
+func TestStaticCSS_GeoPrecisionNotice(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/style.css")
+
+	// 規則必須存在。
+	if !strings.Contains(body, ".geo-precision-notice") {
+		t.Error("style.css: .geo-precision-notice rule must be declared for the geo accuracy banner")
+	}
+	// 必須有左側 accent 邊框（任何標準寫法均可）。
+	hasBorderLeft := strings.Contains(body, "border-left:") || strings.Contains(body, "border-left :")
+	if !hasBorderLeft {
+		t.Error("style.css: .geo-precision-notice must use a border-left accent to signal informational intent")
+	}
+}

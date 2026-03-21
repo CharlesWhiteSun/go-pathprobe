@@ -64,6 +64,7 @@ func (l *CountryLocator) LocateIP(ipStr string) (GeoInfo, error) {
 				info.Lat = coords[0]
 				info.Lon = coords[1]
 				info.HasLocation = true
+				info.LocationPrecision = "country"
 			}
 		}
 	}

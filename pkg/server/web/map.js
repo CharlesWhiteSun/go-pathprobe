@@ -49,13 +49,14 @@
   // config.js is loaded before map.js (see index.html).  The defensive guard
   // means this destructuring never throws even if config.js fails to load.
   const {
-    MAP_POINT_CONFIGS          = {},
-    MARKER_COLOR_SCHEME_CONFIGS = {},
-    MARKER_STYLE_CONFIGS       = {},
-    CONNECTOR_LINE_CONFIGS     = {},
-    MAP_TILE_VARIANTS          = [],
-    MAP_THEME_TO_TILE_VARIANT  = {},
-    TILE_LAYER_CONFIGS         = {},
+    MAP_POINT_CONFIGS             = {},
+    MARKER_COLOR_SCHEME_CONFIGS   = {},
+    MARKER_STYLE_CONFIGS          = {},
+    CONNECTOR_LINE_CONFIGS        = {},
+    MAP_TILE_VARIANTS             = [],
+    MAP_THEME_TO_TILE_VARIANT     = {},
+    TILE_LAYER_CONFIGS            = {},
+    GEO_SAME_REGION_THRESHOLD_KM  = 200,
     DEFAULT_THEME = 'default',
   } = (window.PathProbe && window.PathProbe.Config) || {};
 
@@ -284,6 +285,10 @@
     if (geo.City)        lines.push('<div class="geo-popup__row">' + esc(geo.City)        + '</div>');
     if (geo.CountryName) lines.push('<div class="geo-popup__row">' + esc(geo.CountryName) + ' (' + esc(geo.CountryCode) + ')' + '</div>');
     if (geo.OrgName)     lines.push('<div class="geo-popup__asn">' + 'AS' + esc(String(geo.ASN)) + ' ' + esc(geo.OrgName) + '</div>');
+    if (geo.LocationPrecision) {
+      const precKey = 'geo-precision-' + geo.LocationPrecision;
+      lines.push('<div class="geo-popup__precision">' + esc(t(precKey)) + '</div>');
+    }
     lines.push('</div>');
     return lines.join('');
   }
@@ -345,7 +350,32 @@
                                           scheme.originColor, scheme.targetColor);
     _connectorLayer.addTo(_map);
   }
+  // ── Geo precision notice ────────────────────────────────────────────────────
 
+  /** Show or hide the #geo-precision-notice banner based on the LocationPrecision
+   *  of each geocoded point.  The notice is visible whenever any visible point
+   *  uses country-level precision (coordinates are national centroids, not exact
+   *  addresses), giving users immediate context without requiring a popup click.
+   *  When both endpoints share the same country a more specific "same-region"
+   *  message is shown to explain the overlap artefact on the map.
+   *  Pass null/null to clear and hide the notice (e.g. when the map is hidden).
+   */
+  function updateGeoPrecisionNotice(pub, tgt) {
+    const el = document.getElementById('geo-precision-notice');
+    if (!el) return;
+    const pubCountry = pub && pub.HasLocation && pub.LocationPrecision === 'country';
+    const tgtCountry = tgt && tgt.HasLocation && tgt.LocationPrecision === 'country';
+    if (!pubCountry && !tgtCountry) {
+      el.textContent = '';
+      el.hidden = true;
+      return;
+    }
+    // Use the more specific "same-region" key when both endpoints share a country.
+    const sameCountry = pubCountry && tgtCountry &&
+                        Boolean(pub.CountryCode) && pub.CountryCode === tgt.CountryCode;
+    el.textContent = t(sameCountry ? 'geo-notice-same-region' : 'geo-notice-country-precision');
+    el.hidden = false;
+  }
   // ── Main render function ───────────────────────────────────────────────────
 
   /** Render (or remove) the Leaflet map based on geo results.
@@ -377,6 +407,7 @@
       const outerEl = document.getElementById('geo-map-outer');
       if (outerEl) outerEl.hidden = true;
       if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
+      updateGeoPrecisionNotice(null, null);
       return;
     }
 
@@ -413,16 +444,30 @@
     // be fully initialised (Leaflet throws "Set map center and zoom first." if
     // called before setView / fitBounds).
     if (latLngs.length === 1) {
-      _map.setView(latLngs[0], 8);
+      // Use a lower zoom for country-level coordinates (country centroid) so
+      // the surrounding context is visible; city-level coordinates can zoom in further.
+      const precision = points[0].geo.LocationPrecision;
+      const zoom = (precision === 'city') ? 8 : 5;
+      _map.setView(latLngs[0], zoom);
     } else {
-      _map.fitBounds(latLngs, { padding: [40, 40] });
-    }
+      // Pre-compute the great-circle distance so it drives both the viewport
+      // proximity guard and the distance badge without a second haversineKm() call.
+      const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
+      const hasCountryPrecision = points.some(p => p.geo.LocationPrecision === 'country');
+      // Proximity guard: fitBounds() over-zooms when country centroids coincide
+      // or are very close (e.g. both points map to the same national centroid).
+      // A fixed zoom on the midpoint keeps geographic context visible.
+      if (hasCountryPrecision && km < GEO_SAME_REGION_THRESHOLD_KM) {
+        const midLat = (latLngs[0][0] + latLngs[1][0]) / 2;
+        const midLon = (latLngs[0][1] + latLngs[1][1]) / 2;
+        _map.setView([midLat, midLon], 5);
+      } else {
+        _map.fitBounds(latLngs, { padding: [40, 40] });
+      }
 
-    // Draw the gradient arc connector and show the distance badge when both
-    // endpoints exist.  The connector style and colour scheme come from the
-    // module-level state variables so switching pickers refreshes the arc
-    // without a full map rebuild.
-    if (latLngs.length === 2) {
+      // Draw the gradient arc connector and show the distance badge.
+      // Connector style and colour scheme come from module-level state so
+      // switching pickers refreshes the arc without a full map rebuild.
       const arcScheme   = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
                         || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
       const arcStyleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
@@ -433,11 +478,14 @@
       );
       _connectorLayer.addTo(_map);
       if (distEl) {
-        const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
         distEl.textContent = t('map-distance') + ': ' + Math.round(km).toLocaleString() + ' km';
         distEl.hidden = false;
       }
     }
+
+    // Update the geo-precision notice banner so users receive immediate feedback
+    // about location accuracy without having to click a marker popup.
+    updateGeoPrecisionNotice(pub, tgt);
 
     // Add a legend when multiple marker types are present so users can
     // distinguish origin (偵測起點) from target (偵測目標).

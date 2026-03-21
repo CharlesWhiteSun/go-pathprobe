@@ -31,6 +31,8 @@ type GeoAnnotation struct {
 	ASN         uint
 	OrgName     string
 	HasLocation bool
+	// LocationPrecision mirrors geo.GeoInfo.LocationPrecision: "country" or "city".
+	LocationPrecision string
 }
 
 // PortEntry is a flat view of a netprobe.PortProbeResult for renderers.
@@ -148,15 +150,16 @@ func toPortEntry(r netprobe.PortProbeResult) PortEntry {
 
 func toGeoAnnotation(info geo.GeoInfo) GeoAnnotation {
 	return GeoAnnotation{
-		IP:          info.IP,
-		Lat:         info.Lat,
-		Lon:         info.Lon,
-		City:        info.City,
-		CountryCode: info.CountryCode,
-		CountryName: info.CountryName,
-		ASN:         info.ASN,
-		OrgName:     info.OrgName,
-		HasLocation: info.HasLocation,
+		IP:                info.IP,
+		Lat:               info.Lat,
+		Lon:               info.Lon,
+		City:              info.City,
+		CountryCode:       info.CountryCode,
+		CountryName:       info.CountryName,
+		ASN:               info.ASN,
+		OrgName:           info.OrgName,
+		HasLocation:       info.HasLocation,
+		LocationPrecision: info.LocationPrecision,
 	}
 }
 
