@@ -61,13 +61,19 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 	}
 
 	host := req.Options.Net.Host
-	if parsed, err := neturl.Parse(url); err == nil && parsed.Hostname() != "" {
-		host = parsed.Hostname()
+	scheme := "http"
+	if parsed, err := neturl.Parse(url); err == nil {
+		if parsed.Hostname() != "" {
+			host = parsed.Hostname()
+		}
+		if parsed.Scheme != "" {
+			scheme = parsed.Scheme
+		}
 	}
 	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
 	if req.Report != nil {
 		req.Report.AddProto(ProtoResult{
-			Protocol: "http",
+			Protocol: scheme,
 			Host:     host,
 			OK:       res.StatusCode >= 200 && res.StatusCode < 400,
 			Summary:  summary,

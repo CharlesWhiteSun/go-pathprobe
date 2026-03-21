@@ -100,6 +100,9 @@ func TestHTTPRunnerProtoResultHostFromURL(t *testing.T) {
 	if got := report.Protos[0].Host; got != "check.example.com" {
 		t.Errorf("ProtoResult.Host = %q; want %q", got, "check.example.com")
 	}
+	if got := report.Protos[0].Protocol; got != "https" {
+		t.Errorf("ProtoResult.Protocol = %q; want \"https\" (scheme must reflect URL, not be hardcoded 'http')", got)
+	}
 }
 
 // TestHTTPRunnerSchemeNormalisation verifies that bare hostnames (no https:// or
