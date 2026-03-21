@@ -15,6 +15,8 @@ func TestDiagReportNilSafe(t *testing.T) {
 	r.AddPorts([]netprobe.PortProbeResult{{Port: 80}})
 	r.SetRoute(nil)
 	r.SetRoute(&netprobe.RouteResult{})
+	r.AddDNSComparisons(nil)
+	r.AddDNSComparisons([]netprobe.DNSComparison{{Name: "example.com"}})
 }
 
 // TestDiagReportAccumulates verifies that results are correctly accumulated.
@@ -96,6 +98,43 @@ func TestSetRouteOverwrite(t *testing.T) {
 
 // Compile-time assertion: *DiagReport satisfies ReportWriter.
 var _ ReportWriter = (*DiagReport)(nil)
+
+// TestAddDNSComparisons_Accumulates verifies that multiple AddDNSComparisons
+// calls append to the same slice rather than overwriting it.
+func TestAddDNSComparisons_Accumulates(t *testing.T) {
+	r := &DiagReport{Target: TargetWeb, Host: "example.com"}
+
+	batch1 := []netprobe.DNSComparison{
+		{Name: "example.com", Type: netprobe.RecordTypeA},
+		{Name: "example.com", Type: netprobe.RecordTypeAAAA},
+	}
+	batch2 := []netprobe.DNSComparison{
+		{Name: "mail.example.com", Type: netprobe.RecordTypeMX},
+	}
+
+	r.AddDNSComparisons(batch1)
+	r.AddDNSComparisons(batch2)
+
+	if len(r.DNSComparisons) != 3 {
+		t.Fatalf("expected 3 DNS comparisons after two batches, got %d", len(r.DNSComparisons))
+	}
+	if r.DNSComparisons[0].Name != "example.com" {
+		t.Errorf("expected first entry Name=%q, got %q", "example.com", r.DNSComparisons[0].Name)
+	}
+	if r.DNSComparisons[2].Name != "mail.example.com" {
+		t.Errorf("expected third entry Name=%q, got %q", "mail.example.com", r.DNSComparisons[2].Name)
+	}
+}
+
+// TestAddDNSComparisons_EmptySlice verifies that appending an empty slice
+// leaves DNSComparisons unchanged.
+func TestAddDNSComparisons_EmptySlice(t *testing.T) {
+	r := &DiagReport{Target: TargetWeb, Host: "example.com"}
+	r.AddDNSComparisons([]netprobe.DNSComparison{})
+	if len(r.DNSComparisons) != 0 {
+		t.Fatalf("expected DNSComparisons to remain empty, got %d entries", len(r.DNSComparisons))
+	}
+}
 
 // TestReportWriter_NilInterfaceGuard verifies that runners guarding
 // "if req.Report != nil" correctly skip calls when Report is a nil interface

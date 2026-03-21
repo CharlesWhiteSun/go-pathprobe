@@ -86,21 +86,33 @@ func TestWebRunnerFetcherError(t *testing.T) {
 	}
 }
 
-// TestWebRunnerComparatorError verifies that a failing resolver propagates its error.
+// TestWebRunnerComparatorError verifies that a failing resolver does NOT make the runner
+// return a fatal error. Instead, resolver failures are recorded as LookupError entries
+// in the comparison results so the user can see which resolver failed and why.
 func TestWebRunnerComparatorError(t *testing.T) {
 	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{&errorWebResolver{}}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	runner := NewWebRunner(&stubFetcher{}, comparator, logger)
 
+	rep := &DiagReport{Target: TargetWeb, Host: "example.com"}
 	req := Request{
 		Target: TargetWeb,
 		Options: Options{
 			Global: GlobalOptions{MTRCount: 1, Timeout: time.Second},
 			Web:    WebOptions{Domains: []string{"example.com"}, Types: []netprobe.RecordType{netprobe.RecordTypeA}},
 		},
+		Report: rep,
 	}
-	if err := runner.Run(context.Background(), req); err == nil {
-		t.Fatal("expected error from failing comparator resolver")
+	// Runner must succeed: resolver errors are non-fatal, they are captured in LookupError.
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("expected no error from runner when resolver fails: %v", err)
+	}
+	if len(rep.DNSComparisons) != 1 {
+		t.Fatalf("expected 1 DNS comparison in report, got %d", len(rep.DNSComparisons))
+	}
+	result := rep.DNSComparisons[0].Results[0]
+	if result.LookupError == "" {
+		t.Error("expected LookupError to be set for the failing resolver in the report")
 	}
 }
 
@@ -132,8 +144,8 @@ func (e *errorFetcher) Fetch(_ context.Context) (netprobe.PublicIPResult, error)
 
 type errorWebResolver struct{}
 
-func (e *errorWebResolver) Lookup(_ context.Context, _ string, _ netprobe.RecordType) (netprobe.DNSAnswer, error) {
-	return netprobe.DNSAnswer{}, errors.New("resolver failed")
+func (e *errorWebResolver) Lookup(_ context.Context, name string, rtype netprobe.RecordType) (netprobe.DNSAnswer, error) {
+	return netprobe.DNSAnswer{Name: name, Type: rtype, Source: "error-resolver"}, errors.New("resolver failed")
 }
 
 type fixedResolver struct {
@@ -265,5 +277,39 @@ func TestWebRunnerTracerouteMode(t *testing.T) {
 func TestWebModeTracerouteConstant(t *testing.T) {
 	if WebModeTraceroute != "traceroute" {
 		t.Fatalf("expected WebModeTraceroute = \"traceroute\", got %q", WebModeTraceroute)
+	}
+}
+
+// TestWebRunnerDNSWritesToReport verifies that after a successful DNS mode run
+// the comparisons are appended to req.Report so callers can build an
+// AnnotatedReport that includes DNS data.
+func TestWebRunnerDNSWritesToReport(t *testing.T) {
+	r1 := &fixedResolver{name: "sys", values: []string{"192.0.2.1"}}
+	comparator := netprobe.DNSComparator{Resolvers: []netprobe.DNSResolver{r1}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := NewWebRunner(&stubFetcher{}, comparator, logger)
+
+	rep := &DiagReport{Target: TargetWeb, Host: "example.com"}
+	req := Request{
+		Target: TargetWeb,
+		Options: Options{
+			Global: GlobalOptions{MTRCount: 1, Timeout: time.Second},
+			Web: WebOptions{
+				Mode:    WebModeDNS,
+				Domains: []string{"example.com"},
+				Types:   []netprobe.RecordType{netprobe.RecordTypeA},
+			},
+		},
+		Report: rep,
+	}
+
+	if err := runner.Run(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rep.DNSComparisons) != 1 {
+		t.Fatalf("expected 1 DNS comparison written to report, got %d", len(rep.DNSComparisons))
+	}
+	if rep.DNSComparisons[0].Name != "example.com" {
+		t.Errorf("expected comparison Name=\"example.com\", got %q", rep.DNSComparisons[0].Name)
 	}
 }

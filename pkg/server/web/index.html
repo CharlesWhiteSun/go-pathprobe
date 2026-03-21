@@ -68,9 +68,16 @@
         </div>
       </div>
 
-      <div class="field-group">
+      <div class="field-group" id="host-group">
         <label for="host" data-i18n="label-host">Target Host</label>
         <input type="text" id="host" placeholder="e.g. google.com">
+      </div>
+
+      <!-- dns-domains-group: 只在 web + dns 模式下顯示，取代 Target Host。
+           內容與 #web-fields-dns 中的變位同步，後者僅保留 Record Types。 -->
+      <div class="field-group" id="dns-domains-group" hidden>
+        <label for="dns-domains"><span data-i18n="label-dns-domains">DNS Domains</span> <small data-i18n="label-dns-domains-hint">(comma-separated)</small></label>
+        <input type="text" id="dns-domains" data-i18n-placeholder="ph-dns-domains" placeholder="e.g. google.com">
       </div>
 
       <!-- port-group: 依目標類型與偵測模式動態顯示。
@@ -105,10 +112,6 @@
           </div>
         </div>
         <div id="web-fields-dns" hidden>
-          <div class="field-group">
-            <label for="dns-domains"><span data-i18n="label-dns-domains">DNS Domains</span> <small data-i18n="label-dns-domains-hint">(comma-separated)</small></label>
-            <input type="text" id="dns-domains" data-i18n-placeholder="ph-dns-domains" placeholder="e.g. google.com">
-          </div>
           <div class="field-group">
             <label data-i18n="label-record-types">Record Types</label>
             <div class="checkbox-row">

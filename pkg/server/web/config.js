@@ -197,6 +197,10 @@ const TARGET_MODE_PANELS = {
 // do not perform port-level connectivity checks, so they suppress port-group.
 const WEB_MODES_WITH_PORTS = ['port'];
 
+// Web modes that hide the standard Target Host input and show the DNS Domains
+// input in its place.  dns mode operates on domain names entered separately.
+const WEB_MODES_HIDE_HOST = ['dns'];
+
 // ── Per-target host placeholder i18n keys ─────────────────────────────────
 const TARGET_PLACEHOLDER_KEYS = {
   web:  'ph-web',
@@ -240,6 +244,7 @@ PathProbe.Config = {
   TARGET_PORTS,
   TARGET_MODE_PANELS,
   WEB_MODES_WITH_PORTS,
+  WEB_MODES_HIDE_HOST,
   TARGET_PLACEHOLDER_KEYS,
   COPYRIGHT_START_YEAR,
   THEMES,

@@ -110,6 +110,9 @@ func (r *WebRunner) Run(ctx context.Context, req Request) error {
 			req.Emitf("dns_result", "%-4s %s divergent=%v", comp.Type, comp.Name, comp.HasDivergence())
 			r.logger.Info("dns comparison", "domain", comp.Name, "type", comp.Type, "divergent", comp.HasDivergence(), "results", comp.Results)
 		}
+		if req.Report != nil {
+			req.Report.AddDNSComparisons(comparisons)
+		}
 	}
 
 	return nil

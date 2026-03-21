@@ -124,6 +124,16 @@ window.LOCALES = {
     'th-asn':                'ASN',
     'th-country':            'Country',
 
+    /* ── DNS comparison table ────────────────────────────────────────── */
+    'section-dns':           'DNS Comparison',
+    'th-dns-domain':         'Domain',
+    'th-dns-type':           'Type',
+    'th-dns-resolver':       'Resolver',
+    'th-dns-records':        'Records',
+    'th-dns-rtt':            'RTT',
+    'dns-divergent':         'Divergent',
+    'dns-consistent':        'Consistent',
+
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           'Geo Information',
     'geo-public-ip':         'Public IP',
@@ -295,6 +305,16 @@ window.LOCALES = {
     'th-ip-host':            'IP / 主機',
     'th-asn':                'ASN',
     'th-country':            '國家',
+
+    /* ── DNS comparison table ────────────────────────────────────────── */
+    'section-dns':           'DNS 比對結果',
+    'th-dns-domain':         '網域',
+    'th-dns-type':           '類型',
+    'th-dns-resolver':       '解析器',
+    'th-dns-records':        '解析記錄',
+    'th-dns-rtt':            'RTT',
+    'dns-divergent':         '有差異',
+    'dns-consistent':        '一致',
 
     /* ── Geo section ──────────────────────────────────────────────────── */
     'section-geo':           '地理資訊',

@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 // ── Phase 4: traceroute API field assertions ──────────────────────────────
 
 // TestStaticJS_WebModeTracerouteBuildOpts verifies that the embedded api-builder.js
@@ -109,5 +108,27 @@ func TestStaticJS_BuildRequestFunction(t *testing.T) {
 		if strings.Contains(exportBlock, priv) {
 			t.Errorf("api-builder.js: %s must remain private (not exported in PathProbe.ApiBuilder)", priv)
 		}
+	}
+}
+
+// TestStaticJS_DNSModeEmitsEmptyHost verifies that buildRequest() sends an
+// empty host value when the active web mode is in WEB_MODES_HIDE_HOST (i.e. dns).
+// This prevents the backend from performing a spurious target-host geo lookup
+// and showing a geo map to the user when they are running a DNS comparison.
+func TestStaticJS_DNSModeEmitsEmptyHost(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-builder.js")
+
+	// _webModesHideHost() config alias must be declared in the builder.
+	if !strings.Contains(body, "_webModesHideHost()") {
+		t.Error("api-builder.js: _webModesHideHost() alias must be declared")
+	}
+	// The host field must be conditionally suppressed when the mode is in WEB_MODES_HIDE_HOST.
+	// Check that the ternary guard pattern exists (empty string for host in hide-host modes).
+	if !strings.Contains(body, "_webModesHideHost().includes(") {
+		t.Error("api-builder.js: buildRequest must use _webModesHideHost().includes() to suppress host in dns mode")
+	}
+	// The suppressed value must yield an empty string, not send a hidden field value.
+	if !strings.Contains(body, "? ''") && !strings.Contains(body, `? ""`) {
+		t.Error("api-builder.js: host suppression must produce an empty string ('') in dns mode")
 	}
 }

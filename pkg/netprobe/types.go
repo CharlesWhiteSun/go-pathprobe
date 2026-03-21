@@ -22,12 +22,14 @@ type PublicIPResult struct {
 }
 
 // DNSAnswer stores answers for a single DNS lookup.
+// LookupError is non-empty when the resolver returned an error; Values will be nil in that case.
 type DNSAnswer struct {
-	Name   string
-	Type   RecordType
-	Values []string
-	RTT    time.Duration
-	Source string
+	Name        string
+	Type        RecordType
+	Values      []string
+	RTT         time.Duration
+	Source      string
+	LookupError string
 }
 
 // DNSComparison aggregates lookup results across resolvers and flags divergence.

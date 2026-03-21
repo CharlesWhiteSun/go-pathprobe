@@ -19,6 +19,10 @@ type DiagReport struct {
 	// Route holds the network path discovered by a traceroute probe.
 	// Nil means no traceroute was performed during this diagnostic run.
 	Route *netprobe.RouteResult
+
+	// DNSComparisons holds per-domain resolver comparison results.
+	// Populated by runners that perform DNS divergence detection.
+	DNSComparisons []netprobe.DNSComparison
 }
 
 // ProtoResult captures the outcome of a single protocol probe attempt.
@@ -56,5 +60,12 @@ func (r *DiagReport) AddPorts(results []netprobe.PortProbeResult) {
 func (r *DiagReport) SetRoute(result *netprobe.RouteResult) {
 	if r != nil {
 		r.Route = result
+	}
+}
+
+// AddDNSComparisons appends DNS resolver comparison results.  It is nil-safe.
+func (r *DiagReport) AddDNSComparisons(results []netprobe.DNSComparison) {
+	if r != nil {
+		r.DNSComparisons = append(r.DNSComparisons, results...)
 	}
 }

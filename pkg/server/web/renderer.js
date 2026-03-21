@@ -142,6 +142,56 @@
       '</table></div>';
   }
 
+  // Render DNS comparison results grouped by domain+type.
+  // Each entry shows a badge (Divergent / Consistent), then expands one row
+  // per resolver with its answers and RTT.
+  function renderDNSSection(dnsEntries) {
+    if (!dnsEntries || dnsEntries.length === 0) return '';
+    const rows = dnsEntries.map(entry => {
+      const badge = entry.HasDivergence
+        ? '<span class="badge badge-fail">' + esc(_t('dns-divergent'))  + '</span>'
+        : '<span class="badge badge-ok">'   + esc(_t('dns-consistent')) + '</span>';
+
+      // Build a sub-row for each resolver answer.
+      const answerRows = (entry.Answers || []).map(ans => {
+        let recordsCell;
+        if (ans.LookupError) {
+          recordsCell = '<span class="badge badge-fail">' + esc(ans.LookupError) + '</span>';
+        } else {
+          recordsCell = (ans.Values && ans.Values.length)
+            ? ans.Values.map(v => esc(v)).join('<br>')
+            : '\u2014';
+        }
+        return '<tr class="dns-answer-row">' +
+          '<td></td>' +
+          '<td></td>' +
+          '<td class="dns-resolver">' + esc(ans.Source) + '</td>' +
+          '<td class="dns-records">'  + recordsCell       + '</td>' +
+          '<td>'                      + esc(ans.RTT)      + '</td>' +
+        '</tr>';
+      }).join('');
+
+      return '<tr class="dns-entry-row">' +
+        '<td><strong>' + esc(entry.Domain) + '</strong></td>' +
+        '<td>'         + esc(entry.Type)   + '</td>' +
+        '<td colspan="3">' + badge + '</td>' +
+      '</tr>' + answerRows;
+    }).join('');
+
+    return '<div class="result-section">' +
+      '<h3>' + esc(_t('section-dns')) + '</h3>' +
+      '<table class="result-table dns-table">' +
+        '<thead><tr>' +
+          '<th>' + esc(_t('th-dns-domain'))   + '</th>' +
+          '<th>' + esc(_t('th-dns-type'))     + '</th>' +
+          '<th>' + esc(_t('th-dns-resolver')) + '</th>' +
+          '<th>' + esc(_t('th-dns-records'))  + '</th>' +
+          '<th>' + esc(_t('th-dns-rtt'))      + '</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table></div>';
+  }
+
   function renderGeoSection(pub, tgt) {
     const hasAny = (pub && pub.HasLocation) || (tgt && tgt.HasLocation);
     if (!hasAny) return '';
@@ -183,6 +233,7 @@
       renderSummary(r),
       renderPortsSection(r.Ports),
       renderProtosSection(r.Protos),
+      renderDNSSection(r.DNS),
       renderRouteSection(r.Route),
       renderGeoSection(r.PublicGeo, r.TargetGeo),
     ].filter(Boolean).join('');

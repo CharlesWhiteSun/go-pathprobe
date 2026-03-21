@@ -26,6 +26,7 @@ type ReportWriter interface {
 	AddPorts([]netprobe.PortProbeResult)
 	SetRoute(*netprobe.RouteResult)
 	SetPublicIP(string)
+	AddDNSComparisons([]netprobe.DNSComparison)
 }
 
 // Request encapsulates the diagnostic target and options.

@@ -28,6 +28,7 @@
   function _targetPorts()           { return _cfg().TARGET_PORTS           || {}; }
   function _targetModePanels()      { return _cfg().TARGET_MODE_PANELS      || {}; }
   function _webModesWithPorts()     { return _cfg().WEB_MODES_WITH_PORTS    || []; }
+  function _webModesHideHost()      { return _cfg().WEB_MODES_HIDE_HOST     || []; }
   function _targetPlaceholderKeys() { return _cfg().TARGET_PLACEHOLDER_KEYS || {}; }
 
   // ── Locale (runtime-resolved) ─────────────────────────────────────────
@@ -109,6 +110,22 @@
 
     if (group)   group.hidden   = !needsPorts;
     if (textGrp) textGrp.hidden = !needsPorts;
+  }
+
+  /**
+   * Show or hide the Target Host field (#host-group) and the DNS Domains field
+   * (#dns-domains-group) based on the current target and mode.
+   *
+   * Rules:
+   *   - web + mode in WEB_MODES_HIDE_HOST → hide #host-group, show #dns-domains-group
+   *   - all other combinations            → show #host-group, hide #dns-domains-group
+   */
+  function updateHostGroup(target, mode) {
+    const hostGrp = document.getElementById('host-group');
+    const dnsGrp  = document.getElementById('dns-domains-group');
+    const hideHost = (target === 'web') && _webModesHideHost().includes(mode);
+    if (hostGrp) hostGrp.hidden = hideHost;
+    if (dnsGrp)  dnsGrp.hidden  = !hideHost;
   }
 
   // ── Panel height measurement ───────────────────────────────────────────
@@ -290,6 +307,7 @@
     }
     applyModePanels(target);
     updatePortGroup(target, getModeFor(target));
+    updateHostGroup(target, getModeFor(target));
   }
 
   // ── Advanced-options animated expand/collapse ──────────────────────────
@@ -460,6 +478,7 @@
         const target = radio.name.replace(/-mode$/, '');
         applyModePanels(target);
         updatePortGroup(target, getModeFor(target));
+        updateHostGroup(target, getModeFor(target));
         // Auto-fill ports when switching to a port-needing web mode
         // (mirrors the auto-fill that onTargetChange() does on target switch).
         if (target === 'web') {

@@ -513,7 +513,142 @@ func TestTableWriterNoRouteSection(t *testing.T) {
 	}
 }
 
+// ── DNS section in Build ─────────────────────────────────────────────────
+
+// TestBuildDNSPopulatesEntries verifies that DiagReport.DNSComparisons are
+// flattened into AnnotatedReport.DNS with correct Domain, Type, HasDivergence,
+// and per-resolver Answer entries.
+func TestBuildDNSPopulatesEntries(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", Values: []string{"93.184.216.34"}, RTT: 5 * time.Millisecond},
+				{Source: "cf", Values: []string{"93.184.216.34"}, RTT: 3 * time.Millisecond},
+			},
+		},
+		{
+			Name: "example.com",
+			Type: netprobe.RecordTypeAAAA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", Values: []string{"2606:2800::1"}, RTT: 6 * time.Millisecond},
+				{Source: "cf", Values: []string{"2606:2800::2"}, RTT: 4 * time.Millisecond},
+			},
+		},
+	})
+
+	ar := buildAnnotated(t, dr)
+
+	if len(ar.DNS) != 2 {
+		t.Fatalf("expected 2 DNS entries, got %d", len(ar.DNS))
+	}
+
+	e0 := ar.DNS[0]
+	if e0.Domain != "example.com" {
+		t.Errorf("DNS[0].Domain: got %q, want %q", e0.Domain, "example.com")
+	}
+	// RecordTypeA must be shown as "IPv4" for user-facing clarity.
+	if e0.Type != "IPv4" {
+		t.Errorf("DNS[0].Type: got %q, want %q", e0.Type, "IPv4")
+	}
+	if e0.HasDivergence {
+		t.Error("DNS[0].HasDivergence should be false when answers agree")
+	}
+	if len(e0.Answers) != 2 {
+		t.Fatalf("DNS[0].Answers: expected 2, got %d", len(e0.Answers))
+	}
+	if e0.Answers[0].Source != "sys" {
+		t.Errorf("DNS[0].Answers[0].Source: got %q, want %q", e0.Answers[0].Source, "sys")
+	}
+	if e0.Answers[0].RTT == "" {
+		t.Error("DNS[0].Answers[0].RTT must not be empty")
+	}
+
+	e1 := ar.DNS[1]
+	// RecordTypeAAAA must be shown as "IPv6" for user-facing clarity.
+	if e1.Type != "IPv6" {
+		t.Errorf("DNS[1].Type: got %q, want %q", e1.Type, "IPv6")
+	}
+	if !e1.HasDivergence {
+		t.Error("DNS[1].HasDivergence should be true when AAAA answers differ")
+	}
+}
+
+// TestBuildDNSNilWhenNone confirms AnnotatedReport.DNS is nil when no
+// DNS comparisons were recorded (keeps JSON output clean).
+func TestBuildDNSNilWhenNone(t *testing.T) {
+	ar := buildAnnotated(t, buildSampleDiagReport())
+	if ar.DNS != nil {
+		t.Fatalf("expected DNS to be nil when no comparisons recorded, got %v", ar.DNS)
+	}
+}
+
+// TestBuildDNSTypeDisplayNames verifies that the internal RecordType values
+// are mapped to user-friendly display labels: A→IPv4, AAAA→IPv6, MX unchanged.
+func TestBuildDNSTypeDisplayNames(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		{Name: "example.com", Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{{Source: "sys", Values: []string{"1.2.3.4"}}}},
+		{Name: "example.com", Type: netprobe.RecordTypeAAAA,
+			Results: []netprobe.DNSAnswer{{Source: "sys", Values: []string{"::1"}}}},
+		{Name: "example.com", Type: netprobe.RecordTypeMX,
+			Results: []netprobe.DNSAnswer{{Source: "sys", Values: []string{"mail.example.com"}}}},
+	})
+	ar := buildAnnotated(t, dr)
+	tests := []struct {
+		idx  int
+		want string
+	}{
+		{0, "IPv4"},
+		{1, "IPv6"},
+		{2, "MX"},
+	}
+	for _, tc := range tests {
+		if ar.DNS[tc.idx].Type != tc.want {
+			t.Errorf("DNS[%d].Type = %q, want %q", tc.idx, ar.DNS[tc.idx].Type, tc.want)
+		}
+	}
+}
+
 // ── test helpers ──────────────────────────────────────────────────────────
+
+// TestBuildDNSLookupErrorPassThrough verifies that a DNSAnswer with LookupError set
+// is faithfully propagated to DNSAnswerEntry.LookupError in the AnnotatedReport,
+// allowing the UI to display the resolver failure reason to the user.
+func TestBuildDNSLookupErrorPassThrough(t *testing.T) {
+	dr := buildSampleDiagReport()
+	dr.AddDNSComparisons([]netprobe.DNSComparison{
+		{
+			Name: "notexist.example",
+			Type: netprobe.RecordTypeA,
+			Results: []netprobe.DNSAnswer{
+				{Source: "sys", LookupError: "lookup notexist.example: no such host"},
+				{Source: "cf", Values: []string{"1.1.1.1"}, RTT: 5 * time.Millisecond},
+			},
+		},
+	})
+	ar := buildAnnotated(t, dr)
+	if len(ar.DNS) != 1 {
+		t.Fatalf("expected 1 DNS entry, got %d", len(ar.DNS))
+	}
+	if len(ar.DNS[0].Answers) != 2 {
+		t.Fatalf("expected 2 answers, got %d", len(ar.DNS[0].Answers))
+	}
+	failing := ar.DNS[0].Answers[0]
+	if failing.LookupError == "" {
+		t.Error("expected LookupError to be propagated to DNSAnswerEntry")
+	}
+	if failing.Source != "sys" {
+		t.Errorf("expected Source=%q, got %q", "sys", failing.Source)
+	}
+	ok := ar.DNS[0].Answers[1]
+	if ok.LookupError != "" {
+		t.Errorf("successful answer must have empty LookupError, got %q", ok.LookupError)
+	}
+}
 
 // geoStubLocator returns a fixed non-zero GeoInfo for any IP so that
 // HasLocation=true, allowing tests to exercise the geo branches in templates

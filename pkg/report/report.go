@@ -69,6 +69,24 @@ type HopEntry struct {
 	Lon      float64
 }
 
+// DNSAnswerEntry is one resolver's answer for a domain + record type.
+// LookupError is non-empty when the resolver failed; Values will be nil in that case.
+type DNSAnswerEntry struct {
+	Source      string
+	Values      []string
+	RTT         string
+	LookupError string
+}
+
+// DNSEntry represents the cross-resolver comparison result for one
+// domain + record-type pair.
+type DNSEntry struct {
+	Domain        string
+	Type          string
+	HasDivergence bool
+	Answers       []DNSAnswerEntry
+}
+
 // AnnotatedReport is a DiagReport enriched with geo information.
 type AnnotatedReport struct {
 	Target      string
@@ -81,6 +99,21 @@ type AnnotatedReport struct {
 	Ports  []PortEntry
 	Protos []ProtoEntry
 	Route  []HopEntry
+	DNS    []DNSEntry
+}
+
+// dnsTypeDisplayName maps an internal DNS RecordType to a user-friendly label.
+// "A" is displayed as "IPv4" and "AAAA" as "IPv6" so the UI is consistent with
+// the Record Types labels shown in the form.  Other types (e.g. MX) are kept as-is.
+func dnsTypeDisplayName(t netprobe.RecordType) string {
+	switch t {
+	case netprobe.RecordTypeA:
+		return "IPv4"
+	case netprobe.RecordTypeAAAA:
+		return "IPv6"
+	default:
+		return string(t)
+	}
 }
 
 // fmtDur formats a duration for display, showing "—" for zero values.
@@ -184,6 +217,24 @@ func Build(ctx context.Context, dr *diag.DiagReport, loc geo.IPLocator) (*Annota
 		for _, hop := range dr.Route.Hops {
 			ar.Route = append(ar.Route, toHopEntry(hop, loc))
 		}
+	}
+
+	// Flatten DNS comparison results into renderer-friendly entries.
+	for _, comp := range dr.DNSComparisons {
+		entry := DNSEntry{
+			Domain:        comp.Name,
+			Type:          dnsTypeDisplayName(comp.Type),
+			HasDivergence: comp.HasDivergence(),
+		}
+		for _, ans := range comp.Results {
+			entry.Answers = append(entry.Answers, DNSAnswerEntry{
+				Source:      ans.Source,
+				Values:      ans.Values,
+				RTT:         fmtDur(ans.RTT),
+				LookupError: ans.LookupError,
+			})
+		}
+		ar.DNS = append(ar.DNS, entry)
 	}
 
 	if loc == nil {

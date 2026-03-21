@@ -41,7 +41,7 @@ func (r *HTTPDNSResolver) Lookup(ctx context.Context, name string, rtype RecordT
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.Endpoint, nil)
 	if err != nil {
-		return DNSAnswer{}, err
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, err
 	}
 	q := req.URL.Query()
 	q.Set("name", name)
@@ -52,20 +52,20 @@ func (r *HTTPDNSResolver) Lookup(ctx context.Context, name string, rtype RecordT
 
 	resp, err := r.Client.Do(req)
 	if err != nil {
-		return DNSAnswer{}, err
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return DNSAnswer{}, fmt.Errorf("doh status %d", resp.StatusCode)
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, fmt.Errorf("doh status %d", resp.StatusCode)
 	}
 
 	var dr dohResponse
 	if err := json.NewDecoder(resp.Body).Decode(&dr); err != nil {
-		return DNSAnswer{}, err
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, err
 	}
 	if dr.Status != 0 {
-		return DNSAnswer{}, errors.New("resolver returned error status")
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, errors.New("resolver returned error status")
 	}
 
 	values := make([]string, 0, len(dr.Answer))
@@ -120,11 +120,11 @@ func (r *SystemResolver) Lookup(ctx context.Context, name string, rtype RecordTy
 			records = stringifyMX(mx)
 		}
 	default:
-		return DNSAnswer{}, fmt.Errorf("unsupported record type: %s", rtype)
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, fmt.Errorf("unsupported record type: %s", rtype)
 	}
 
 	if err != nil {
-		return DNSAnswer{}, err
+		return DNSAnswer{Name: name, Type: rtype, Source: r.Name}, err
 	}
 
 	return DNSAnswer{
@@ -177,7 +177,20 @@ func (c DNSComparator) compareSingle(ctx context.Context, domain string, rt Reco
 	for _, resolver := range c.Resolvers {
 		ans, err := resolver.Lookup(ctx, domain, rt)
 		if err != nil {
-			return DNSComparison{}, err
+			// Context cancellation / deadline is a hard stop — the caller controls this.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return DNSComparison{}, err
+			}
+			// Any other resolver error (NXDOMAIN, network unreachable, DoH error …) is
+			// recorded as an empty answer with an error annotation.  Comparison continues
+			// so the user sees results from the other resolvers and can spot divergence.
+			results = append(results, DNSAnswer{
+				Name:        domain,
+				Type:        rt,
+				Source:      ans.Source, // populated by all resolvers even on error
+				LookupError: err.Error(),
+			})
+			continue
 		}
 		results = append(results, ans)
 	}

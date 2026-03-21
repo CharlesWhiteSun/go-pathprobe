@@ -21,6 +21,7 @@
   // ── Config aliases (runtime-resolved) ──────────────────────────────────
   function _cfg()               { return (window.PathProbe && window.PathProbe.Config) || {}; }
   function _webModesWithPorts() { return _cfg().WEB_MODES_WITH_PORTS || []; }
+  function _webModesHideHost()  { return _cfg().WEB_MODES_HIDE_HOST  || []; }
   function _targetPorts()       { return _cfg().TARGET_PORTS          || {}; }
 
   // ── Form accessors (runtime-resolved via PathProbe.Form) ────────────────
@@ -172,7 +173,15 @@
       timeout,
       insecure,
       disable_geo: !_checked('geo-enabled'),
-      net: { host: _val('host'), ports },
+      // When the host field is not relevant for the active mode (e.g. web/dns,
+      // where the user fills dns-domains instead), send an empty host so the
+      // backend does not attempt target-host geo annotation or use stale input.
+      net: {
+        host: (target === 'web' && _webModesHideHost().includes(_getModeFor('web')))
+          ? ''
+          : _val('host'),
+        ports,
+      },
     };
 
     switch (target) {

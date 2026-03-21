@@ -191,12 +191,71 @@ func TestDNSComparatorMultipleDomains(t *testing.T) {
 	}
 }
 
-// TestDNSComparatorResolverError verifies that a resolver failure propagates as an error.
+// TestDNSComparatorResolverError verifies that a non-context resolver failure is recorded
+// as a LookupError in the comparison result rather than being propagated as a fatal error.
+// This allows the user to see results from the remaining resolvers.
 func TestDNSComparatorResolverError(t *testing.T) {
-	bad := &errorResolver{err: errors.New("resolution failed")}
+	bad := &errorResolver{name: "bad", err: errors.New("resolution failed")}
+	ok := &spyResolver{name: "ok", answers: map[string][]string{"example.com|A": {"1.2.3.4"}}}
+	comparator := DNSComparator{Resolvers: []DNSResolver{bad, ok}}
+	comps, err := comparator.Compare(context.Background(), []string{"example.com"}, []RecordType{RecordTypeA})
+	if err != nil {
+		t.Fatalf("expected no error from comparator: non-context resolver failures must not be fatal; got %v", err)
+	}
+	if len(comps) != 1 {
+		t.Fatalf("expected 1 comparison, got %d", len(comps))
+	}
+	comp := comps[0]
+	if len(comp.Results) != 2 {
+		t.Fatalf("expected 2 results (failing + ok), got %d", len(comp.Results))
+	}
+	// Failing resolver result must have LookupError set and no values.
+	failed := comp.Results[0]
+	if failed.LookupError == "" {
+		t.Error("expected LookupError to be set for the failing resolver")
+	}
+	if len(failed.Values) != 0 {
+		t.Errorf("unexpected Values in failed result: %v", failed.Values)
+	}
+	// Successful resolver result must be normal.
+	good := comp.Results[1]
+	if good.LookupError != "" {
+		t.Errorf("unexpected LookupError on successful resolver: %q", good.LookupError)
+	}
+	if len(good.Values) != 1 || good.Values[0] != "1.2.3.4" {
+		t.Errorf("unexpected Values on good resolver: %v", good.Values)
+	}
+}
+
+// TestDNSComparatorNXDOMAINRecorded verifies that NXDOMAIN-style errors are recorded
+// as LookupError entries and the comparison still succeeds, allowing the user to see
+// that no resolver could resolve the domain.
+func TestDNSComparatorNXDOMAINRecorded(t *testing.T) {
+	nxdomain := &errorResolver{name: "sys", err: errors.New("lookup notexist.example: no such host")}
+	comparator := DNSComparator{Resolvers: []DNSResolver{nxdomain}}
+	comps, err := comparator.Compare(context.Background(), []string{"notexist.example"}, []RecordType{RecordTypeA})
+	if err != nil {
+		t.Fatalf("NXDOMAIN must not be a fatal error; got %v", err)
+	}
+	if len(comps[0].Results) != 1 {
+		t.Fatalf("expected 1 result entry, got %d", len(comps[0].Results))
+	}
+	if comps[0].Results[0].LookupError == "" {
+		t.Error("expected LookupError to contain the resolver error message")
+	}
+}
+
+// TestDNSComparatorContextCancel verifies that context cancellation IS propagated
+// as a fatal error, stopping the comparison immediately.
+func TestDNSComparatorContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	// Use a resolver that wraps the context error so it reaches compareSingle.
+	bad := &errorResolver{name: "ctx", err: context.Canceled}
 	comparator := DNSComparator{Resolvers: []DNSResolver{bad}}
-	if _, err := comparator.Compare(context.Background(), []string{"example.com"}, []RecordType{RecordTypeA}); err == nil {
-		t.Fatal("expected error from failing resolver")
+	if _, err := comparator.Compare(ctx, []string{"example.com"}, []RecordType{RecordTypeA}); err == nil {
+		t.Fatal("expected error for context cancellation")
 	}
 }
 
@@ -267,9 +326,10 @@ func (s *spyResolver) Lookup(ctx context.Context, name string, rtype RecordType)
 }
 
 type errorResolver struct {
-	err error
+	name string
+	err  error
 }
 
-func (e *errorResolver) Lookup(_ context.Context, _ string, _ RecordType) (DNSAnswer, error) {
-	return DNSAnswer{}, e.err
+func (e *errorResolver) Lookup(_ context.Context, name string, rtype RecordType) (DNSAnswer, error) {
+	return DNSAnswer{Name: name, Type: rtype, Source: e.name}, e.err
 }
