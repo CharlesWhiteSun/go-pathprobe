@@ -22,6 +22,17 @@ func (s *stubHTTPProber) Probe(ctx context.Context, req netprobe.HTTPProbeReques
 	return netprobe.HTTPProbeResult{StatusCode: 200, RTT: time.Millisecond}, nil
 }
 
+// tlsStubHTTPProber is a stub that returns a configurable TLS state alongside
+// a fixed HTTP 200 response, allowing summary and TLS rendering to be tested
+// without a real network connection.
+type tlsStubHTTPProber struct {
+	tls *netprobe.TLSInfo
+}
+
+func (s *tlsStubHTTPProber) Probe(_ context.Context, _ netprobe.HTTPProbeRequest) (netprobe.HTTPProbeResult, error) {
+	return netprobe.HTTPProbeResult{StatusCode: 200, RTT: 50 * time.Millisecond, TLS: s.tls}, nil
+}
+
 // TestHTTPRunnerUsesURL ensures URL resolution and insecure/timeout propagation.
 func TestHTTPRunnerUsesURL(t *testing.T) {
 	prober := &stubHTTPProber{}
@@ -275,5 +286,112 @@ func TestHTTPRunnerCalledOnHTTPMode(t *testing.T) {
 	}
 	if !prober.called {
 		t.Fatal("prober must fire in http mode")
+	}
+}
+
+// TestHTTPRunnerSchemeCaseNormalisation verifies that an uppercase scheme prefix
+// (e.g. "HTTPS://") is lowercased before the request is sent to the prober,
+// so log output, ProtoResult.Protocol, and the probed URL are all consistent
+// regardless of how the user typed the scheme.
+func TestHTTPRunnerSchemeCaseNormalisation(t *testing.T) {
+	cases := []struct {
+		input   string
+		wantURL string
+	}{
+		{"HTTPS://google.com", "https://google.com"},
+		{"HTTP://google.com", "http://google.com"},
+		{"HTTPS://google.com/Path?q=Search", "https://google.com/Path?q=Search"},
+		// Mixed case — only the scheme prefix is lowercased, path is preserved.
+		{"Https://google.com", "https://google.com"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			prober := &stubHTTPProber{}
+			runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			req := Request{
+				Target:  TargetWeb,
+				Options: Options{Global: GlobalOptions{Timeout: time.Second}, Web: WebOptions{URL: tc.input}},
+			}
+			if err := runner.Run(context.Background(), req); err != nil {
+				t.Fatalf("input=%q: unexpected error: %v", tc.input, err)
+			}
+			if prober.url != tc.wantURL {
+				t.Errorf("input=%q: probed URL = %q; want %q", tc.input, prober.url, tc.wantURL)
+			}
+		})
+	}
+}
+
+// TestHTTPRunnerSummaryFormat verifies that ProtoResult.Summary reflects the
+// actual scheme (HTTPS / HTTP), includes TLS version and ALPN when available,
+// and always ends with the RTT.  This prevents the regression where the summary
+// was always "HTTP 200, RTT ..." regardless of the scheme or TLS details.
+func TestHTTPRunnerSummaryFormat(t *testing.T) {
+	cases := []struct {
+		name        string
+		url         string
+		tls         *netprobe.TLSInfo
+		wantParts   []string
+		absentParts []string
+	}{
+		{
+			name:      "https with TLS1.3 and h2",
+			url:       "https://example.com",
+			tls:       &netprobe.TLSInfo{Version: "TLS1.3", NegotiatedALPN: "h2"},
+			wantParts: []string{"HTTPS 200", "TLS1.3", "h2", "RTT"},
+		},
+		{
+			name:      "https with TLS1.2 no ALPN",
+			url:       "https://example.com",
+			tls:       &netprobe.TLSInfo{Version: "TLS1.2"},
+			wantParts: []string{"HTTPS 200", "TLS1.2", "RTT"},
+		},
+		{
+			name:        "http plain no TLS",
+			url:         "http://example.com",
+			tls:         nil,
+			wantParts:   []string{"HTTP 200", "RTT"},
+			absentParts: []string{"TLS"},
+		},
+		{
+			name:      "uppercase scheme normalised to https in summary",
+			url:       "HTTPS://example.com",
+			tls:       &netprobe.TLSInfo{Version: "TLS1.3", NegotiatedALPN: "h2"},
+			wantParts: []string{"HTTPS 200", "TLS1.3", "h2", "RTT"},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			prober := &tlsStubHTTPProber{tls: tc.tls}
+			runner := NewHTTPRunner(prober, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			report := &DiagReport{}
+			req := Request{
+				Target: TargetWeb,
+				Options: Options{
+					Global: GlobalOptions{Timeout: time.Second},
+					Web:    WebOptions{Mode: WebModeHTTP, URL: tc.url},
+				},
+				Report: report,
+			}
+			if err := runner.Run(context.Background(), req); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(report.Protos) == 0 {
+				t.Fatal("expected a ProtoResult to be recorded")
+			}
+			summary := report.Protos[0].Summary
+			for _, part := range tc.wantParts {
+				if !contains(summary, part) {
+					t.Errorf("summary = %q; expected to contain %q", summary, part)
+				}
+			}
+			for _, part := range tc.absentParts {
+				if contains(summary, part) {
+					t.Errorf("summary = %q; must NOT contain %q", summary, part)
+				}
+			}
+		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	neturl "net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"go-pathprobe/pkg/netprobe"
@@ -45,6 +46,12 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		url = "https://" + url
 		req.Emitf("http", "No scheme detected — assuming HTTPS: %s", url)
 	}
+	// Normalise scheme casing: lowercase the scheme prefix (e.g. HTTPS:// → https://)
+	// so log output, emitted events, and ProtoResult.Protocol are all consistent
+	// regardless of whether the user typed "HTTPS://" or "https://".
+	if idx := strings.Index(url, "://"); idx > 0 {
+		url = strings.ToLower(url[:idx]) + url[idx:]
+	}
 	req.Emitf("http", "Probing HTTP %s …", url)
 
 	res, err := r.Prober.Probe(ctx, netprobe.HTTPProbeRequest{
@@ -61,8 +68,11 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		r.Logger.Info("tls info", "version", res.TLS.Version, "cipher", res.TLS.CipherSuite, "alpn", res.TLS.NegotiatedALPN)
 	}
 
+	// Parse URL once to extract host, scheme, and port.  url is already
+	// lowercase-schemed at this point so scheme comparison is safe.
 	host := req.Options.Net.Host
 	scheme := "http"
+	port := 0
 	if parsed, err := neturl.Parse(url); err == nil {
 		if parsed.Hostname() != "" {
 			host = parsed.Hostname()
@@ -70,18 +80,31 @@ func (r *HTTPRunner) Run(ctx context.Context, req Request) error {
 		if parsed.Scheme != "" {
 			scheme = parsed.Scheme
 		}
-	}
-	// Resolve port: explicit port in URL wins; fall back to the well-known
-	// port for the scheme (https → 443, http → 80).
-	port := defaultPortForScheme(scheme)
-	if parsed, err := neturl.Parse(url); err == nil {
+		port = defaultPortForScheme(scheme)
 		if p := parsed.Port(); p != "" {
 			if n, err2 := strconv.Atoi(p); err2 == nil {
 				port = n
 			}
 		}
 	}
-	summary := fmt.Sprintf("HTTP %d, RTT %s", res.StatusCode, res.RTT.Round(time.Millisecond))
+
+	// Build an informative summary: "<SCHEME> <status>[, <TLS ver> / <ALPN>], RTT <rtt>".
+	// Examples:
+	//   HTTPS 200, TLS1.3 / h2, RTT 87ms
+	//   HTTPS 200, TLS1.2, RTT 103ms
+	//   HTTP 200, RTT 63ms
+	schemeLabel := strings.ToUpper(scheme)
+	var summaryParts []string
+	summaryParts = append(summaryParts, fmt.Sprintf("%s %d", schemeLabel, res.StatusCode))
+	if res.TLS != nil {
+		tlsPart := res.TLS.Version
+		if res.TLS.NegotiatedALPN != "" {
+			tlsPart += " / " + res.TLS.NegotiatedALPN
+		}
+		summaryParts = append(summaryParts, tlsPart)
+	}
+	summaryParts = append(summaryParts, "RTT "+res.RTT.Round(time.Millisecond).String())
+	summary := strings.Join(summaryParts, ", ")
 	if req.Report != nil {
 		req.Report.AddProto(ProtoResult{
 			Protocol: scheme,
