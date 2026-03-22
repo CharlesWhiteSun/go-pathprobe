@@ -31,8 +31,7 @@
   function _webModesWithPorts()     { return _cfg().WEB_MODES_WITH_PORTS    || []; }
   function _webModesHideHost()      { return _cfg().WEB_MODES_HIDE_HOST      || []; }
   function _webModesShowDnsDomains(){ return _cfg().WEB_MODES_SHOW_DNS_DOMAINS || []; }
-  function _webModesShowHttpUrl()   { return _cfg().WEB_MODES_SHOW_HTTP_URL   || []; }
-
+  function _webModesShowHttpUrl()   { return _cfg().WEB_MODES_SHOW_HTTP_URL   || []; }  function _advOptSupport()         { return _cfg().ADV_OPT_SUPPORT           || {}; }
   // ── Locale (runtime-resolved) ─────────────────────────────────────────
   /** Return the translation for key in the current locale, falling back to key. */
   function _t(key) {
@@ -136,7 +135,49 @@
     if (dnsGrp)     dnsGrp.hidden     = !showDns;
     if (httpUrlGrp) httpUrlGrp.hidden = !showHttpUrl;
   }
+  // ── Advanced options visibility ───────────────────────────────────────────────
+  // Controllable option IDs (wrapper element id = 'adv-opt-{key}').
+  // 'timeout' is always visible and intentionally omitted from this list.
+  const _ADV_OPT_KEYS = ['mtr-count', 'insecure', 'geo'];
 
+  /**
+   * Show or hide each advanced option based on the current target and mode.
+   *
+   * Driven by ADV_OPT_SUPPORT in config.js — adding a new mode or target
+   * only requires an entry there; no code change is needed here.
+   *
+   * Fail-open: an unknown target or mode shows all options so new modes
+   * never accidentally hide useful controls.
+   *
+   * @param {string} target — active diagnostic target (e.g. 'web', 'smtp')
+   * @param {string} mode   — active sub-mode (e.g. 'http', ''); '' = no sub-mode
+   */
+  function updateAdvancedOpts(target, mode) {
+    const supportMap = _advOptSupport();
+    const targetMap  = supportMap[target];
+    // Unknown target → null → show all (fail-open).
+    // Unknown mode   → fall back to '' entry for the target, then show all.
+    const supported  = targetMap
+      ? (targetMap[mode] !== undefined ? targetMap[mode]
+          : (targetMap[''] !== undefined ? targetMap[''] : null))
+      : null;
+    _ADV_OPT_KEYS.forEach(function(key) {
+      const wrapper = document.getElementById('adv-opt-' + key);
+      if (!wrapper) return;
+      const show = supported === null || supported.includes(key);
+      wrapper.hidden = !show;
+      // Disable inputs inside hidden wrappers to prevent interaction with
+      // controls that are invisible to the user.
+      wrapper.querySelectorAll('input').forEach(function(inp) {
+        inp.disabled = !show;
+        // Uncheck hidden checkboxes so invisible controls never silently affect
+        // the submitted request payload ("停用且取消勾選").
+        if (!show && inp.type === 'checkbox') {
+          inp.checked = false;
+        }
+      });
+    });
+  }
   // ── Panel height measurement ───────────────────────────────────────────
   /**
    * Measure the layout height a panel element would occupy inside the stage
@@ -316,8 +357,7 @@
     }
     applyModePanels(target);
     updatePortGroup(target, getModeFor(target));
-    updateHostGroup(target, getModeFor(target));
-  }
+    updateHostGroup(target, getModeFor(target));    updateAdvancedOpts(target, getModeFor(target));  }
 
   // ── Enter-key submit ───────────────────────────────────────────────────
   /**
@@ -514,6 +554,7 @@
         applyModePanels(target);
         updatePortGroup(target, getModeFor(target));
         updateHostGroup(target, getModeFor(target));
+        updateAdvancedOpts(target, getModeFor(target));
         // Auto-fill ports when switching to a port-needing web mode
         // (mirrors the auto-fill that onTargetChange() does on target switch).
         if (target === 'web') {
@@ -555,6 +596,6 @@
 
   // ── Namespace registration ─────────────────────────────────────────────
   const PathProbe = window.PathProbe || {};
-  PathProbe.Form = { val, checked, getModeFor, getRunningHTML, onTargetChange, init };
+  PathProbe.Form = { val, checked, getModeFor, getRunningHTML, onTargetChange, updateAdvancedOpts, init };
   window.PathProbe = PathProbe;
 })(); // end form IIFE

@@ -216,6 +216,50 @@ const WEB_MODES_SHOW_HTTP_URL = ['http'];
 // the Target Host input.  This is a strict subset of WEB_MODES_HIDE_HOST.
 const WEB_MODES_SHOW_DNS_DOMAINS = ['dns'];
 
+// Advanced options applicability matrix.
+// Maps target → { mode: string[] } where the array lists supported option keys.
+// 'timeout' is universally applicable and is intentionally omitted.
+// An unrecognised target or mode falls back silently to showing ALL options
+// (fail-open: new modes never accidentally hide useful controls).
+//
+// Valid option keys (match 'adv-opt-{key}' wrapper IDs in index.html):
+//   'mtr-count' — probe count per hop / per port batch (ConnectivityRunner + TracerouteRunner)
+//   'insecure'  — skip TLS certificate verification (HTTPRunner, FTPRunner, SMTPRunner)
+//   'geo'       — enable geo IP annotation and map display
+//
+// Extending:
+//   • New web mode  → add an entry under web.{mode}.
+//   • New target    → add a top-level entry: target: { '': [...] }.
+//   • New option    → add the key to all relevant mode arrays AND add a wrapper
+//                      element with id="adv-opt-{key}" in index.html.
+const ADV_OPT_SUPPORT = {
+  web: {
+    'public-ip':  ['geo'],
+    'dns':        [],
+    'http':       ['insecure'],          // geo not applicable: HTTP results carry no server-IP geo data in this mode
+    'port':       ['mtr-count'],          // geo not applicable: port-scan results do not include geo annotation
+    'traceroute': ['mtr-count', 'geo'],
+    '':           ['mtr-count', 'insecure', 'geo'],  // legacy all-in-one mode
+  },
+  smtp: {
+    '':          ['mtr-count', 'insecure', 'geo'],
+    'handshake': ['mtr-count', 'insecure', 'geo'],
+    'auth':      ['mtr-count', 'insecure', 'geo'],
+    'send':      ['mtr-count', 'insecure', 'geo'],
+  },
+  imap: { '': ['mtr-count', 'geo'] },
+  pop:  { '': ['mtr-count', 'geo'] },
+  ftp: {
+    '':      ['mtr-count', 'insecure', 'geo'],
+    'login': ['mtr-count', 'insecure', 'geo'],
+    'list':  ['mtr-count', 'insecure', 'geo'],
+  },
+  sftp: {
+    '':     ['mtr-count', 'geo'],
+    'auth': ['mtr-count', 'geo'],
+    'ls':   ['mtr-count', 'geo'],
+  },
+};
 
 // The year this project was first published.  Used to build a copyright range
 // that automatically extends as calendar years advance — e.g. "2026" in 2026,
@@ -254,6 +298,7 @@ PathProbe.Config = {
   WEB_MODES_HIDE_HOST,
   WEB_MODES_SHOW_HTTP_URL,
   WEB_MODES_SHOW_DNS_DOMAINS,
+  ADV_OPT_SUPPORT,
   COPYRIGHT_START_YEAR,
   THEMES,
   DEFAULT_THEME,
