@@ -140,7 +140,11 @@
       resultEl.hidden = false;
       // renderMap — 執行期解析，透過 PathProbe.Map
       if (window.PathProbe && window.PathProbe.Map) {
-        window.PathProbe.Map.renderMap(payload.PublicGeo, payload.TargetGeo);
+        // payload.Route 含路由追蹤躁點資料（HasGeo/Lat/Lon），傳入後
+        // renderMap() 會在地圖上呼現實網路路徑之多點連線。
+        // 非路由追蹤模式時 payload.Route 為 null/undefined，
+        // renderMap() 自動回落至原始兩點弧線行為。
+        window.PathProbe.Map.renderMap(payload.PublicGeo, payload.TargetGeo, payload.Route);
       }
       // loadHistory — 執行期解析，透過 PathProbe.History
       if (window.PathProbe && window.PathProbe.History) {

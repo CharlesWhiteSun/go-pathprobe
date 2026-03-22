@@ -1,7 +1,9 @@
 'use strict';
 // ── map-connector.js — gradient arc & animated glow connector module ─────────
 // Extracted from app.js (sub-task 3.7).
-// Exposes: PathProbe.MapConnector = { buildConnectorLayer }
+// Exposes: PathProbe.MapConnector = { buildConnectorLayer, buildRouteLayer }
+//   buildConnectorLayer — single-arc (origin→target) with gradient + optional glow
+//   buildRouteLayer     — multi-hop traceroute path (polyline segments + circles)
 // All internal helpers (lerpHex, hexToRgba, buildArcLatLngs, buildArrowSVG,
 // isMapLoaded, ConnectorArcLayer, ConnectorGlowLayer, buildArrowConnectorLayer)
 // are private to this IIFE and do not leak into the global scope.
@@ -515,6 +517,220 @@
     return group;
   }
 
+  // ── Private: route layer helpers ──────────────────────────────────────────
+
+  /** Minimal HTML-escape helper — used in popup HTML to prevent XSS. */
+  function _escRoute(s) {
+    return String(s)
+      .replace(/&/g,  '&amp;')
+      .replace(/</g,  '&lt;')
+      .replace(/>/g,  '&gt;')
+      .replace(/"/g,  '&quot;')
+      .replace(/'/g,  '&#39;');
+  }
+
+  /** Build Leaflet popup HTML for an intermediate route hop.
+   *  Reuses the same .geo-popup CSS classes as the origin/target markers so
+   *  the visual language is consistent without coupling to map.js internals.
+   *  Field labels match the existing route-table th-* i18n keys so they are
+   *  legible even if PathProbe.Locale is not available.
+   */
+  function _buildHopPopupHtml(hop) {
+    const lines = ['<div class="geo-popup">'];
+    // Role badge — shows TTL number (always available)
+    lines.push('<span class="geo-popup__role geo-popup__role--hop">TTL\u00a0' + _escRoute(String(hop.TTL)) + '</span>');
+    if (hop.IP)       lines.push('<div class="geo-popup__ip">'  + _escRoute(hop.IP)           + '</div>');
+    if (hop.Hostname && hop.Hostname !== hop.IP) {
+      lines.push('<div class="geo-popup__row">' + _escRoute(hop.Hostname) + '</div>');
+    }
+    if (hop.Country)  lines.push('<div class="geo-popup__row">' + _escRoute(hop.Country)      + '</div>');
+    if (hop.ASN)      lines.push('<div class="geo-popup__asn">AS' + _escRoute(String(hop.ASN)) + '</div>');
+    if (hop.AvgRTT)   lines.push('<div class="geo-popup__row">' + _escRoute(hop.AvgRTT)       + '</div>');
+    lines.push('</div>');
+    return lines.join('');
+  }
+
+  // ── Private: hop geographic clustering ────────────────────────────────────
+
+  /** Maximum coordinate difference (decimal degrees) for two geo-located hops
+   *  to be considered co-located and merged into one cluster marker.
+   *  0.05° ≈ 5.5 km at the equator — tight enough to keep genuinely separate
+   *  city hops distinct while collapsing hops that share the same country
+   *  centroid (their coordinates are bitwise identical: ΔLat=0, ΔLon=0).
+   */
+  var GEO_HOP_CLUSTER_THRESHOLD_DEG = 0.05;
+
+  /** Group an array of geo-located hops into geographic clusters.
+   *  Iterates in TTL order; a hop joins the first cluster whose anchor
+   *  coordinates are within the threshold, or opens a new cluster.
+   *  Returns an array of { lat, lon, hops[] } objects preserving TTL order.
+   */
+  function _clusterHops(geoHops) {
+    var clusters = [];
+    for (var i = 0; i < geoHops.length; i++) {
+      var hop    = geoHops[i];
+      var placed = false;
+      for (var j = 0; j < clusters.length; j++) {
+        var cl = clusters[j];
+        if (Math.abs(cl.lat - hop.Lat) <= GEO_HOP_CLUSTER_THRESHOLD_DEG &&
+            Math.abs(cl.lon - hop.Lon) <= GEO_HOP_CLUSTER_THRESHOLD_DEG) {
+          cl.hops.push(hop);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        clusters.push({ lat: hop.Lat, lon: hop.Lon, hops: [hop] });
+      }
+    }
+    return clusters;
+  }
+
+  /** Build a small diamond-shaped Leaflet divIcon for an intermediate hop
+   *  cluster marker.  Uses the same CSS class family (.geo-marker, .geo-marker--hop)
+   *  as the origin/target diamonds but without the pulse animation, so it
+   *  recedes visually while remaining stylistically consistent.
+   *  When count > 1 a small badge displays the number of co-located hops merged
+   *  into this cluster.
+   */
+  function _buildHopMarkerIcon(color, count) {
+    var core = document.createElement('div');
+    core.className   = 'geo-marker__hop-core';
+    core.style.background = color;
+    var wrap = document.createElement('div');
+    wrap.className   = 'geo-marker geo-marker--hop';
+    wrap.appendChild(core);
+    if (count > 1) {
+      var badge = document.createElement('span');
+      badge.className   = 'geo-marker__hop-badge';
+      badge.textContent = String(count);
+      wrap.appendChild(badge);
+    }
+    return L.divIcon({
+      className:   '',
+      html:        wrap.outerHTML,
+      iconSize:    [14, 14],
+      iconAnchor:  [7, 7],
+      popupAnchor: [0, -10],
+    });
+  }
+
+  /** Build a Leaflet popup for a cluster of two or more co-located hops.
+   *  The role badge shows the TTL range (e.g. "TTL 2–6"); each hop gets its
+   *  own row with IP and average RTT.  Reuses .geo-popup CSS classes for
+   *  visual consistency with the origin/target marker popups.
+   */
+  function _buildClusterPopupHtml(hops) {
+    var lines = ['<div class="geo-popup">'];
+    var first  = hops[0];
+    var last   = hops[hops.length - 1];
+    lines.push('<span class="geo-popup__role geo-popup__role--hop">TTL\u00a0' +
+      _escRoute(String(first.TTL)) + '\u2013' + _escRoute(String(last.TTL)) + '</span>');
+    hops.forEach(function(hop) {
+      lines.push('<div class="geo-popup__cluster-hop">');
+      lines.push('<div class="geo-popup__ip">TTL\u00a0' + _escRoute(String(hop.TTL)) +
+        '\u00a0\u00b7\u00a0' + _escRoute(hop.IP) + '</div>');
+      if (hop.AvgRTT) lines.push('<div class="geo-popup__row">' + _escRoute(hop.AvgRTT) + '</div>');
+      lines.push('</div>');
+    });
+    if (first.Country) lines.push('<div class="geo-popup__row">' + _escRoute(first.Country) + '</div>');
+    lines.push('</div>');
+    return lines.join('');
+  }
+
+  // ── Public: build route layer ──────────────────────────────────────────────
+
+  /**
+   * Build a Leaflet LayerGroup visualising a multi-hop traceroute path.
+   *
+   * Geo-located hops are first clustered by geographic proximity so that ISP
+   * backbone IPs which all resolve to the same country centroid collapse into a
+   * single diamond marker with a combined popup, rather than flooding the same
+   * spot with overlapping invisible markers.  Distinct geographic clusters are
+   * then connected by the same arc / arrow / glow connector used for the
+   * origin→target arc on non-traceroute maps (style passed via styleCfg),
+   * giving a visually consistent result with the "Public IP Detection" map.
+   *
+   * Design principles:
+   *  • Fail-safe: hops without HasGeo===true are silently skipped.
+   *  • Backward compatible: falls back to L.polyline when styleCfg is omitted.
+   *  • No hardcoded colours: all colour values come from the caller (colors).
+   *  • No global state: mapInstance is passed explicitly.
+   *  • Single Responsibility: only builds the layer; does NOT mutate the map.
+   *
+   * @param  {Array}   hops        HopEntry objects from the backend
+   *                               (TTL, IP, Hostname, ASN, Country,
+   *                                AvgRTT, LossPct, HasGeo, Lat, Lon)
+   * @param  {{originColor:string, targetColor:string}} colors
+   *                               Hex colour strings for gradient endpoints
+   * @param  {object|null} styleCfg CONNECTOR_LINE_CONFIGS entry (same style
+   *                               used for the Public IP Detection arc); when
+   *                               present each cluster pair is rendered via
+   *                               buildConnectorLayer for style consistency.
+   *                               Pass null/undefined for plain polyline fallback.
+   * @param  {L.Map}   mapInstance  Leaflet map instance (may be null/undefined)
+   * @returns {L.LayerGroup}
+   */
+  function buildRouteLayer(hops, colors, styleCfg, mapInstance) {
+    if (!hops || !hops.length || !mapInstance) return L.layerGroup();
+
+    // Filter to hops with valid geo coordinates.
+    const geoHops = hops.filter(function(h) {
+      return h.HasGeo && (h.Lat || h.Lon);   // accepts 0,0 only when set intentionally
+    });
+    if (geoHops.length === 0) return L.layerGroup();
+
+    // Cluster geographically co-located hops so that country-centroid IPs
+    // (multiple hops with identical coordinates) appear as one marker.
+    const clusters = _clusterHops(geoHops);
+    const n        = clusters.length;
+
+    const group = L.layerGroup();
+    const { originColor, targetColor } = colors;
+
+    // ── Connectors between distinct geographic clusters ──────────────────────
+    // When a styleCfg is provided (the user-selected Public IP Detection style),
+    // delegate to buildConnectorLayer so the arc, arrows, and glow match
+    // the non-traceroute map exactly.  Without styleCfg, fall back to a plain
+    // L.polyline segment (backward-compatible with the original behaviour).
+    for (let i = 0; i < n - 1; i++) {
+      const c1     = clusters[i];
+      const c2     = clusters[i + 1];
+      const color1 = lerpHex(originColor, targetColor, i / (n - 1 || 1));
+      const color2 = lerpHex(originColor, targetColor, (i + 1) / (n - 1 || 1));
+      if (styleCfg) {
+        const p = { HasLocation: true, Lat: c1.lat, Lon: c1.lon };
+        const q = { HasLocation: true, Lat: c2.lat, Lon: c2.lon };
+        buildConnectorLayer(p, q, styleCfg, color1, color2, mapInstance).addTo(group);
+      } else {
+        const tMid = (n > 2) ? (i + 0.5) / (n - 1) : 0.5;
+        L.polyline(
+          [[c1.lat, c1.lon], [c2.lat, c2.lon]],
+          { color: lerpHex(originColor, targetColor, tMid), weight: 2.5, opacity: 0.85, dashArray: '7 5' }
+        ).addTo(group);
+      }
+    }
+
+    // ── Diamond hop cluster markers ──────────────────────────────────────────
+    // L.marker + _buildHopMarkerIcon creates a small diamond that shares the
+    // same CSS family as the origin/target markers for visual consistency.
+    // zIndexOffset -100 keeps hop diamonds below the emphatic end-point markers
+    // without pulling them out of the marker pane.
+    clusters.forEach(function(cluster, idx) {
+      const t         = n > 1 ? idx / (n - 1) : 0;
+      const fillColor = lerpHex(originColor, targetColor, t);
+      const popupHtml = cluster.hops.length === 1
+        ? _buildHopPopupHtml(cluster.hops[0])
+        : _buildClusterPopupHtml(cluster.hops);
+      L.marker([cluster.lat, cluster.lon], {
+        icon:         _buildHopMarkerIcon(fillColor, cluster.hops.length),
+        zIndexOffset: -100,
+      }).bindPopup(popupHtml).addTo(group);
+    });
+
+    return group;
+  }
+
   // ── Public: build connector layer ─────────────────────────────────────────
 
   /** Build a Leaflet LayerGroup that draws the origin→target connector arc.
@@ -555,6 +771,6 @@
 
   // ── Export ─────────────────────────────────────────────────────────────────
   const _ns = window.PathProbe || {};
-  _ns.MapConnector = { buildConnectorLayer };
+  _ns.MapConnector = { buildConnectorLayer, buildRouteLayer };
   window.PathProbe = _ns;
 })();

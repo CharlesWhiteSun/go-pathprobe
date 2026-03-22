@@ -1082,7 +1082,6 @@ fieldset.target-fields legend {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-
 /* Popup inner layout */
 .geo-popup { font-size: .84rem; min-width: 130px; line-height: 1.5; }
 .geo-popup__role {
@@ -1098,9 +1097,33 @@ fieldset.target-fields legend {
 }
 .geo-popup__role--origin { background: var(--mc-origin); }
 .geo-popup__role--target { background: var(--mc-target); }
+/* Intermediate traceroute hop marker popup — neutral slate so it visually
+   recedes behind the bolder origin/target role colours. */
+.geo-popup__role--hop    { background: #607d8b; }
 .geo-popup__ip  { font-weight: 600; }
 .geo-popup__row { color: #555; font-size: .82rem; }
 .geo-popup__asn { font-size: .74rem; color: #888; margin-top: .15rem; }
+/* Cluster popup: each co-located hop gets its own row with a subtle separator */
+.geo-popup__cluster-hop { border-top: 1px solid rgba(0,0,0,.08); padding-top: 3px; margin-top: 3px; }
+.geo-popup__cluster-hop:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+/* Intermediate traceroute hop diamond marker — smaller than origin/target
+   (10×10 px) and without the pulse animation, so it recedes visually. */
+.geo-marker--hop { position: relative; }
+.geo-marker__hop-core {
+  width: 10px; height: 10px;
+  transform: rotate(45deg);
+  border: 1.5px solid rgba(255,255,255,.88);
+  box-shadow: 0 0 4px rgba(0,0,0,.35);
+}
+.geo-marker__hop-badge {
+  position: absolute; top: -8px; right: -8px;
+  font-size: 8px; font-weight: 700;
+  line-height: 13px; min-width: 13px;
+  text-align: center; padding: 0 2px;
+  border-radius: 6px;
+  background: rgba(30,30,30,.72);
+  color: #fff; white-space: nowrap;
+}
 
 /* -- History Panel ----------------------------------------------------------- */
 .history-empty {

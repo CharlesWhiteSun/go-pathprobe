@@ -212,6 +212,11 @@ window.LOCALES = {
     /* ── Geo precision labels ─────────────────────────────────────────── */
     'geo-precision-country': 'Country-level',
     'geo-precision-city':    'City-level',
+    /* ── Route info card (traceroute mode, geo coverage summary) ────────── */
+    'route-info-title':       'Map Coverage',
+    'route-info-hops':        'Total hops',
+    'route-info-geolocated':  'Geo-located',
+    'route-info-locations':   'Map locations',
     /* ── Marker style label ─────────────────────────────────────────────── */
     'marker-style-diamond-pulse':    'Pulse',
     /* ── Marker colour scheme ────────────────────────────────────────────── */
@@ -446,7 +451,12 @@ window.LOCALES = {
     /* ── 地理精度標籤 ─────────────────────────────────────────── */
     'geo-precision-country': '國家層級',
     'geo-precision-city':    '城市層級',
-    /* ── 標記外觀標籤 ─────────────────────────────────────────── */
+    /* ── 路由資訊卡（路由追蹤模式，地理覆蓋摘要） ──────────────── */
+    'route-info-title':       '地圖覆蓋',
+    'route-info-hops':        '躍點總數',
+    'route-info-geolocated':  '已定位',
+    'route-info-locations':   '地圖標記數',
+    /* ── 標記外觀標籤 ───────────────────────────────────── */
     'marker-style-diamond-pulse':    '脈衝',
     /* ── 標記配色方案 ────────────────────────────────────────── */
     'marker-color-ocean':      '海洋',

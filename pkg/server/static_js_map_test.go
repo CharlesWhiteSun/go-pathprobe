@@ -639,8 +639,11 @@ func TestStaticJS_ConnectorLineStateVars(t *testing.T) {
 	}
 }
 
-// TestStaticJS_RenderMapUsesConnectorLayer verifies that renderMap() calls
-// buildConnectorLayer() to draw the gradient arc instead of a plain polyline.
+// TestStaticJS_RenderMapUsesConnectorLayer verifies that renderMap() delegates
+// connector/route layer building to refreshConnectorLayer() rather than drawing
+// layers inline.  refreshConnectorLayer() is the single place that decides
+// between the multi-hop route layer (traceroute) and the simple gradient arc
+// (other modes), keeping renderMap() free of connector-strategy logic.
 func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/map.js")
 
@@ -660,11 +663,14 @@ func TestStaticJS_RenderMapUsesConnectorLayer(t *testing.T) {
 		fnBody = body[fnStart:end]
 	}
 
-	if !strings.Contains(fnBody, "buildConnectorLayer(") {
-		t.Error("map.js: renderMap must call buildConnectorLayer() to draw the gradient arc connector")
+	// renderMap() must delegate to refreshConnectorLayer() — which is the single
+	// source of truth that picks between route layer and simple arc.
+	if !strings.Contains(fnBody, "refreshConnectorLayer()") {
+		t.Error("map.js: renderMap must call refreshConnectorLayer() to draw the connector arc or route layer")
 	}
+	// Hardcoded colour in renderMap would mean the connector strategy leaked in.
 	if strings.Contains(fnBody, "color: '#5b8dee'") {
-		t.Error("map.js: renderMap must not use the hardcoded '#5b8dee' polyline — use buildConnectorLayer() instead")
+		t.Error("map.js: renderMap must not use the hardcoded '#5b8dee' polyline — use refreshConnectorLayer() instead")
 	}
 }
 
@@ -763,8 +769,9 @@ func TestStaticJS_IsMapLoadedHelper(t *testing.T) {
 }
 
 // TestStaticJS_RenderMapSetsViewBeforeConnector verifies that renderMap()
-// calls setView / fitBounds before buildConnectorLayer() so the Leaflet map
-// is fully initialised when latLngToLayerPoint() is first invoked.
+// calls setView / fitBounds before refreshConnectorLayer() so the Leaflet map
+// is fully initialised when latLngToLayerPoint() is first invoked inside the
+// connector or route-layer building code.
 func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/map.js")
 
@@ -784,25 +791,27 @@ func TestStaticJS_RenderMapSetsViewBeforeConnector(t *testing.T) {
 		fnBody = body[fnStart:end]
 	}
 
-	// Find relative positions: setView/fitBounds must appear before buildConnectorLayer.
+	// Find relative positions: setView/fitBounds must appear before refreshConnectorLayer.
+	// Use the semicolon-terminated form "refreshConnectorLayer();" to avoid matching
+	// the same identifier when it appears inside a comment (comments never end with ;).
 	setViewIdx := strings.Index(fnBody, ".setView(")
 	fitBoundsIdx := strings.Index(fnBody, ".fitBounds(")
-	connectorIdx := strings.Index(fnBody, "buildConnectorLayer(")
+	connectorIdx := strings.Index(fnBody, "refreshConnectorLayer();")
 
 	if setViewIdx == -1 && fitBoundsIdx == -1 {
 		t.Fatal("map.js: renderMap must call setView() or fitBounds() to initialise the map")
 	}
 	if connectorIdx == -1 {
-		t.Fatal("map.js: renderMap must call buildConnectorLayer()")
+		t.Fatal("map.js: renderMap must call refreshConnectorLayer()")
 	}
 
-	// At least one viewport-setting call must precede buildConnectorLayer.
+	// At least one viewport-setting call must precede refreshConnectorLayer.
 	viewportIdx := setViewIdx
 	if fitBoundsIdx != -1 && (viewportIdx == -1 || fitBoundsIdx < viewportIdx) {
 		viewportIdx = fitBoundsIdx
 	}
 	if viewportIdx >= connectorIdx {
-		t.Error("map.js: renderMap must call setView/fitBounds BEFORE buildConnectorLayer() " +
+		t.Error("map.js: renderMap must call setView/fitBounds BEFORE refreshConnectorLayer() " +
 			"so the Leaflet map is loaded before latLngToLayerPoint() is invoked")
 	}
 }

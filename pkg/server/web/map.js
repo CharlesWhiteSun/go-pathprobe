@@ -34,8 +34,12 @@
   let _markerColorSchemeId = 'ocean';
   // Last rendered geo data; retained so refreshMapMarkers() can redraw markers
   // after a style change without a full map rebuild.
-  let _lastPub = null;
-  let _lastTgt = null;
+  let _lastPub   = null;
+  let _lastTgt   = null;
+  // Last rendered traceroute hop array; retained alongside _lastPub/_lastTgt so
+  // that refreshConnectorLayer() can rebuild the route layer after colour-scheme
+  // or style changes without requiring a full renderMap() call.
+  let _lastRoute = null;
   // The live Leaflet legend control; stored so refreshMapMarkers() can remove
   // the old legend and add a fresh one that reflects the current colour scheme.
   let _legendControl = null;
@@ -44,6 +48,11 @@
   // Live Leaflet layer group for the connector arc between origin and target;
   // stored so refreshConnectorLayer() can remove the old layer before rebuilding.
   let _connectorLayer  = null;
+  // Live Leaflet layer group for the multi-hop traceroute route path;
+  // contains gradient polyline segments and circle markers for each geo hop.
+  // Mutually exclusive with _connectorLayer: when route hops have geo data the
+  // route layer is preferred and the simple arc is not drawn.
+  let _routeLayer = null;
   // Last computed great-circle distance in km between origin and target;
   // retained so rerenderLabels() can refresh the distance badge text when the
   // locale changes without recomputing haversineKm().  Null when no two-point
@@ -354,16 +363,102 @@
       : L.layerGroup();
   }
 
-  /** Remove any existing connector arc layer and draw a fresh one using the
-   *  current _connectorStyleId and colour scheme.  No-op when the map has
-   *  not been initialised or geo data for both endpoints is unavailable.
+  /** Private wrapper — delegates multi-hop route rendering to map-connector.js.
+   *  Passes the Leaflet map instance and the active connector style config
+   *  explicitly so map-connector.js can render hop-to-hop segments using the
+   *  same arc / arrow / glow style as the Public IP Detection map.
+   */
+  function buildRouteLayer(hops, originColor, targetColor) {
+    const styleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
+                   || CONNECTOR_LINE_CONFIGS['dot-bead'];
+    return (window.PathProbe && window.PathProbe.MapConnector)
+      ? window.PathProbe.MapConnector.buildRouteLayer(
+          hops, { originColor, targetColor }, styleCfg, _map)
+      : L.layerGroup();
+  }
+
+  /** Show or update the #geo-route-info info card that explains the geo
+   *  coverage of the current traceroute result.  Displayed when:
+   *    • Some hops lack geo data (private IPs, timeouts, no GeoIP record), OR
+   *    • Multiple hops cluster at the same geographic location (e.g. all hops
+   *      within one country resolve to the same country centroid).
+   *  Uses the same .route-stats-card / .route-stats-grid CSS as the route
+   *  summary card so the visual language is consistent.
+   *  Pass null/undefined to hide the card (non-traceroute modes).
+   */
+  function _renderRouteInfoCard(route) {
+    const card = document.getElementById('geo-route-info');
+    if (!card) return;
+    if (!route || !route.length) { card.hidden = true; return; }
+
+    const geoHops = route.filter(function(h) { return h.HasGeo && (h.Lat || h.Lon); });
+    // Count distinct geographic locations using the same coordinate resolution
+    // as _clusterHops() in map-connector.js (0.05° threshold ≈ 5.5 km).
+    const locKey   = function(h) { return h.Lat.toFixed(2) + ',' + h.Lon.toFixed(2); };
+    const clusters = (new Set(geoHops.map(locKey))).size;
+
+    // Hide when every hop has a unique geo location — nothing extra to explain.
+    if (geoHops.length === route.length && clusters === geoHops.length) {
+      card.hidden = true;
+      return;
+    }
+
+    // Update the card title using the current locale.
+    const titleEl = card.querySelector('.route-stats-title');
+    if (titleEl) titleEl.textContent = t('route-info-title');
+
+    // Populate the stat grid with the same .route-stat-item pattern used by
+    // renderRouteStats() in renderer.js so the two cards look identical.
+    const grid = card.querySelector('.route-stats-grid');
+    if (!grid) { card.hidden = true; return; }
+
+    const items = [
+      { label: t('route-info-hops'),       value: String(route.length)  },
+      { label: t('route-info-geolocated'), value: String(geoHops.length) },
+      { label: t('route-info-locations'),  value: String(clusters)       },
+    ];
+    grid.innerHTML = items.map(function(item) {
+      return '<div class="route-stat-item">' +
+        '<span class="route-stat-label">' + esc(item.label) + '</span>' +
+        '<span class="route-stat-value">' + esc(item.value) + '</span>' +
+        '</div>';
+    }).join('');
+    card.hidden = false;
+  }
+
+  /** Remove any existing connector or route layer and draw a fresh one.
+   *
+   *  Priority:
+   *    1. Multi-hop route layer  — when _lastRoute contains hops with geo data.
+   *       The route layer renders the actual traced path as gradient polyline
+   *       segments + circle markers; the simple origin→target arc is NOT drawn
+   *       because it would be misleading (the arc is a straight great-circle
+   *       approximation, not the real network path).
+   *    2. Simple arc fallback    — when no route geo hops are available but
+   *       both origin and target have location data (existing behaviour).
+   *
+   *  No-op when the map has not been initialised.
    */
   function refreshConnectorLayer() {
-    if (!isMapLoaded() || !_lastPub || !_lastTgt) return;
+    if (!isMapLoaded()) return;
     if (_connectorLayer) { _connectorLayer.remove(); _connectorLayer = null; }
-    if (!_lastPub.HasLocation || !_lastTgt.HasLocation) return;
-    const scheme   = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
-                   || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
+    if (_routeLayer)     { _routeLayer.remove();     _routeLayer     = null; }
+
+    const scheme = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
+                 || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
+
+    // ── Priority 1: multi-hop route layer ──────────────────────────────────
+    const geoHops = (_lastRoute || []).filter(function(h) { return h.HasGeo; });
+    if (geoHops.length > 0) {
+      _routeLayer = buildRouteLayer(_lastRoute, scheme.originColor, scheme.targetColor);
+      _routeLayer.addTo(_map);
+      _renderRouteInfoCard(_lastRoute);  // explain geo coverage when hops cluster
+      return;  // route shown — skip simple arc to avoid misleading overlay
+    }
+
+    // ── Priority 2: simple origin→target arc (existing behaviour) ──────────
+    _renderRouteInfoCard(null);  // hide route info card in non-traceroute mode
+    if (!_lastPub || !_lastTgt || !_lastPub.HasLocation || !_lastTgt.HasLocation) return;
     const styleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
                    || CONNECTOR_LINE_CONFIGS['dot-bead'];
     _connectorLayer = buildConnectorLayer(_lastPub, _lastTgt, styleCfg,
@@ -388,12 +483,23 @@
   // ── Main render function ───────────────────────────────────────────────────
 
   /** Render (or remove) the Leaflet map based on geo results.
-   *  pub / tgt are GeoAnnotation objects that may be null/undefined.
+   *
+   * @param {object|null}  pub   PublicGeo annotation (client's public IP geo)
+   * @param {object|null}  tgt   TargetGeo annotation (diagnostic target geo)
+   * @param {Array|null}   route Optional array of traceroute HopEntry objects.
+   *                             When supplied and at least one hop has HasGeo,
+   *                             the map shows a multi-point route path instead
+   *                             of the single origin→target arc.  The viewport
+   *                             is fitted over all geo-located points (pub, tgt,
+   *                             and route hops).  Passing null/undefined falls
+   *                             back to the existing two-point arc behaviour.
    */
-  function renderMap(pub, tgt) {
-    // Retain geo data so refreshMapMarkers() can redraw without a full rebuild.
-    _lastPub = pub;
-    _lastTgt = tgt;
+  function renderMap(pub, tgt, route) {
+    // Retain all geo data so refreshMapMarkers() / refreshConnectorLayer() can
+    // redraw after style changes without requiring a full rebuild.
+    _lastPub   = pub;
+    _lastTgt   = tgt;
+    _lastRoute = route || null;
 
     const container = document.getElementById('geo-map');
     const distEl    = document.getElementById('geo-distance');
@@ -402,22 +508,29 @@
     // Reset distance badge on every render cycle.
     if (distEl) distEl.hidden = true;
 
+    // Origin / target diamond markers (unchanged behaviour).
     const points = [];
-    if (pub && pub.HasLocation) {
-      points.push({ geo: pub, type: 'origin' });
-    }
-    if (tgt && tgt.HasLocation) {
-      points.push({ geo: tgt, type: 'target' });
-    }
+    if (pub && pub.HasLocation) points.push({ geo: pub, type: 'origin' });
+    if (tgt && tgt.HasLocation) points.push({ geo: tgt, type: 'target' });
 
-    // Hide the map when there are no geo-located points.
-    if (points.length === 0) {
+    // Route hops with valid geo coordinates (new).
+    const geoHops = (_lastRoute || []).filter(function(h) { return h.HasGeo && (h.Lat || h.Lon); });
+
+    // All geo-located points used to calculate the map viewport.
+    const boundsLatLngs = [
+      ...points.map(function(p) { return [p.geo.Lat, p.geo.Lon]; }),
+      ...geoHops.map(function(h) { return [h.Lat, h.Lon]; }),
+    ];
+
+    // Hide the map when no geo data is available anywhere.
+    if (boundsLatLngs.length === 0) {
       container.classList.remove('visible');
       const outerEl = document.getElementById('geo-map-outer');
       if (outerEl) outerEl.hidden = true;
-      if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; }
+      if (_map) { _map.remove(); _map = null; _tileLayer = null; _connectorLayer = null; _routeLayer = null; }
       _lastDistanceKm = null;
       _markerByType = {};
+      _renderRouteInfoCard(null);  // clear info card when map is hidden
       return;
     }
 
@@ -441,59 +554,58 @@
       maxZoom: 18,
     }).addTo(_map);
 
-    const latLngs = [];
+    // ── Origin / target diamond markers ──────────────────────────────────────
+    const markerLatLngs = [];
     for (const p of points) {
       const m = L.marker([p.geo.Lat, p.geo.Lon], { icon: buildMarkerIcon(p.type) })
         .addTo(_map)
         .bindPopup(buildPopupHtml(p.geo, p.type));
       _markerByType[p.type] = m;
-      latLngs.push([p.geo.Lat, p.geo.Lon]);
+      markerLatLngs.push([p.geo.Lat, p.geo.Lon]);
     }
 
-    // Set the map viewport BEFORE building the connector because functions such
-    // as latLngToLayerPoint() and the dash-offset calculation require the map to
-    // be fully initialised (Leaflet throws "Set map center and zoom first." if
-    // called before setView / fitBounds).
-    if (latLngs.length === 1) {
-      // Use a lower zoom for country-level coordinates (country centroid) so
-      // the surrounding context is visible; city-level coordinates can zoom in further.
-      const precision = points[0].geo.LocationPrecision;
+    // ── Viewport setup ────────────────────────────────────────────────────────
+    // MUST be done BEFORE building the connector/route layer because Leaflet
+    // functions such as latLngToLayerPoint() require the map to be fully
+    // initialised (throws "Set map center and zoom first." otherwise).
+    if (boundsLatLngs.length === 1) {
+      // Single geo point: zoom level depends on coordinate precision.
+      const precision = (points.length > 0 ? points[0].geo.LocationPrecision : null)
+                      || (geoHops.length  > 0 ? '' : '');
       const zoom = (precision === 'city') ? 8 : 5;
-      _map.setView(latLngs[0], zoom);
+      _map.setView(boundsLatLngs[0], zoom);
     } else {
-      // Pre-compute the great-circle distance so it drives both the viewport
-      // proximity guard and the distance badge without a second haversineKm() call.
-      const km = haversineKm(latLngs[0][0], latLngs[0][1], latLngs[1][0], latLngs[1][1]);
-      _lastDistanceKm = km;
-      const hasCountryPrecision = points.some(p => p.geo.LocationPrecision === 'country');
-      // Proximity guard: fitBounds() over-zooms when country centroids coincide
-      // or are very close (e.g. both points map to the same national centroid).
-      // A fixed zoom on the midpoint keeps geographic context visible.
-      if (hasCountryPrecision && km < GEO_SAME_REGION_THRESHOLD_KM) {
-        const midLat = (latLngs[0][0] + latLngs[1][0]) / 2;
-        const midLon = (latLngs[0][1] + latLngs[1][1]) / 2;
-        _map.setView([midLat, midLon], 5);
+      // Multiple geo points: fit the viewport over all of them.
+      // Distance badge and proximity guard only apply when both pub and tgt
+      // have location data (existing two-point behaviour; unchanged).
+      if (markerLatLngs.length === 2) {
+        const km = haversineKm(
+          markerLatLngs[0][0], markerLatLngs[0][1],
+          markerLatLngs[1][0], markerLatLngs[1][1]);
+        _lastDistanceKm = km;
+        const hasCountryPrecision = points.some(p => p.geo.LocationPrecision === 'country');
+        // Proximity guard: prevents over-zoom when two country centroids coincide.
+        if (hasCountryPrecision && km < GEO_SAME_REGION_THRESHOLD_KM) {
+          const midLat = (markerLatLngs[0][0] + markerLatLngs[1][0]) / 2;
+          const midLon = (markerLatLngs[0][1] + markerLatLngs[1][1]) / 2;
+          _map.setView([midLat, midLon], 5);
+        } else {
+          _map.fitBounds(boundsLatLngs, { padding: [40, 40] });
+        }
+        updateDistanceBadge();
       } else {
-        _map.fitBounds(latLngs, { padding: [40, 40] });
+        // Route hops only (or mixed without both pub+tgt): plain fitBounds.
+        _map.fitBounds(boundsLatLngs, { padding: [40, 40] });
       }
 
-      // Draw the gradient arc connector and show the distance badge.
-      // Connector style and colour scheme come from module-level state so
-      // switching pickers refreshes the arc without a full map rebuild.
-      const arcScheme   = MARKER_COLOR_SCHEME_CONFIGS[_markerColorSchemeId]
-                        || MARKER_COLOR_SCHEME_CONFIGS['ocean'];
-      const arcStyleCfg = CONNECTOR_LINE_CONFIGS[_connectorStyleId]
-                        || CONNECTOR_LINE_CONFIGS['dot-bead'];
-      _connectorLayer   = buildConnectorLayer(
-        points[0].geo, points[1].geo,
-        arcStyleCfg, arcScheme.originColor, arcScheme.targetColor
-      );
-      _connectorLayer.addTo(_map);
-      updateDistanceBadge();
+      // Draw connector arc OR multi-hop route layer via refreshConnectorLayer().
+      // refreshConnectorLayer() selects the route layer when _lastRoute has geo
+      // hops; otherwise falls back to the simple origin→target arc.
+      refreshConnectorLayer();
     }
 
-    // Add a legend when multiple marker types are present so users can
-    // distinguish origin (偵測起點) from target (偵測目標).
+    // Add a legend when multiple origin/target marker types are present so users
+    // can distinguish 偵測起點 from 偵測目標.
     if (points.length > 1) {
       _legendControl = buildMapLegend(points.map(p => p.type));
       _legendControl.addTo(_map);
@@ -526,6 +638,7 @@
     renderMapBar();
     refreshMapMarkers();
     updateDistanceBadge();
+    _renderRouteInfoCard(_lastRoute);  // refresh i18n text in route info card
   }
 
   // ── Global bridge (HTML onclick buttons need window.setMapTileVariant) ──────

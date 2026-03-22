@@ -327,6 +327,13 @@
       <div id="geo-map" aria-label="Geo location map"></div>
     </div>
     <div id="geo-distance" class="geo-distance" hidden></div>
+    <!-- Route info card: shown in traceroute mode when geo coverage is limited.     -->
+    <!-- Uses the same .route-stats-card visual style as the route summary card.  -->
+    <!-- Populated entirely by _renderRouteInfoCard() in map.js.                  -->
+    <div id="geo-route-info" class="route-stats-card" hidden aria-live="polite">
+      <h4 class="route-stats-title"></h4>
+      <div class="route-stats-grid"></div>
+    </div>
   </section>
 
   <!-- ── History ──────────────────────────────────────────────────── -->

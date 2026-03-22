@@ -88,8 +88,10 @@ func TestStaticJS_SSEResultRevealOrder(t *testing.T) {
 		t.Fatal("api-client.js: evtName === 'result' branch not found in handleSSEMessage")
 	}
 	// Inspect a window large enough to cover the result branch body.
+	// The window is generous (900 chars) to accommodate inline comments that
+	// may exist between 'evtName === result' and the renderMap() call.
 	windowStart := fnStart + resultBranchIdx
-	end := windowStart + 600
+	end := windowStart + 900
 	if end > len(body) {
 		end = len(body)
 	}
