@@ -193,3 +193,126 @@ func TestStaticHTML_LiveTableSplitColumns(t *testing.T) {
 		t.Error("index.html: live-progress table must include th-hostname column")
 	}
 }
+
+// TestStaticHTML_LiveTableTypeColumn verifies that the live progress table
+// in index.html includes the th-type column header for IP classification tags.
+func TestStaticHTML_LiveTableTypeColumn(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	if !strings.Contains(body, `data-i18n="th-type"`) {
+		t.Error("index.html: live-progress table must include th-type column for IP classification")
+	}
+}
+
+// TestStaticJS_HopClassifierClassifyIPTagsExported verifies that
+// classifyIPTags is defined and exported alongside classifyIP.
+func TestStaticJS_HopClassifierClassifyIPTagsExported(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	if !strings.Contains(body, "classifyIPTags") {
+		t.Error("hop-classifier.js: classifyIPTags must be defined and exported")
+	}
+	// Both functions must appear in the exported HopClassifier object.
+	if !strings.Contains(body, "classifyIPTags }") {
+		t.Error("hop-classifier.js: both classifyIP and classifyIPTags must appear in the HopClassifier export")
+	}
+}
+
+// TestStaticJS_HopClassifierIPv4Classes verifies that classifyIPTags covers
+// all five IPv4 classes (A–E) using first-octet boundary thresholds.
+func TestStaticJS_HopClassifierIPv4Classes(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	boundaries := []struct{ needle, label string }{
+		{"'class-a'", "class-a tag"},
+		{"'class-b'", "class-b tag"},
+		{"'class-c'", "class-c tag"},
+		{"'class-d'", "class-d tag"},
+		{"'class-e'", "class-e tag"},
+		{"a < 128", "Class A upper boundary (< 128)"},
+		{"a < 192", "Class B upper boundary (< 192)"},
+		{"a < 224", "Class C upper boundary (< 224)"},
+		{"a < 240", "Class D upper boundary (< 240)"},
+	}
+	for _, b := range boundaries {
+		if !strings.Contains(body, b.needle) {
+			t.Errorf("hop-classifier.js: missing %s (expected %q)", b.label, b.needle)
+		}
+	}
+}
+
+// TestStaticJS_HopClassifierCGNAT verifies that classifyIPTags recognises
+// the CGNAT / Shared Address range 100.64.0.0/10 (RFC 6598).
+func TestStaticJS_HopClassifierCGNAT(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	if !strings.Contains(body, "'cgnat'") {
+		t.Error("hop-classifier.js: must return 'cgnat' for 100.64.0.0/10 range")
+	}
+	if !strings.Contains(body, "b >= 64 && b <= 127") {
+		t.Error("hop-classifier.js: must check second-octet range (b >= 64 && b <= 127) for CGNAT")
+	}
+}
+
+// TestStaticJS_HopClassifierDocumentation verifies that classifyIPTags handles
+// the three TEST-NET documentation ranges defined in RFC 5737.
+func TestStaticJS_HopClassifierDocumentation(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	if !strings.Contains(body, "'documentation'") {
+		t.Error("hop-classifier.js: must return 'documentation' for TEST-NET ranges")
+	}
+	testNets := []struct{ needle, label string }{
+		{"b === 0   && c === 2", "TEST-NET-1 (192.0.2.0/24)"},
+		{"b === 51  && c === 100", "TEST-NET-2 (198.51.100.0/24)"},
+		{"b === 0   && c === 113", "TEST-NET-3 (203.0.113.0/24)"},
+	}
+	for _, tn := range testNets {
+		if !strings.Contains(body, tn.needle) {
+			t.Errorf("hop-classifier.js: missing %s check (expected %q)", tn.label, tn.needle)
+		}
+	}
+}
+
+// TestStaticJS_HopClassifierIPv6 verifies that classifyIPTags returns the
+// 'ipv6' tag for IPv6 addresses by detecting a colon in the string.
+func TestStaticJS_HopClassifierIPv6(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	if !strings.Contains(body, "'ipv6'") {
+		t.Error("hop-classifier.js: must return 'ipv6' tag for IPv6 addresses")
+	}
+	if !strings.Contains(body, "indexOf(':') !== -1") {
+		t.Error("hop-classifier.js: must detect IPv6 via indexOf(':') colon check")
+	}
+}
+
+// TestStaticJS_HopClassifierPublicTag verifies that classifyIPTags explicitly
+// returns a 'public' tag for ordinary routable addresses.
+func TestStaticJS_HopClassifierPublicTag(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/hop-classifier.js")
+
+	if !strings.Contains(body, "'public'") {
+		t.Error("hop-classifier.js: must return 'public' for routable public addresses")
+	}
+}
+
+// TestStaticJS_I18nHopTypeExtendedKeys verifies that i18n.js defines all
+// extended hop classification keys added by classifyIPTags.
+func TestStaticJS_I18nHopTypeExtendedKeys(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/i18n.js")
+
+	keys := []string{
+		"'th-type'",
+		"'hop-type-class-a'", "'hop-type-class-b'", "'hop-type-class-c'",
+		"'hop-type-class-d'", "'hop-type-class-e'",
+		"'hop-type-public'", "'hop-type-cgnat'", "'hop-type-multicast'",
+		"'hop-type-reserved'", "'hop-type-broadcast'",
+		"'hop-type-documentation'", "'hop-type-6to4-relay'", "'hop-type-ipv6'",
+	}
+	for _, k := range keys {
+		if !strings.Contains(body, k) {
+			t.Errorf("i18n.js: missing extended hop-type key %s", k)
+		}
+	}
+}

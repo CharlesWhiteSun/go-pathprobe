@@ -430,9 +430,12 @@ func TestStaticJS_TimedoutHopShowsLoss(t *testing.T) {
 func TestStaticJS_IPAndHostnameSeparateColumns(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
 
-	// Both column-header i18n keys must be present.
+	// All three column-header i18n keys must be present.
 	if !strings.Contains(body, "'th-ip'") {
 		t.Error("renderer.js: must reference i18n key 'th-ip' for the separate IP column")
+	}
+	if !strings.Contains(body, "'th-type'") {
+		t.Error("renderer.js: must reference i18n key 'th-type' for the IP type column")
 	}
 	if !strings.Contains(body, "'th-hostname'") {
 		t.Error("renderer.js: must reference i18n key 'th-hostname' for the separate Hostname column")
@@ -441,6 +444,31 @@ func TestStaticJS_IPAndHostnameSeparateColumns(t *testing.T) {
 	// (hop-host sub-span inside ipCell is removed; hostname is its own cell)
 	if strings.Contains(body, "class=\"hop-host\"") {
 		t.Error("renderer.js: 'hop-host' inline sub-span must be removed; Hostname is a separate cell")
+	}
+}
+
+// TestStaticJS_HopTypeTagsHelper verifies that renderer.js defines the
+// _hopTypeTags helper and delegates to HopClassifier.classifyIPTags for
+// multi-tag classification.
+func TestStaticJS_HopTypeTagsHelper(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	if !strings.Contains(body, "function _hopTypeTags(") {
+		t.Error("renderer.js: _hopTypeTags helper must be defined")
+	}
+	if !strings.Contains(body, "classifyIPTags") {
+		t.Error("renderer.js: _hopTypeTags must call HopClassifier.classifyIPTags")
+	}
+	// Extended badge CSS class names must be referenced in the file (in comment or code).
+	extendedClasses := []string{
+		"hop-ip-badge--class-a", "hop-ip-badge--class-b", "hop-ip-badge--class-c",
+		"hop-ip-badge--class-d", "hop-ip-badge--class-e",
+		"hop-ip-badge--public", "hop-ip-badge--cgnat",
+	}
+	for _, cls := range extendedClasses {
+		if !strings.Contains(body, cls) {
+			t.Errorf("renderer.js: must reference CSS class %q (in comment or code)", cls)
+		}
 	}
 }
 

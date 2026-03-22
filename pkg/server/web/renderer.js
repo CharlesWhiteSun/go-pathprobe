@@ -87,6 +87,7 @@
   // or an empty string for public IPs.  Delegates classification to the
   // HopClassifier module so this function stays free of IP-range literals.
   function _hopIpBadge(ip) {
+    // Scope CSS classes (listed for tooling): hop-ip-badge--private hop-ip-badge--loopback hop-ip-badge--link-local
     const clf = window.PathProbe && window.PathProbe.HopClassifier;
     if (!clf) return '';
     const scope = clf.classifyIP(ip);
@@ -94,6 +95,29 @@
     return ' <span class="hop-ip-badge hop-ip-badge--' + scope + '">' +
       esc(_t('hop-type-' + scope)) +
     '</span>';
+  }
+
+  // ── Private: _hopTypeTags ─────────────────────────────────────────────────
+  // Returns zero or more classification badge spans for the "Type" column.
+  // Delegates to HopClassifier.classifyIPTags so all range logic lives in
+  // hop-classifier.js.  Each tag key maps to 'hop-type-{key}' in i18n and
+  // 'hop-ip-badge--{key}' in CSS.
+  //
+  // Extended CSS classes referenced here (for tooling / grep):
+  //   hop-ip-badge--class-a  hop-ip-badge--class-b  hop-ip-badge--class-c
+  //   hop-ip-badge--class-d  hop-ip-badge--class-e  hop-ip-badge--public
+  //   hop-ip-badge--cgnat    hop-ip-badge--multicast hop-ip-badge--reserved
+  //   hop-ip-badge--broadcast hop-ip-badge--documentation hop-ip-badge--6to4-relay
+  //   hop-ip-badge--ipv6
+  function _hopTypeTags(ip) {
+    const clf = window.PathProbe && window.PathProbe.HopClassifier;
+    if (!clf || !clf.classifyIPTags) return '';
+    const tags = clf.classifyIPTags(ip);
+    if (!tags || !tags.length) return '';
+    return tags.map(function(key) {
+      return '<span class="hop-ip-badge hop-ip-badge--' + key + '">' +
+        esc(_t('hop-type-' + key)) + '</span>';
+    }).join(' ');
   }
 
   // ── Private: renderRouteStats ─────────────────────────────────────────────
@@ -152,10 +176,13 @@
       const timedout  = !h.IP;
       const rowClass  = timedout ? ' class="hop-timedout"' : '';
 
-      // ── IP column: address + optional scope badge ──────────────────────
+      // ── IP column: clean address; ??? for timed-out hops ─────────────────
       const ipCell = timedout
         ? '<em class="hop-timeout-marker" title="' + esc(tipText) + '">???</em>'
-        : esc(h.IP) + _hopIpBadge(h.IP);
+        : esc(h.IP);
+
+      // ── Type column: multi-tag classification badges ───────────────────
+      const typeCell = timedout ? '' : _hopTypeTags(h.IP);
 
       // ── Hostname column: separate from IP ──────────────────────────────
       const hostCell = (!h.Hostname || h.Hostname === h.IP) ? '\u2014' : esc(h.Hostname);
@@ -165,11 +192,12 @@
 
       // Loss% is always shown numerically (timedout hops report 100.0% from the backend).
       const loss = (h.LossPct || 0).toFixed(1) + '%';
-      const rtt  = timedout ? '\u2014' : esc(h.AvgRTT || '\u2014');
+      const rtt  = timedout || !h.AvgRTT ? '\u2014' : esc(h.AvgRTT);
 
       return '<tr' + rowClass + '>' +
         '<td>'                        + esc(String(h.TTL)) + '</td>' +
         '<td>'                        + ipCell              + '</td>' +
+        '<td class="hop-type-col">'   + typeCell            + '</td>' +
         '<td>'                        + hostCell            + '</td>' +
         '<td>'                        + asnCell             + '</td>' +
         '<td>'                        + esc(country)        + '</td>' +
@@ -183,6 +211,7 @@
         '<thead><tr>' +
           '<th>' + esc(_t('th-ttl'))      + '</th>' +
           '<th>' + esc(_t('th-ip'))       + '</th>' +
+          '<th>' + esc(_t('th-type'))     + '</th>' +
           '<th>' + esc(_t('th-hostname')) + '</th>' +
           '<th>' + esc(_t('th-asn'))      + '</th>' +
           '<th>' + esc(_t('th-country'))  + '</th>' +
@@ -470,13 +499,16 @@
     const row = document.createElement('tr');
     if (timedout) row.className = 'hop-timedout';
 
-    // IP cell: address + optional scope badge; timeout → ???
+    // IP cell: clean address; timeout → ???
     let ipCell;
     if (timedout) {
       ipCell = '<em class="hop-timeout-marker" title="' + esc(_t('hop-timeout-tip')) + '">???</em>';
     } else {
-      ipCell = esc(hopData.ip) + _hopIpBadge(hopData.ip);
+      ipCell = esc(hopData.ip);
     }
+
+    // Type cell: multi-tag classification badges (empty for timed-out hops)
+    const typeCell = timedout ? '' : _hopTypeTags(hopData.ip);
 
     // Hostname cell: separate column; dash when absent or same as IP
     const hostCell = (hopData.hostname && hopData.hostname !== hopData.ip)
@@ -487,10 +519,11 @@
     const loss = (hopData.loss_pct || 0).toFixed(1) + '%';
     const rtt  = timedout ? '\u2014' : esc(hopData.avg_rtt || '\u2014');
     row.innerHTML = '<td>' + esc(String(hopData.ttl)) + '</td>' +
-      '<td>' + ipCell   + '</td>' +
-      '<td>' + hostCell + '</td>' +
-      '<td>' + loss     + '</td>' +
-      '<td>' + rtt      + '</td>';
+      '<td>' + ipCell    + '</td>' +
+      '<td>' + typeCell  + '</td>' +
+      '<td>' + hostCell  + '</td>' +
+      '<td>' + loss      + '</td>' +
+      '<td>' + rtt       + '</td>';
     tbody.appendChild(row);
 
     const liveSection = document.getElementById('tr-live-section');
