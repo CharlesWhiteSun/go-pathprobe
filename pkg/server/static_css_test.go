@@ -26,6 +26,36 @@ func TestStaticCSS_ButtonFixedDimensions(t *testing.T) {
 	}
 }
 
+// TestStaticCSS_CancelBtnMatchesRunBtn 驗證 .btn-cancel 的尺寸與 #run-btn 一致
+// (同為 2.75rem 方形圖示按鈕)，且透過 CSS ::before 偽元素繪製停止圖示。
+func TestStaticCSS_CancelBtnMatchesRunBtn(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/style.css")
+
+	// Locate .btn-cancel rule block.
+	cancelStart := strings.Index(body, ".btn-cancel")
+	if cancelStart == -1 {
+		t.Fatal("style.css: .btn-cancel rule not found")
+	}
+
+	// The cancel button section must declare matching square dimensions.
+	sectionEnd := strings.Index(body[cancelStart:], "/*  History Panel  */")
+	if sectionEnd == -1 {
+		sectionEnd = 800
+	}
+	section := body[cancelStart : cancelStart+sectionEnd]
+
+	if !strings.Contains(section, "width: 2.75rem") {
+		t.Error("style.css: .btn-cancel must declare 'width: 2.75rem' to match #run-btn")
+	}
+	if !strings.Contains(section, "height: 2.75rem") {
+		t.Error("style.css: .btn-cancel must declare 'height: 2.75rem' to match #run-btn")
+	}
+	// Stop icon must be drawn via CSS ::before pseudo-element (no text/glyph dependency).
+	if !strings.Contains(section, ".btn-cancel::before") {
+		t.Error("style.css: .btn-cancel must use ::before pseudo-element for the stop icon")
+	}
+}
+
 // TestStaticCSS_ThemeBarButtons verifies that the embedded style.css defines
 // the circular dot-button styles for the .theme-bar switcher. It confirms:
 //  1. .theme-btn uses border-radius: 50% to produce a circle.

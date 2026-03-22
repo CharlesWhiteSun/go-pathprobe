@@ -280,7 +280,7 @@
 
     <div class="form-actions">
       <button id="run-btn" onclick="runDiag()">&#9654;</button>
-      <button id="cancel-btn" class="btn-cancel" hidden onclick="cancelDiag()">&#10005; <span data-i18n="btn-cancel">Cancel</span></button>
+      <button id="cancel-btn" class="btn-cancel" hidden onclick="cancelDiag()" aria-label="Cancel"></button>
     </div>
   </section>
 
@@ -305,7 +305,8 @@
       <table class="result-table route-table tr-live-table">
         <thead><tr>
           <th data-i18n="th-ttl">TTL</th>
-          <th data-i18n="th-ip-host">IP / Host</th>
+          <th data-i18n="th-ip">IP</th>
+          <th data-i18n="th-hostname">Hostname</th>
           <th data-i18n="th-loss">Loss%</th>
           <th data-i18n="th-avg-rtt">Avg RTT</th>
         </tr></thead>
@@ -345,6 +346,7 @@
 <script src="/theme.js"      defer></script>
 <script src="/form.js"       defer></script>
 <script src="/api-builder.js" defer></script>
+<script src="/hop-classifier.js" defer></script>
 <script src="/renderer.js"        defer></script>
   <script src="/map-connector.js" defer></script>
 <script src="/map.js"           defer></script>

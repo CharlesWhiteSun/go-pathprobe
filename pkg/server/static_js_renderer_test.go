@@ -87,15 +87,23 @@ func TestStaticJS_RenderReportStoresLastReport(t *testing.T) {
 }
 
 // TestStaticJS_RenderRouteSectionColumns verifies that renderer.js references
-// all six i18n column-header keys used in the route-trace hop table.
+// the i18n column-header keys used in the route-trace hop table.
+// IP and Hostname are now separate columns; th-ip-host is kept only for the
+// live-progress table (backward-compat) and is no longer a route-table header.
 func TestStaticJS_RenderRouteSectionColumns(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
 
-	keys := []string{"th-ttl", "th-ip-host", "th-asn", "th-country", "th-loss", "th-avg-rtt"}
-	for _, k := range keys {
+	// New separate-column keys
+	required := []string{"th-ttl", "th-ip", "th-hostname", "th-asn", "th-country", "th-loss", "th-avg-rtt"}
+	for _, k := range required {
 		if !strings.Contains(body, "'"+k+"'") {
 			t.Errorf("renderer.js: renderRouteSection must reference i18n key %q", k)
 		}
+	}
+	// th-ip-host must NOT be used as a route-table column header anymore
+	// (it is still present in index.html for back-compat but not in renderRouteSection)
+	if strings.Contains(body, "'th-ip-host'") {
+		t.Error("renderer.js: renderRouteSection must use 'th-ip' and 'th-hostname' instead of the combined 'th-ip-host'")
 	}
 }
 
@@ -316,6 +324,185 @@ func TestStaticJS_DNSSectionCardLayout(t *testing.T) {
 	for _, old := range []string{"dns-entry-row", "dns-table", "colspan=\"5\""} {
 		if strings.Contains(fnBody, old) {
 			t.Errorf("renderer.js: old flat-table artifact %q must be removed", old)
+		}
+	}
+}
+
+// TestStaticJS_FinalizeTracerouteProgressExported 驗證 renderer.js 匯出了
+// finalizeTracerouteProgress 函式，以供 api-client.js 在 SSE error 事件或
+// 網路層錯誤時呼叫，保留已收集的躍點資料並切換至最終狀態。
+func TestStaticJS_FinalizeTracerouteProgressExported(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	// The function must be defined.
+	if !strings.Contains(body, "function finalizeTracerouteProgress(") {
+		t.Error("renderer.js: finalizeTracerouteProgress must be defined")
+	}
+	// It must be exported in the PathProbe.Renderer namespace.
+	exportIdx := strings.Index(body, "_ns.Renderer = {")
+	if exportIdx == -1 {
+		t.Fatal("renderer.js: PathProbe.Renderer export object not found")
+	}
+	exportBlock := body[exportIdx:]
+	braceEnd := strings.Index(exportBlock, "}")
+	if braceEnd == -1 {
+		t.Fatal("renderer.js: closing brace of PathProbe.Renderer not found")
+	}
+	exportBlock = exportBlock[:braceEnd]
+	if !strings.Contains(exportBlock, "finalizeTracerouteProgress") {
+		t.Error("renderer.js: finalizeTracerouteProgress must be listed in PathProbe.Renderer export")
+	}
+}
+
+// TestStaticJS_FinalizeTracerouteProgressHidesSpinner 驗證
+// finalizeTracerouteProgress 函式會隱藏 .tr-spin spinner 元素（以 hidden 屬性），
+// 並更新標題文字以反映最終狀態（取消或逾時）。
+func TestStaticJS_FinalizeTracerouteProgressHidesSpinner(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	fnStart := strings.Index(body, "function finalizeTracerouteProgress(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: finalizeTracerouteProgress not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 600
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	// Must hide the spinner element.
+	if !strings.Contains(fnBody, "spinner.hidden = true") {
+		t.Error("renderer.js: finalizeTracerouteProgress must set spinner.hidden = true")
+	}
+	// Must update the title element.
+	if !strings.Contains(fnBody, "trTitle") {
+		t.Error("renderer.js: finalizeTracerouteProgress must update the tr-title element")
+	}
+}
+
+// ── Route-trace rendering enhancements ────────────────────────────────────
+
+// TestStaticJS_TimedoutHopShowsLoss verifies that timed-out hops (IP="??")
+// display their loss percentage numerically (100.0%) instead of a dash,
+// so users can see that 100% of probes were lost — not just "no data".
+func TestStaticJS_TimedoutHopShowsLoss(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	fnStart := strings.Index(body, "function renderRouteSection(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: renderRouteSection not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 2000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+
+	// Loss must be computed with toFixed(1) unconditionally (no timedout branch).
+	if !strings.Contains(fnBody, ".toFixed(1) + '%'") {
+		t.Error("renderer.js: loss% must use toFixed(1) + '%' for all hops including timed-out ones")
+	}
+	// The loss cell must NOT have a timedout ? '—' branch that hides 100% loss.
+	if strings.Contains(fnBody, "timedout ? '\\u2014'") || strings.Contains(fnBody, `timedout ? '\u2014'`) {
+		t.Error("renderer.js: renderRouteSection must not special-case timedout loss to '—'; use LossPct directly")
+	}
+	// The loss cell must use the hop-loss-col class for targeted CSS styling.
+	if !strings.Contains(fnBody, "hop-loss-col") {
+		t.Error("renderer.js: loss <td> must carry class 'hop-loss-col' for CSS targeting")
+	}
+}
+
+// TestStaticJS_IPAndHostnameSeparateColumns verifies that renderRouteSection
+// and appendLiveHop both produce separate IP and Hostname table cells rather
+// than combining them in a single cell.
+func TestStaticJS_IPAndHostnameSeparateColumns(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	// Both column-header i18n keys must be present.
+	if !strings.Contains(body, "'th-ip'") {
+		t.Error("renderer.js: must reference i18n key 'th-ip' for the separate IP column")
+	}
+	if !strings.Contains(body, "'th-hostname'") {
+		t.Error("renderer.js: must reference i18n key 'th-hostname' for the separate Hostname column")
+	}
+	// The old combined class must not be the primary display mechanism in render.
+	// (hop-host sub-span inside ipCell is removed; hostname is its own cell)
+	if strings.Contains(body, "class=\"hop-host\"") {
+		t.Error("renderer.js: 'hop-host' inline sub-span must be removed; Hostname is a separate cell")
+	}
+}
+
+// TestStaticJS_RenderRouteStatsFunction verifies that renderer.js defines a
+// renderRouteStats helper and wires it into renderRouteSection so a summary
+// card is appended below the hop table.
+func TestStaticJS_RenderRouteStatsFunction(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	if !strings.Contains(body, "function renderRouteStats(") {
+		t.Error("renderer.js: renderRouteStats function must be defined")
+	}
+	// Must be called from inside renderRouteSection.
+	fnStart := strings.Index(body, "function renderRouteSection(")
+	if fnStart == -1 {
+		t.Fatal("renderer.js: renderRouteSection not found")
+	}
+	nextFn := strings.Index(body[fnStart+1:], "\n  function ")
+	var fnBody string
+	if nextFn != -1 {
+		fnBody = body[fnStart : fnStart+1+nextFn]
+	} else {
+		end := fnStart + 2000
+		if end > len(body) {
+			end = len(body)
+		}
+		fnBody = body[fnStart:end]
+	}
+	if !strings.Contains(fnBody, "renderRouteStats(hops)") {
+		t.Error("renderer.js: renderRouteSection must call renderRouteStats(hops)")
+	}
+	// Stats card i18n keys must be referenced.
+	statsKeys := []string{
+		"'route-stats-title'", "'route-stats-total'", "'route-stats-responsive'",
+		"'route-stats-timeout'", "'route-stats-avg-loss'", "'route-stats-max-rtt'",
+		"'route-stats-countries'", "'route-stats-reached'", "'route-stats-not-reached'",
+	}
+	for _, k := range statsKeys {
+		if !strings.Contains(body, k) {
+			t.Errorf("renderer.js: renderRouteStats must reference i18n key %s", k)
+		}
+	}
+}
+
+// TestStaticJS_HopIPBadgeHegper verifies that renderer.js defines the
+// _hopIpBadge helper and delegates classification to HopClassifier rather
+// than embedding IP-range literals in the renderer.
+func TestStaticJS_HopIPBadgeHelper(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/renderer.js")
+
+	if !strings.Contains(body, "function _hopIpBadge(") {
+		t.Error("renderer.js: _hopIpBadge helper must be defined")
+	}
+	// Must delegate to HopClassifier, not inline IP ranges.
+	if !strings.Contains(body, "HopClassifier") {
+		t.Error("renderer.js: _hopIpBadge must reference window.PathProbe.HopClassifier")
+	}
+	// Badge class names for the three scope types must be referenced.
+	for _, scope := range []string{"private", "loopback", "link-local"} {
+		cls := "hop-ip-badge--" + scope
+		if !strings.Contains(body, cls) {
+			t.Errorf("renderer.js: _hopIpBadge must apply CSS class %q for scope %q", cls, scope)
 		}
 	}
 }

@@ -546,6 +546,8 @@ func TestStaticI18n_TracerouteProgressKeys(t *testing.T) {
 		"'traceroute-hop-count'",
 		"'traceroute-max-wait'",
 		"'traceroute-complete'",
+		"'traceroute-cancelled'",
+		"'traceroute-timeout'",
 	}
 
 	for _, key := range requiredKeys {

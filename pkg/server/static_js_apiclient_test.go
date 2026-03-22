@@ -179,3 +179,105 @@ func TestStaticJS_TracerouteHopHandling(t *testing.T) {
 		t.Error("api-client.js: must call appendLiveHop for traceroute-hop progress events")
 	}
 }
+
+// TestStaticJS_IsTracerouteFlag 驗證 api-client.js 宣告了模組級 _isTraceroute
+// 狀態旗標，供 AbortError 及網路層錯誤的差異化處理使用。
+func TestStaticJS_IsTracerouteFlag(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	if !strings.Contains(body, "let _isTraceroute = false") {
+		t.Error("api-client.js: must declare module-level '_isTraceroute' flag")
+	}
+	// The flag must also be reset inside the finally block.
+	if !strings.Contains(body, "_isTraceroute = false") {
+		t.Error("api-client.js: _isTraceroute must be reset to false in the finally block")
+	}
+}
+
+// TestStaticJS_AbortErrorHidesPanel 驗證 AbortError（使用者主動取消）catch
+// 分支會呼叫 hideTracerouteProgress() 並向 progress-log 寫入友善取消訊息，
+// 而非單純 return（先前 bug：panel 殘留未清除）。
+func TestStaticJS_AbortErrorHidesPanel(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	fnStart := strings.Index(body, "function runDiag(")
+	if fnStart == -1 {
+		t.Fatal("api-client.js: runDiag function not found")
+	}
+	// Locate the AbortError branch within runDiag.
+	abortIdx := strings.Index(body[fnStart:], "AbortError")
+	if abortIdx == -1 {
+		t.Fatal("api-client.js: AbortError handler not found in runDiag")
+	}
+	// Inspect a window large enough to cover the AbortError branch.
+	windowStart := fnStart + abortIdx
+	end := windowStart + 600
+	if end > len(body) {
+		end = len(body)
+	}
+	window := body[windowStart:end]
+
+	if !strings.Contains(window, "hideTracerouteProgress") {
+		t.Error("api-client.js: AbortError handler must call hideTracerouteProgress() to clear the panel")
+	}
+	if !strings.Contains(window, "traceroute-cancelled") {
+		t.Error("api-client.js: AbortError handler must log a 'traceroute-cancelled' friendly message")
+	}
+}
+
+// TestStaticJS_SSEErrorContextCanceledHandling 驗證 handleSSEMessage 的 error
+// 分支在偵測到 'context canceled'/'deadline exceeded' 錯誤且為 traceroute 模式
+// 時，呼叫 finalizeTracerouteProgress 而非 hideTracerouteProgress，以保留已
+// 收集的躍點資料。
+func TestStaticJS_SSEErrorContextCanceledHandling(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	fnStart := strings.Index(body, "function handleSSEMessage(")
+	if fnStart == -1 {
+		t.Fatal("api-client.js: handleSSEMessage not found")
+	}
+	fnBody := body[fnStart:]
+	// Must detect context canceled pattern.
+	if !strings.Contains(fnBody, "context canceled") {
+		t.Error("api-client.js: handleSSEMessage must check for 'context canceled' error pattern")
+	}
+	// Must call finalizeTracerouteProgress for the timeout path.
+	if !strings.Contains(fnBody, "finalizeTracerouteProgress") {
+		t.Error("api-client.js: handleSSEMessage must call finalizeTracerouteProgress for context-canceled traceroute errors")
+	}
+	// Must reference the timeout i18n key.
+	if !strings.Contains(fnBody, "traceroute-timeout") {
+		t.Error("api-client.js: handleSSEMessage must use 'traceroute-timeout' key for context-canceled traceroute errors")
+	}
+}
+
+// TestStaticJS_NetworkErrorTracerouteFinalize 驗證 runDiag 的 catch 塊在
+// _isTraceroute 為 true 且非 AbortError 時（如伺服器關閉串流），呼叫
+// finalizeTracerouteProgress 而非 showError，以保留躍點追蹤資料。
+func TestStaticJS_NetworkErrorTracerouteFinalize(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
+
+	fnStart := strings.Index(body, "function runDiag(")
+	if fnStart == -1 {
+		t.Fatal("api-client.js: runDiag not found")
+	}
+	catchIdx := strings.Index(body[fnStart:], "} catch (err)")
+	if catchIdx == -1 {
+		t.Fatal("api-client.js: catch block not found in runDiag")
+	}
+	// Inspect catch block (large enough window to cover both branches).
+	windowStart := fnStart + catchIdx
+	end := windowStart + 1200
+	if end > len(body) {
+		end = len(body)
+	}
+	window := body[windowStart:end]
+
+	// The catch block must branch on _isTraceroute and call finalizeTracerouteProgress.
+	if !strings.Contains(window, "_isTraceroute") {
+		t.Error("api-client.js: catch block must check _isTraceroute flag for network errors")
+	}
+	if !strings.Contains(window, "finalizeTracerouteProgress") {
+		t.Error("api-client.js: catch block must call finalizeTracerouteProgress for traceroute network errors")
+	}
+}

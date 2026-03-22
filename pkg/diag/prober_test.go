@@ -8,35 +8,26 @@ import (
 
 // ── SelectTracerouteProber — prober selection policy ──────────────────────
 //
-// These tests serve as the programmatic equivalent of the manual 7-2 / 7-3
-// verifications:
-//   - 7-2 (non-admin / no CAP_NET_RAW): ICMP unavailable → TCP prober
-//   - 7-3 (admin / CAP_NET_RAW):        ICMP available   → ICMP prober
+// SelectTracerouteProber always returns an *OsTracerouteProber regardless of
+// the icmpAvailable flag.  The OS-native traceroute command (tracert on
+// Windows, traceroute on Unix/macOS) correctly captures intermediate router
+// IP addresses without requiring elevated privileges, superseding the former
+// ICMP / TCP prober implementations.
 
-// TestSelectTracerouteProber_ICMPAvailable corresponds to Phase 7 item 7-3:
-// when the OS grants raw ICMP socket access, SelectTracerouteProber must
-// return an *ICMPTracerouteProber so that high-fidelity hop detection is used.
-func TestSelectTracerouteProber_ICMPAvailable(t *testing.T) {
-	prober := SelectTracerouteProber(true)
-	if _, ok := prober.(*netprobe.ICMPTracerouteProber); !ok {
-		t.Errorf("ICMP available: expected *netprobe.ICMPTracerouteProber, got %T", prober)
+// TestSelectTracerouteProber_AlwaysReturnsOsProber verifies that both the
+// "ICMP available" and "ICMP unavailable" cases now return *OsTracerouteProber.
+func TestSelectTracerouteProber_AlwaysReturnsOsProber(t *testing.T) {
+	for _, icmpAvail := range []bool{true, false} {
+		prober := SelectTracerouteProber(icmpAvail)
+		if _, ok := prober.(*netprobe.OsTracerouteProber); !ok {
+			t.Errorf("icmpAvail=%v: expected *netprobe.OsTracerouteProber, got %T", icmpAvail, prober)
+		}
 	}
 }
 
-// TestSelectTracerouteProber_ICMPUnavailable corresponds to Phase 7 item 7-2:
-// when the OS denies raw ICMP access (non-admin / insufficient privileges),
-// SelectTracerouteProber must return a *TCPTracerouteProber as a
-// privilege-free fallback so traceroute still works without elevation.
-func TestSelectTracerouteProber_ICMPUnavailable(t *testing.T) {
-	prober := SelectTracerouteProber(false)
-	if _, ok := prober.(*netprobe.TCPTracerouteProber); !ok {
-		t.Errorf("ICMP unavailable: expected *netprobe.TCPTracerouteProber, got %T", prober)
-	}
-}
-
-// TestSelectTracerouteProber_ImplementsInterface verifies that both returned
-// probers satisfy the netprobe.TracerouteProber interface, ensuring they can
-// be used interchangeably by TracerouteRunner.
+// TestSelectTracerouteProber_ImplementsInterface verifies that the returned
+// prober satisfies the netprobe.TracerouteProber interface so it can be used
+// interchangeably by TracerouteRunner.
 func TestSelectTracerouteProber_ImplementsInterface(t *testing.T) {
 	for _, icmpAvailable := range []bool{true, false} {
 		p := SelectTracerouteProber(icmpAvailable)

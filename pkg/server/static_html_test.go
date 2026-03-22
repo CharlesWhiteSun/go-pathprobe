@@ -716,3 +716,22 @@ func TestStaticHTML_WebFieldsHttpRemoved(t *testing.T) {
 		t.Error("index.html: #web-fields-http sub-panel must be removed — #http-url input has moved to top-level #http-url-group")
 	}
 }
+
+// TestStaticHTML_CancelBtnIconOnly 驗證 index.html 的 #cancel-btn 為純圖示按鈕
+// (icon via CSS ::before)，不含可見文字內容，並透過 aria-label 提供無障礙標籤。
+func TestStaticHTML_CancelBtnIconOnly(t *testing.T) {
+	body := fetchBody(t, newStaticHandler(t), "/")
+
+	// The cancel button must exist with aria-label for accessibility.
+	if !strings.Contains(body, `id="cancel-btn"`) {
+		t.Fatal("index.html: #cancel-btn button not found")
+	}
+	if !strings.Contains(body, `aria-label="Cancel"`) {
+		t.Error("index.html: #cancel-btn must have aria-label=\"Cancel\" for screen-reader accessibility")
+	}
+	// Must NOT contain inline text nodes (icon-only design, matching #run-btn).
+	// The old design used a <span data-i18n="btn-cancel"> inside the button.
+	if strings.Contains(body, `data-i18n="btn-cancel"`) {
+		t.Error("index.html: #cancel-btn must not contain a data-i18n text span — use CSS ::before for the icon")
+	}
+}

@@ -82,42 +82,117 @@
     '</div>';
   }
 
+  // ── Private: _hopIpBadge ─────────────────────────────────────────────────
+  // Returns an HTML badge string for private / loopback / link-local IPs,
+  // or an empty string for public IPs.  Delegates classification to the
+  // HopClassifier module so this function stays free of IP-range literals.
+  function _hopIpBadge(ip) {
+    const clf = window.PathProbe && window.PathProbe.HopClassifier;
+    if (!clf) return '';
+    const scope = clf.classifyIP(ip);
+    if (!scope) return '';
+    return ' <span class="hop-ip-badge hop-ip-badge--' + scope + '">' +
+      esc(_t('hop-type-' + scope)) +
+    '</span>';
+  }
+
+  // ── Private: renderRouteStats ─────────────────────────────────────────────
+  // Renders a compact statistics card below the hop table summarising the
+  // overall route quality: total hops, responsive vs. silent, average loss,
+  // terminal RTT, countries traversed, and whether the destination was reached.
+  function renderRouteStats(hops) {
+    if (!hops || !hops.length) return '';
+
+    const total      = hops.length;
+    const responsive = hops.filter(h => h.IP).length;
+    const timedout   = total - responsive;
+    const avgLoss    = hops.reduce((s, h) => s + (h.LossPct || 0), 0) / total;
+
+    // Terminal RTT: AvgRTT of the highest TTL that actually responded.
+    const lastOk = hops.slice().reverse().find(h => h.IP && h.AvgRTT && h.AvgRTT !== '\u2014');
+    const termRTT = lastOk ? lastOk.AvgRTT : '\u2014';
+
+    // Unique country codes seen across all hops (geo annotation, may be empty).
+    const countries = [];
+    hops.forEach(h => { if (h.Country && !countries.includes(h.Country)) countries.push(h.Country); });
+
+    // Destination reached when the last hop has a non-empty IP.
+    const reached = !!(hops[hops.length - 1].IP);
+    const reachedBadge = reached
+      ? '<span class="badge badge-ok">'   + esc(_t('route-stats-reached'))     + '</span>'
+      : '<span class="badge badge-warn">' + esc(_t('route-stats-not-reached')) + '</span>';
+
+    const statItems = [
+      { label: _t('route-stats-total'),      html: esc(String(total)) },
+      { label: _t('route-stats-responsive'), html: esc(String(responsive)) },
+      { label: _t('route-stats-timeout'),    html: esc(String(timedout)) },
+      { label: _t('route-stats-avg-loss'),   html: esc(avgLoss.toFixed(1)) + '%' },
+      { label: _t('route-stats-max-rtt'),    html: esc(termRTT) },
+      { label: _t('route-stats-countries'),  html: countries.length ? esc(countries.join(', ')) : '\u2014' },
+      { label: _t('route-stats-reached'),    html: reachedBadge },
+    ];
+
+    const itemsHtml = statItems.map(item =>
+      '<div class="route-stat-item">' +
+        '<span class="route-stat-label">' + esc(item.label) + '</span>' +
+        '<span class="route-stat-value">' + item.html       + '</span>' +
+      '</div>'
+    ).join('');
+
+    return '<div class="route-stats-card">' +
+      '<h4 class="route-stats-title">' + esc(_t('route-stats-title')) + '</h4>' +
+      '<div class="route-stats-grid">' + itemsHtml + '</div>' +
+    '</div>';
+  }
+
   function renderRouteSection(hops) {
     if (!hops || !hops.length) return '';
+    const tipText = _t('hop-timeout-tip');
     const rows = hops.map(h => {
-      const timedout = !h.IP;
-      const rowClass = timedout ? ' class="hop-timedout"' : '';
-      const ipCell   = timedout
-        ? '<em>???</em>'
-        : (h.Hostname && h.Hostname !== h.IP
-            ? esc(h.IP) + ' <span class="hop-host">(' + esc(h.Hostname) + ')</span>'
-            : esc(h.IP));
-      const asnCell  = h.ASN ? 'AS' + esc(String(h.ASN)) : '';
-      const country  = h.Country || '\u2014';
-      const loss     = timedout ? '\u2014' : (h.LossPct || 0).toFixed(1) + '%';
-      const rtt      = esc(h.AvgRTT || '\u2014');
+      const timedout  = !h.IP;
+      const rowClass  = timedout ? ' class="hop-timedout"' : '';
+
+      // ── IP column: address + optional scope badge ──────────────────────
+      const ipCell = timedout
+        ? '<em class="hop-timeout-marker" title="' + esc(tipText) + '">???</em>'
+        : esc(h.IP) + _hopIpBadge(h.IP);
+
+      // ── Hostname column: separate from IP ──────────────────────────────
+      const hostCell = (!h.Hostname || h.Hostname === h.IP) ? '\u2014' : esc(h.Hostname);
+
+      const asnCell = h.ASN ? 'AS' + esc(String(h.ASN)) : '';
+      const country = h.Country || '\u2014';
+
+      // Loss% is always shown numerically (timedout hops report 100.0% from the backend).
+      const loss = (h.LossPct || 0).toFixed(1) + '%';
+      const rtt  = timedout ? '\u2014' : esc(h.AvgRTT || '\u2014');
+
       return '<tr' + rowClass + '>' +
-        '<td>'         + esc(String(h.TTL)) + '</td>' +
-        '<td>'         + ipCell             + '</td>' +
-        '<td>'         + asnCell            + '</td>' +
-        '<td>'         + esc(country)       + '</td>' +
-        '<td>'         + loss               + '</td>' +
-        '<td>'         + rtt                + '</td>' +
+        '<td>'                        + esc(String(h.TTL)) + '</td>' +
+        '<td>'                        + ipCell              + '</td>' +
+        '<td>'                        + hostCell            + '</td>' +
+        '<td>'                        + asnCell             + '</td>' +
+        '<td>'                        + esc(country)        + '</td>' +
+        '<td class="hop-loss-col">'   + loss                + '</td>' +
+        '<td>'                        + rtt                 + '</td>' +
       '</tr>';
     }).join('');
     return '<div class="result-section">' +
       '<h3>' + esc(_t('section-route')) + '</h3>' +
       '<table class="result-table route-table">' +
         '<thead><tr>' +
-          '<th>' + esc(_t('th-ttl'))     + '</th>' +
-          '<th>' + esc(_t('th-ip-host')) + '</th>' +
-          '<th>' + esc(_t('th-asn'))     + '</th>' +
-          '<th>' + esc(_t('th-country')) + '</th>' +
-          '<th>' + esc(_t('th-loss'))    + '</th>' +
-          '<th>' + esc(_t('th-avg-rtt')) + '</th>' +
+          '<th>' + esc(_t('th-ttl'))      + '</th>' +
+          '<th>' + esc(_t('th-ip'))       + '</th>' +
+          '<th>' + esc(_t('th-hostname')) + '</th>' +
+          '<th>' + esc(_t('th-asn'))      + '</th>' +
+          '<th>' + esc(_t('th-country'))  + '</th>' +
+          '<th>' + esc(_t('th-loss'))     + '</th>' +
+          '<th>' + esc(_t('th-avg-rtt'))  + '</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
-      '</table></div>';
+      '</table>' +
+      renderRouteStats(hops) +
+    '</div>';
   }
 
   function renderPortsSection(ports) {
@@ -366,6 +441,10 @@
     const trLiveSection = document.getElementById('tr-live-section');
     if (trLiveSection) trLiveSection.hidden = true;
 
+    // Restore spinner visibility in case a previous finalizeTracerouteProgress hid it.
+    const spinner = el.querySelector('.tr-spin');
+    if (spinner) spinner.hidden = false;
+
     el.hidden = false;
   }
 
@@ -391,22 +470,55 @@
     const row = document.createElement('tr');
     if (timedout) row.className = 'hop-timedout';
 
+    // IP cell: address + optional scope badge; timeout → ???
     let ipCell;
     if (timedout) {
-      ipCell = '<em>???</em>';
-    } else if (hopData.hostname && hopData.hostname !== hopData.ip) {
-      ipCell = esc(hopData.ip) + ' <span class="hop-host">(' + esc(hopData.hostname) + ')</span>';
+      ipCell = '<em class="hop-timeout-marker" title="' + esc(_t('hop-timeout-tip')) + '">???</em>';
     } else {
-      ipCell = esc(hopData.ip);
+      ipCell = esc(hopData.ip) + _hopIpBadge(hopData.ip);
     }
-    const loss = timedout ? '\u2014' : (hopData.loss_pct || 0).toFixed(1) + '%';
+
+    // Hostname cell: separate column; dash when absent or same as IP
+    const hostCell = (hopData.hostname && hopData.hostname !== hopData.ip)
+      ? esc(hopData.hostname)
+      : '\u2014';
+
+    // Loss% is always numeric (timedout hops report 100.0 from the backend)
+    const loss = (hopData.loss_pct || 0).toFixed(1) + '%';
     const rtt  = timedout ? '\u2014' : esc(hopData.avg_rtt || '\u2014');
-    row.innerHTML = '<td>' + esc(String(hopData.ttl)) + '</td><td>' + ipCell + '</td><td>' + loss + '</td><td>' + rtt + '</td>';
+    row.innerHTML = '<td>' + esc(String(hopData.ttl)) + '</td>' +
+      '<td>' + ipCell   + '</td>' +
+      '<td>' + hostCell + '</td>' +
+      '<td>' + loss     + '</td>' +
+      '<td>' + rtt      + '</td>';
     tbody.appendChild(row);
 
     const liveSection = document.getElementById('tr-live-section');
     if (liveSection) liveSection.hidden = false;
     tbody.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /**
+   * Transition the traceroute progress panel to a final state without hiding it.
+   * The spinner is replaced by a status message; the live hop table remains visible.
+   * Called when the trace ends naturally (timeout) or the backend reports context canceled.
+   * @param {string} titleKey - i18n key for the status title (e.g. 'traceroute-timeout')
+   */
+  function finalizeTracerouteProgress(titleKey) {
+    const el = document.getElementById('traceroute-progress');
+    if (!el || el.hidden) return;
+
+    // Hide the spinner — no longer in-progress.
+    const spinner = el.querySelector('.tr-spin');
+    if (spinner) spinner.hidden = true;
+
+    // Update title to reflect the final status.
+    const trTitle = document.getElementById('tr-title');
+    if (trTitle) trTitle.textContent = _t(titleKey).replace('{n}', _trHopCount);
+
+    // Replace ETA with "N hops recorded" summary.
+    const trEta = document.getElementById('tr-eta');
+    if (trEta) trEta.textContent = _t('traceroute-hop-count').replace('{n}', _trHopCount);
   }
 
   /**
@@ -439,6 +551,6 @@
 
   // ── Export ─────────────────────────────────────────────────────────────
   const _ns = window.PathProbe || {};
-  _ns.Renderer = { renderReport, rerenderLast, initTracerouteProgress, appendLiveHop, hideTracerouteProgress };
+  _ns.Renderer = { renderReport, rerenderLast, initTracerouteProgress, appendLiveHop, hideTracerouteProgress, finalizeTracerouteProgress };
   window.PathProbe = _ns;
 })();

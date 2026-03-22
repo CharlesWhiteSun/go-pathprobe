@@ -89,6 +89,8 @@ window.LOCALES = {
     'traceroute-hop-count':      '{n} hop(s) found',
     'traceroute-max-wait':       'Max ~{n} min',
     'traceroute-complete':       'Trace complete — {n} hops found',
+    'traceroute-cancelled':      'Trace cancelled — {n} hop(s) recorded',
+    'traceroute-timeout':        'Trace timed out — {n} hop(s) recorded',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           'Diagnostic timed out — the operation exceeded the configured timeout. For Route Trace, try increasing Timeout in Advanced Options or reducing Max Hops.',
     'err-no-runner':         'No handler registered for this diagnostic target.',
@@ -125,9 +127,27 @@ window.LOCALES = {
     /* ── Route trace table ────────────────────────────────────────────── */
     'section-route':         'Route Trace',
     'th-ttl':                'TTL',
-    'th-ip-host':            'IP / Host',
+    'th-ip-host':            'IP / Host',      // kept for back-compat (live-progress table)
+    'th-ip':                 'IP',
+    'th-hostname':           'Hostname',
     'th-asn':                'ASN',
     'th-country':            'Country',
+    /* IP scope classification badges */
+    'hop-type-private':      'Private',
+    'hop-type-loopback':     'Loopback',
+    'hop-type-link-local':   'Link-local',
+    /* Tooltip shown on ??? cells */
+    'hop-timeout-tip':       'No response received — this router may filter ICMP packets',
+    /* Route summary statistics card */
+    'route-stats-title':     'Route Summary',
+    'route-stats-total':     'Total hops',
+    'route-stats-responsive':'Responsive',
+    'route-stats-timeout':   'Silent (???)',
+    'route-stats-avg-loss':  'Avg. loss',
+    'route-stats-max-rtt':   'Furthest RTT',
+    'route-stats-countries': 'Countries',
+    'route-stats-reached':   'Reached',
+    'route-stats-not-reached':'Not reached',
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS Comparison',
@@ -291,6 +311,8 @@ window.LOCALES = {
     'traceroute-hop-count':      '已發現 {n} 個躍點',
     'traceroute-max-wait':       '最長等候約 {n} 分鐘',
     'traceroute-complete':       '路由追蹤完成，共 {n} 個躍點',
+    'traceroute-cancelled':      '已取消路由追蹤，共記錄 {n} 個躍點',
+    'traceroute-timeout':        '路由追蹤逾時，共記錄 {n} 個躍點',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           '診斷逾時 — 操作超過設定的等待時間。若使用路由追蹤，請嘗試在進階選項中增加逾時時間，或縮短最大躍點數。',
     'err-no-runner':         '找不到此診斷目標所對應的處理器。',
@@ -327,9 +349,27 @@ window.LOCALES = {
     /* ── Route trace table ────────────────────────────────────────────── */
     'section-route':         '路由路徑',
     'th-ttl':                'TTL',
-    'th-ip-host':            'IP / 主機',
+    'th-ip-host':            'IP / 主機',      // 保留相容性（即時進度表格）
+    'th-ip':                 'IP',
+    'th-hostname':           '主機名稱',
     'th-asn':                'ASN',
     'th-country':            '國家',
+    /* IP 位址範圍分類徽章 */
+    'hop-type-private':      '私網',
+    'hop-type-loopback':     '迴路',
+    'hop-type-link-local':   '鏈路本地',
+    /* ??? 逾時格的滑鼠提示文字 */
+    'hop-timeout-tip':       '此節點無回應，可能過濾 ICMP 封包',
+    /* 路由摘要統計卡片 */
+    'route-stats-title':     '路由摘要',
+    'route-stats-total':     '躍點總數',
+    'route-stats-responsive':'有回應',
+    'route-stats-timeout':   '無回應 (???)',
+    'route-stats-avg-loss':  '平均丟包率',
+    'route-stats-max-rtt':   '最遠躍點 RTT',
+    'route-stats-countries': '途經國家',
+    'route-stats-reached':   '已到達',
+    'route-stats-not-reached':'未到達',
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS 比對結果',

@@ -25,6 +25,7 @@ func (s *stubProber) Trace(_ context.Context, _ string, _, _ int, _ HopEmitter) 
 var _ TracerouteProber = (*stubProber)(nil)
 var _ TracerouteProber = (*ICMPTracerouteProber)(nil)
 var _ TracerouteProber = (*TCPTracerouteProber)(nil)
+var _ TracerouteProber = (*OsTracerouteProber)(nil)
 
 // ── RouteResult / HopResult helpers ─────────────────────────────────────────
 

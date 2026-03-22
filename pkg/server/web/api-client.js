@@ -27,6 +27,9 @@
   /** 目前進行中請求的 AbortController，由 cancelDiag() 用來中斷請求。 */
   let _currentAbortController = null;
 
+  /** 是否為路由追蹤模式——影響 AbortError / 網路錯誤的 UI 處理策略。 */
+  let _isTraceroute = false;
+
   // ── 執行期相依注入（runtime shims）────────────────────────────────────
 
   function _t(key) {
@@ -145,12 +148,24 @@
       }
       resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (evtName === 'error') {
-      // 清除並隱藏進度記錄，避免部分輸出殘留在錯誤橫幅下方。
-      if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
-      if (window.PathProbe && window.PathProbe.Renderer) {
-        window.PathProbe.Renderer.hideTracerouteProgress();
+      const errMsg = payload.error || '';
+      // "context canceled" / "deadline exceeded" during traceroute = server-side
+      // timeout; keep the hop table visible and show a finalized status instead
+      // of an alarming error banner.
+      const isCtxCancel = errMsg.toLowerCase().includes('context canceled') ||
+                          errMsg.toLowerCase().includes('deadline exceeded');
+      if (_isTraceroute && isCtxCancel) {
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.finalizeTracerouteProgress('traceroute-timeout');
+        }
+      } else {
+        // Non-traceroute or unexpected error: clear progress and show banner.
+        if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.hideTracerouteProgress();
+        }
+        showError(errMsg || 'diagnostic error');
       }
-      showError(payload.error || 'diagnostic error');
     }
   }
 
@@ -184,6 +199,7 @@
       const isTraceroute = req.target === 'web' &&
                            req.options && req.options.web &&
                            req.options.web.mode === 'traceroute';
+      _isTraceroute = isTraceroute;
 
       if (isTraceroute) {
         if (progressEl) progressEl.hidden = true;
@@ -234,18 +250,38 @@
       if (buffer.trim()) handleSSEMessage(buffer, progressEl, resultEl);
 
     } catch (err) {
-      if (err.name === 'AbortError') return; // 使用者主動取消 — 不顯示錯誤橫幅
-      // 網路層失敗：隱藏並清除進度記錄，避免殘留部分輸出。
-      if (progressEl) { progressEl.hidden = true; progressEl.innerHTML = ''; }
-      if (window.PathProbe && window.PathProbe.Renderer) {
-        window.PathProbe.Renderer.hideTracerouteProgress();
+      if (err.name === 'AbortError') {
+        // User actively cancelled — hide the traceroute panel and log a friendly note.
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.hideTracerouteProgress();
+        }
+        if (progressEl) {
+          progressEl.innerHTML = '';
+          progressEl.hidden = false;
+          appendProgress(progressEl, { stage: 'info', message: _t('traceroute-cancelled').replace('{n}', '') });
+        }
+        return;
       }
-      showError('Request failed: ' + err.message);
+      // Network-level failure (e.g. server closed stream after context cancel):
+      // for traceroute, preserve the hop table in finalized state instead of
+      // showing an alarming "network error" banner.
+      if (_isTraceroute) {
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.finalizeTracerouteProgress('traceroute-timeout');
+        }
+      } else {
+        if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = true; }
+        if (window.PathProbe && window.PathProbe.Renderer) {
+          window.PathProbe.Renderer.hideTracerouteProgress();
+        }
+        showError('Request failed: ' + err.message);
+      }
     } finally {
       btn.disabled    = false;
       btn.textContent = _t('btn-run');
       if (cancelBtn) cancelBtn.hidden = true;
       _currentAbortController = null;
+      _isTraceroute = false;
     }
   }
 

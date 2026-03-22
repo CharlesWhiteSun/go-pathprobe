@@ -2,19 +2,17 @@ package diag
 
 import "go-pathprobe/pkg/netprobe"
 
-// SelectTracerouteProber returns the appropriate TracerouteProber based on
-// whether the OS grants raw ICMP socket access.
+// SelectTracerouteProber returns an OsTracerouteProber that delegates to the
+// platform-native traceroute command (tracert on Windows, traceroute on
+// Unix/macOS).
 //
-// When icmpAvailable is true an ICMPTracerouteProber is returned, which sends
-// real ICMP echo requests and yields the highest-fidelity hop results.
-// When false a TCPTracerouteProber is returned as a privilege-free fallback
-// that uses TCP SYN probes instead.
+// The icmpAvailable parameter is accepted for API compatibility but no longer
+// influences the returned prober.  OsTracerouteProber is preferred over the
+// former ICMP / TCP probers because it correctly captures intermediate router
+// IP addresses on all platforms and requires no elevated OS privileges.
 //
-// This factory is the single authoritative place that maps capability detection
-// to a concrete prober, making the policy easy to test without OS permissions.
-func SelectTracerouteProber(icmpAvailable bool) netprobe.TracerouteProber {
-	if icmpAvailable {
-		return &netprobe.ICMPTracerouteProber{}
-	}
-	return &netprobe.TCPTracerouteProber{}
+// This factory is the single authoritative place that selects the prober
+// implementation, making the policy easy to test without OS permissions.
+func SelectTracerouteProber(_ bool) netprobe.TracerouteProber {
+	return &netprobe.OsTracerouteProber{}
 }
