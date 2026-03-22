@@ -169,7 +169,7 @@ func (p *DialFTPProber) Probe(ctx context.Context, req FTPProbeRequest) (FTPProb
 }
 
 // ftpPassiveList issues PASV, opens a data connection, sends LIST, and reads directory entries.
-func ftpPassiveList(ctx context.Context, ctrl *bufio.ReadWriter, ctrlConn net.Conn, tlsCfg *tls.Config, protectedData bool) ([]string, error) {
+func ftpPassiveList(ctx context.Context, ctrl *bufio.ReadWriter, _ net.Conn, tlsCfg *tls.Config, protectedData bool) ([]string, error) {
 	if err := ftpSend(ctrl, "PASV"); err != nil {
 		return nil, err
 	}

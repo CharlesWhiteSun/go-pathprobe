@@ -212,7 +212,7 @@ func TestHopProgressData_RoundTrip(t *testing.T) {
 		Sent:     5,
 		Received: 5,
 	}
-	ev := ProgressEvent{Stage: "traceroute-hop", Message: "hop info", Hop: hop}
+	ev := ProgressEvent{Hop: hop}
 
 	if ev.Hop == nil {
 		t.Fatal("expected non-nil Hop after assignment")

@@ -142,12 +142,13 @@ func TestAddDNSComparisons_EmptySlice(t *testing.T) {
 func TestReportWriter_NilInterfaceGuard(t *testing.T) {
 	var rw ReportWriter // nil interface — simulates an unset Report field
 
-	if rw != nil {
-		t.Fatal("expected nil interface")
+	// Pass through a function parameter so the nilness analyser cannot
+	// statically prove the value is nil, allowing the guard to be exercised.
+	// This mirrors the real runner pattern: `if req.Report != nil { ... }`.
+	guardedCall := func(w ReportWriter) {
+		if w != nil {
+			w.AddProto(ProtoResult{Protocol: "test"})
+		}
 	}
-
-	// Guard pattern used by all runners — must not panic.
-	if rw != nil {
-		rw.AddProto(ProtoResult{Protocol: "test"})
-	}
+	guardedCall(rw) // passes nil — guard prevents the call, must not panic
 }

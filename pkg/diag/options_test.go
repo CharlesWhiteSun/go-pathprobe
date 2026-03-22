@@ -21,7 +21,7 @@ func TestGlobalOptionsValidate(t *testing.T) {
 
 // TestDefaultLogLevel keeps default log level stable at info.
 func TestDefaultLogLevel(t *testing.T) {
-	opts := GlobalOptions{MTRCount: 1, Timeout: time.Second, LogLevel: slog.LevelInfo}
+	opts := GlobalOptions{LogLevel: slog.LevelInfo}
 	if opts.LogLevel != slog.LevelInfo {
 		t.Fatalf("expected info level, got %v", opts.LogLevel)
 	}

@@ -36,7 +36,7 @@ func TestRouteResult_Empty(t *testing.T) {
 }
 
 func TestHopResult_TimedOut(t *testing.T) {
-	hop := HopResult{TTL: 3, IP: "", Hostname: ""}
+	hop := HopResult{} // timed-out hop: zero-value IP and Hostname
 	if hop.IP != "" {
 		t.Fatalf("timed-out hop should have empty IP, got %q", hop.IP)
 	}

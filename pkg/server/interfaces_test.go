@@ -28,9 +28,10 @@ func (m *mockDispatcher) Dispatch(_ context.Context, req diag.Request) error {
 // ---- tests ----------------------------------------------------------------
 
 func TestDispatcherInterface_MockSatisfiesInterface(t *testing.T) {
+	// Verify *mockDispatcher satisfies the Dispatcher interface via type assertion.
 	var d Dispatcher = &mockDispatcher{}
-	if d == nil {
-		t.Fatal("expected non-nil Dispatcher")
+	if _, ok := d.(*mockDispatcher); !ok {
+		t.Fatal("expected *mockDispatcher to satisfy Dispatcher interface")
 	}
 }
 
