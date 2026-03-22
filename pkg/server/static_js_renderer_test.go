@@ -20,8 +20,8 @@ func TestStaticJS_RenderRouteSection(t *testing.T) {
 		t.Error("renderer.js: renderRouteSection function must be defined")
 	}
 	// It must be invoked from renderReport with the Route field.
-	if !strings.Contains(body, "renderRouteSection(r.Route)") {
-		t.Error("renderer.js: renderReport must call renderRouteSection(r.Route)")
+	if !strings.Contains(body, "renderRouteSection(r.Route") {
+		t.Error("renderer.js: renderReport must call renderRouteSection(r.Route...)")
 	}
 	// The route section heading i18n key must be referenced.
 	if !strings.Contains(body, "'section-route'") {
@@ -497,8 +497,8 @@ func TestStaticJS_RenderRouteStatsFunction(t *testing.T) {
 		}
 		fnBody = body[fnStart:end]
 	}
-	if !strings.Contains(fnBody, "renderRouteStats(hops)") {
-		t.Error("renderer.js: renderRouteSection must call renderRouteStats(hops)")
+	if !strings.Contains(fnBody, "renderRouteStats(hops") {
+		t.Error("renderer.js: renderRouteSection must call renderRouteStats(hops...)")
 	}
 	// Stats card i18n keys must be referenced.
 	statsKeys := []string{

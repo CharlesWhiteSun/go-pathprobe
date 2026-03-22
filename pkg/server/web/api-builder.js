@@ -143,9 +143,12 @@
    *   Never returns null; validation is left to the backend.
    */
   function buildRequest() {
-    const target   = _val('target');
-    const mtrCount = Math.max(1, parseInt(_val('mtr-count'), 10) || 5);
-    let   timeout  = _val('diag-timeout') || '30s';
+    const target     = _val('target');
+    const mtrCount   = Math.max(1, parseInt(_val('mtr-count'), 10) || 5);
+    // diag-timeout is now a minute-count number input (min 1, default 1).
+    // Convert to seconds string so the backend receives a valid Go duration.
+    const timeoutMin = Math.max(1, parseInt(_val('diag-timeout'), 10) || 1);
+    let   timeout    = String(timeoutMin * 60) + 's';
     const insecure = _checked('insecure');
 
     // Determine which ports to include based on target and active sub-mode.

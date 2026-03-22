@@ -75,7 +75,7 @@ window.LOCALES = {
     /* ── Advanced ─────────────────────────────────────────────────────── */
     'adv-summary':           'Advanced Options',
     'label-mtr-count':       'MTR Count',
-    'label-timeout':         'Timeout',
+    'label-timeout':         'Timeout (min)',
     'label-insecure':        'Skip TLS certificate verification',
     'label-geo-enabled':     'Enable Geo annotation & map',
 
@@ -91,6 +91,7 @@ window.LOCALES = {
     'traceroute-complete':       'Trace complete — {n} hops found',
     'traceroute-cancelled':      'Trace cancelled — {n} hop(s) recorded',
     'traceroute-timeout':        'Trace timed out — {n} hop(s) recorded',
+    'traceroute-countdown':      'Time remaining: {t}',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           'Diagnostic timed out — the operation exceeded the configured timeout. For Route Trace, try increasing Timeout in Advanced Options or reducing Max Hops.',
     'err-no-runner':         'No handler registered for this diagnostic target.',
@@ -163,6 +164,7 @@ window.LOCALES = {
     'route-stats-countries': 'Countries',
     'route-stats-reached':   'Reached',
     'route-stats-not-reached':'Not reached',
+    'route-stats-elapsed':   'Time spent',
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS Comparison',
@@ -317,7 +319,7 @@ window.LOCALES = {
     /* ── Advanced ─────────────────────────────────────────────────────── */
     'adv-summary':           '進階選項',
     'label-mtr-count':       'MTR 次數',
-    'label-timeout':         '逾時時間',
+    'label-timeout':         '逾時（分鐘）',
     'label-insecure':        '略過 TLS 憑證驗證',
     'label-geo-enabled':     '啟用地理標註與地圖',
 
@@ -333,6 +335,7 @@ window.LOCALES = {
     'traceroute-complete':       '路由追蹤完成，共 {n} 個躍點',
     'traceroute-cancelled':      '已取消路由追蹤，共記錄 {n} 個躍點',
     'traceroute-timeout':        '路由追蹤逾時，共記錄 {n} 個躍點',
+    'traceroute-countdown':      '剩餘時間：{t}',
     /* ── Error messages (UI-friendly versions of backend errors) ─────── */
     'err-timeout':           '診斷逾時 — 操作超過設定的等待時間。若使用路由追蹤，請嘗試在進階選項中增加逾時時間，或縮短最大躍點數。',
     'err-no-runner':         '找不到此診斷目標所對應的處理器。',
@@ -405,6 +408,7 @@ window.LOCALES = {
     'route-stats-countries': '途經國家',
     'route-stats-reached':   '已到達',
     'route-stats-not-reached':'未到達',
+    'route-stats-elapsed':   '花費時間',
 
     /* ── DNS comparison table ────────────────────────────────────────── */
     'section-dns':           'DNS 比對結果',

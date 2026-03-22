@@ -207,11 +207,16 @@
 
       if (isTraceroute) {
         if (progressEl) progressEl.hidden = true;
-        const host     = (req.options.net && req.options.net.host) || '';
-        const maxHops  = (req.options.web && req.options.web.max_hops) || 30;
-        const mtrCount = req.options.mtr_count || 5;
+        const host       = (req.options.net && req.options.net.host) || '';
+        const maxHops    = (req.options.web && req.options.web.max_hops) || 30;
+        const mtrCount   = req.options.mtr_count || 5;
+        // The countdown timer shows the time the user explicitly chose, NOT the
+        // auto-extended backend value (req.options.timeout may be longer than the
+        // user's setting when traceroute min-timeout kicks in).
+        const diagInput      = document.getElementById('diag-timeout');
+        const userTimeoutSec = Math.max(60, (parseInt(diagInput && diagInput.value, 10) || 1) * 60);
         if (window.PathProbe && window.PathProbe.Renderer) {
-          window.PathProbe.Renderer.initTracerouteProgress(host, maxHops, mtrCount);
+          window.PathProbe.Renderer.initTracerouteProgress(host, maxHops, mtrCount, userTimeoutSec);
         }
       } else {
         if (progressEl) { progressEl.innerHTML = ''; progressEl.hidden = false; }
@@ -255,14 +260,21 @@
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        // User actively cancelled — hide the traceroute panel and log a friendly note.
-        if (window.PathProbe && window.PathProbe.Renderer) {
-          window.PathProbe.Renderer.hideTracerouteProgress();
-        }
-        if (progressEl) {
-          progressEl.innerHTML = '';
-          progressEl.hidden = false;
-          appendProgress(progressEl, { stage: 'info', message: _t('traceroute-cancelled').replace('{n}', '') });
+        if (_isTraceroute) {
+          // Traceroute cancel: keep the panel visible and show the route stats
+          // summary so the user can inspect all hops collected before cancel.
+          if (window.PathProbe && window.PathProbe.Renderer) {
+            window.PathProbe.Renderer.finalizeTracerouteProgress('traceroute-cancelled');
+          }
+        } else {
+          // Non-traceroute cancel: clear UI quietly.
+          if (window.PathProbe && window.PathProbe.Renderer) {
+            window.PathProbe.Renderer.hideTracerouteProgress();
+          }
+          if (progressEl) {
+            progressEl.innerHTML = '';
+            progressEl.hidden = false;
+          }
         }
         return;
       }

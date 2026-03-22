@@ -267,8 +267,8 @@
               <input type="number" id="mtr-count" value="5" min="1" max="50">
             </div>
             <div class="field-group">
-              <label for="diag-timeout" data-i18n="label-timeout">Timeout</label>
-              <input type="text" id="diag-timeout" value="30s" placeholder="30s">
+              <label for="diag-timeout" data-i18n="label-timeout">Timeout (min)</label>
+              <input type="number" id="diag-timeout" min="1" max="1440" value="1">
             </div>
           </div>
           <div class="checkbox-row">
@@ -304,6 +304,11 @@
     </div>
     <div class="tr-bar-wrap"><div id="tr-bar" class="tr-bar"></div></div>
     <p id="tr-eta" class="tr-eta"></p>
+    <!-- Countdown progress bar: shrinks from 100% (full time) to 0% (elapsed). -->
+    <div id="tr-countdown-wrap" class="tr-countdown-wrap">
+      <div class="tr-cbar-outer"><div id="tr-countdown-bar" class="tr-cbar"></div></div>
+      <span id="tr-countdown-label" class="tr-countdown-label"></span>
+    </div>
     <div id="tr-live-section" hidden>
       <table class="result-table route-table tr-live-table">
         <thead><tr>
@@ -317,6 +322,7 @@
         <tbody id="tr-live-body"></tbody>
       </table>
     </div>
+    <div id="tr-stats" class="tr-stats-inpanel"></div>
   </div>
   <!-- ── Results ──────────────────────────────────────────────────────── -->
   <section class="card" id="results" hidden>

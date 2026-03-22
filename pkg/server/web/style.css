@@ -847,8 +847,43 @@ fieldset.target-fields legend {
   transition: width .4s ease;
   width: 0%;
 }
-.tr-eta { font-size: .78rem; color: var(--muted); margin-bottom: .75rem; }
+.tr-eta { font-size: .78rem; color: var(--muted); margin-bottom: .4rem; }
+/* Countdown progress bar: outer track + fill + right-side label */
+.tr-countdown-wrap {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .75rem;
+}
+.tr-cbar-outer {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.tr-cbar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  /* linear easing so each 1 s tick shrinks the bar smoothly */
+  transition: width 1s linear;
+  width: 100%;
+}
+.tr-countdown-label {
+  font-size: .74rem;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .tr-live-table { margin-top: .5rem; }
+/* Stats card injected inside the traceroute panel on timeout / cancel. */
+.tr-stats-inpanel {
+  margin-top: .75rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--border);
+}
+.tr-stats-inpanel .route-stats-card { margin-top: 0; }
 .hop-timedout td { color: var(--muted); font-style: italic; }
 .hop-host { color: var(--muted); font-size: .85em; }
 

@@ -124,7 +124,9 @@
   // Renders a compact statistics card below the hop table summarising the
   // overall route quality: total hops, responsive vs. silent, average loss,
   // terminal RTT, countries traversed, and whether the destination was reached.
-  function renderRouteStats(hops) {
+  // Optional elapsedMs (milliseconds): when > 0, a "Time spent" stat item is
+  // appended — used for traceroute reports where wall-clock duration is meaningful.
+  function renderRouteStats(hops, elapsedMs) {
     if (!hops || !hops.length) return '';
 
     const total      = hops.length;
@@ -155,6 +157,10 @@
       { label: _t('route-stats-countries'),  html: countries.length ? esc(countries.join(', ')) : '\u2014' },
       { label: _t('route-stats-reached'),    html: reachedBadge },
     ];
+    // Elapsed wall-clock time — only shown for traceroute runs.
+    if (elapsedMs !== undefined && elapsedMs > 0) {
+      statItems.push({ label: _t('route-stats-elapsed'), html: esc(_formatElapsed(elapsedMs)) });
+    }
 
     const itemsHtml = statItems.map(item =>
       '<div class="route-stat-item">' +
@@ -169,7 +175,7 @@
     '</div>';
   }
 
-  function renderRouteSection(hops) {
+  function renderRouteSection(hops, elapsedMs) {
     if (!hops || !hops.length) return '';
     const tipText = _t('hop-timeout-tip');
     const rows = hops.map(h => {
@@ -220,7 +226,7 @@
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
-      renderRouteStats(hops) +
+      renderRouteStats(hops, elapsedMs) +
     '</div>';
   }
 
@@ -432,20 +438,71 @@
 
   // ── Traceroute live progress helpers ───────────────────────────────────
 
-  let _trStartTime = 0;
-  let _trMaxHops   = 30;
-  let _trHopCount  = 0;
+  let _trStartTime     = 0;
+  let _trMaxHops       = 30;
+  let _trHopCount      = 0;
+  /** Live-accumulated hop objects (PascalCase) for inline stats on timeout/cancel. */
+  let _trCollectedHops  = [];
+  /** Effective timeout in seconds passed from api-client (0 = no countdown). */
+  let _trTotalSec       = 0;
+  /** setInterval handle for the live countdown; null when idle. */
+  let _trCountdownTimer = null;
+
+  // ── Countdown helpers ──────────────────────────────────────────────────
+
+  /** Clear any active countdown interval. Safe to call when idle. */
+  function _stopCountdown() {
+    if (_trCountdownTimer !== null) {
+      clearInterval(_trCountdownTimer);
+      _trCountdownTimer = null;
+    }
+  }
+
+  /** Format seconds as "Mm SSs" or "Ss" for the countdown display. */
+  function _formatCountdown(sec) {
+    if (sec <= 0) return '0s';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? (m + 'm ' + (s < 10 ? '0' : '') + s + 's') : (sec + 's');
+  }
+
+  /** Format milliseconds as "Xm Ys" or "Zs" for the elapsed-time stat item. */
+  function _formatElapsed(ms) {
+    const sec = Math.round(ms / 1000);
+    if (sec <= 0) return '0s';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? (m + 'm ' + (s < 10 ? '0' : '') + s + 's') : (sec + 's');
+  }
+
+  /**
+   * Render the accumulated live hop data as a route-stats-card into the
+   * #tr-stats container.  Gives users a full numeric summary on timeout or
+   * cancel without waiting for the SSE result event.
+   */
+  function _renderInlineStats() {
+    const container = document.getElementById('tr-stats');
+    if (!container || !_trCollectedHops.length) return;
+    // Pass elapsed wall-clock time so the inline stats card shows the duration
+    // of this traceroute run (from initTracerouteProgress to now).
+    const elapsedMs = _trStartTime > 0 ? Date.now() - _trStartTime : 0;
+    container.innerHTML = renderRouteStats(_trCollectedHops, elapsedMs);
+  }
 
   /**
    * Show the traceroute progress panel and initialise its fields.
    * @param {string} host       - destination host being traced
    * @param {number} maxHops    - configured max TTL
    * @param {number} mtrCount   - probes per hop (used for ETA estimate)
+   * @param {number} timeoutSec - effective request timeout in seconds (for countdown)
    */
-  function initTracerouteProgress(host, maxHops, mtrCount) {
-    _trStartTime = Date.now();
-    _trMaxHops   = maxHops || 30;
-    _trHopCount  = 0;
+  function initTracerouteProgress(host, maxHops, mtrCount, timeoutSec) {
+    _trStartTime     = Date.now();
+    _trMaxHops       = maxHops || 30;
+    _trHopCount      = 0;
+    _trCollectedHops = [];
+    _trTotalSec      = timeoutSec || 0;
+    _stopCountdown();
 
     const el = document.getElementById('traceroute-progress');
     if (!el) return;
@@ -463,6 +520,30 @@
     const estMin = Math.ceil((_trMaxHops * (mtrCount || 5) * 2 + 15) / 60);
     const trEta = document.getElementById('tr-eta');
     if (trEta) trEta.textContent = _t('traceroute-max-wait').replace('{n}', estMin);
+
+    // Initialise the countdown progress bar and label.
+    const cbar      = document.getElementById('tr-countdown-bar');
+    const cbarLabel = document.getElementById('tr-countdown-label');
+    if (cbar) cbar.style.width = '100%';
+    if (cbarLabel) {
+      cbarLabel.textContent = _trTotalSec > 0
+        ? _t('traceroute-countdown').replace('{t}', _formatCountdown(_trTotalSec))
+        : '';
+    }
+    if (_trTotalSec > 0) {
+      let remaining = _trTotalSec;
+      _trCountdownTimer = setInterval(function() {
+        remaining = Math.max(0, remaining - 1);
+        const pct = Math.round(remaining / _trTotalSec * 100);
+        if (cbar)      cbar.style.width = pct + '%';
+        if (cbarLabel) cbarLabel.textContent = _t('traceroute-countdown').replace('{t}', _formatCountdown(remaining));
+        if (remaining <= 0) _stopCountdown();
+      }, 1000);
+    }
+
+    // Clear any stats from a previous run.
+    const statsContainer = document.getElementById('tr-stats');
+    if (statsContainer) statsContainer.innerHTML = '';
 
     const trBody = document.getElementById('tr-live-body');
     if (trBody) trBody.innerHTML = '';
@@ -484,6 +565,19 @@
   function appendLiveHop(hopData) {
     if (!hopData) return;
     _trHopCount++;
+
+    // Accumulate a normalised copy for the inline stats card shown on
+    // timeout/cancel.  Country and ASN are not available in live SSE events;
+    // renderRouteStats() handles those fields being empty gracefully.
+    _trCollectedHops.push({
+      TTL:      hopData.ttl      || 0,
+      IP:       hopData.ip       || '',
+      Hostname: hopData.hostname || '',
+      AvgRTT:   hopData.avg_rtt  || '—',
+      LossPct:  hopData.loss_pct || 0,
+      Country:  hopData.country  || '',
+      ASN:      hopData.asn      || 0,
+    });
 
     const pct = Math.min(100, Math.round(_trHopCount / (_trMaxHops || 30) * 100));
     const trBar = document.getElementById('tr-bar');
@@ -541,6 +635,11 @@
     const el = document.getElementById('traceroute-progress');
     if (!el || el.hidden) return;
 
+    // Stop the countdown — no longer meaningful once done.
+    _stopCountdown();
+    const cbarWrap = document.getElementById('tr-countdown-wrap');
+    if (cbarWrap) cbarWrap.hidden = true;
+
     // Hide the spinner — no longer in-progress.
     const spinner = el.querySelector('.tr-spin');
     if (spinner) spinner.hidden = true;
@@ -552,26 +651,42 @@
     // Replace ETA with "N hops recorded" summary.
     const trEta = document.getElementById('tr-eta');
     if (trEta) trEta.textContent = _t('traceroute-hop-count').replace('{n}', _trHopCount);
+
+    // Render inline route stats so users see the full summary (total hops,
+    // loss rate, terminal RTT, whether destination was reached) without
+    // waiting for a result event that may never arrive on timeout/cancel.
+    _renderInlineStats();
   }
 
   /**
-   * Hide the traceroute progress panel (called when result arrives or on error).
+   * Hide the traceroute progress panel (called when a full result arrives).
+   * Stops the countdown and resets accumulated state for the next run.
    */
   function hideTracerouteProgress() {
+    _stopCountdown();
     const el = document.getElementById('traceroute-progress');
     if (el) el.hidden = true;
+    // Clear accumulated hop state; initTracerouteProgress resets everything on next run.
+    _trCollectedHops = [];
+    const statsContainer = document.getElementById('tr-stats');
+    if (statsContainer) statsContainer.innerHTML = '';
   }
 
   // ── Public: main render entry point ────────────────────────────────────
 
   function renderReport(r) {
     _lastReport = r;
+    // Compute elapsed wall-clock time for traceroute reports so the route stats
+    // card can display "Time spent".  Guard: non-traceroute results have no r.Route,
+    // so elapsedMs stays 0 and the stat item is suppressed in renderRouteStats.
+    const hasRoute  = r.Route && r.Route.length > 0;
+    const elapsedMs = (hasRoute && _trStartTime > 0) ? Date.now() - _trStartTime : 0;
     document.getElementById('results-inner').innerHTML = [
       renderSummary(r),
       renderPortsSection(r.Ports),
       renderProtosSection(r.Protos),
       renderDNSSection(r.DNS),
-      renderRouteSection(r.Route),
+      renderRouteSection(r.Route, elapsedMs),
       renderGeoSection(r.PublicGeo, r.TargetGeo),
     ].filter(Boolean).join('');
   }

@@ -197,8 +197,10 @@ func TestStaticJS_IsTracerouteFlag(t *testing.T) {
 }
 
 // TestStaticJS_AbortErrorHidesPanel 驗證 AbortError（使用者主動取消）catch
-// 分支會呼叫 hideTracerouteProgress() 並向 progress-log 寫入友善取消訊息，
-// 而非單純 return（先前 bug：panel 殘留未清除）。
+// 分支的雙路處理策略：
+//   - 路由追蹤模式：呼叫 finalizeTracerouteProgress('traceroute-cancelled')，
+//     保留已收集的躍點資料並顯示統計摘要（不隱藏面板）。
+//   - 非路由追蹤模式：呼叫 hideTracerouteProgress() 清除 UI。
 func TestStaticJS_AbortErrorHidesPanel(t *testing.T) {
 	body := fetchBody(t, newStaticHandler(t), "/api-client.js")
 
@@ -211,19 +213,22 @@ func TestStaticJS_AbortErrorHidesPanel(t *testing.T) {
 	if abortIdx == -1 {
 		t.Fatal("api-client.js: AbortError handler not found in runDiag")
 	}
-	// Inspect a window large enough to cover the AbortError branch.
+	// Inspect a window large enough to cover both the traceroute and
+	// non-traceroute branches of the AbortError handler.
 	windowStart := fnStart + abortIdx
-	end := windowStart + 600
+	end := windowStart + 800
 	if end > len(body) {
 		end = len(body)
 	}
 	window := body[windowStart:end]
 
+	// Non-traceroute branch must still hide the panel.
 	if !strings.Contains(window, "hideTracerouteProgress") {
-		t.Error("api-client.js: AbortError handler must call hideTracerouteProgress() to clear the panel")
+		t.Error("api-client.js: AbortError handler non-traceroute branch must call hideTracerouteProgress()")
 	}
+	// Traceroute branch must finalize (not just hide) with the cancelled key.
 	if !strings.Contains(window, "traceroute-cancelled") {
-		t.Error("api-client.js: AbortError handler must log a 'traceroute-cancelled' friendly message")
+		t.Error("api-client.js: AbortError handler must reference 'traceroute-cancelled' i18n key for the finalized panel title")
 	}
 }
 
